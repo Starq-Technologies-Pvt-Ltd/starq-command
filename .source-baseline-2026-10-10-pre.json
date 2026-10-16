@@ -1,0 +1,267 @@
+{
+  "timestamp": "2026-10-10T13:14:15.197Z",
+  "scope": "src/ (all regular files recursively), server/data-service.mjs, server/floor.mjs; pre-change state; excludes observation/ and scripts/lifecycle/",
+  "files": [
+    {
+      "path": "server/data-service.mjs",
+      "sha256": "77b8d71effe033f2b6fe2b44577d67ae68a6e36750cda865c1292ad19fccabd1",
+      "bytes": 41793
+    },
+    {
+      "path": "server/floor.mjs",
+      "sha256": "8eb1d3f32c00e112b35abc0493b4234b51d50d34af247ba58437c713cf54cfdb",
+      "bytes": 47752
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "8ed27a841c0a3d8eede76a05b3e09df10d6402c3c72dd631c8157ff26e2ee20f",
+      "bytes": 20652
+    },
+    {
+      "path": "src/capacity/quota-tracker.ts",
+      "sha256": "ef3eea198e5b26e1a84df62ce4a96653198c6f4813ee634611c0e09ff5c07408",
+      "bytes": 6213
+    },
+    {
+      "path": "src/components/console.tsx",
+      "sha256": "752900d2e5b53a5da56aba8d6d78c7b86bbf018cb353526856eee178c4c5d32e",
+      "bytes": 15886
+    },
+    {
+      "path": "src/components/evidence-peek.tsx",
+      "sha256": "cc9f531cb6cd0efb0c00569a87b4065050df2659d11a798908664a2b5da255f4",
+      "bytes": 5962
+    },
+    {
+      "path": "src/components/herdr-terminal.tsx",
+      "sha256": "0a1534b918b3815c06a8a6b53c6e13814e547f242708c4a5bda099d61beb598e",
+      "bytes": 12444
+    },
+    {
+      "path": "src/components/shell.tsx",
+      "sha256": "87bb2b98deabdc9de2cedb6d9e40424de1db3c7048cd0eeb01189024ef0ecad2",
+      "bytes": 14290
+    },
+    {
+      "path": "src/components/state-gate.tsx",
+      "sha256": "2a12c7480201394c50ac1f3f247a1c76076fe444a3daded03292de40e3705af2",
+      "bytes": 9688
+    },
+    {
+      "path": "src/components/ui/badge.tsx",
+      "sha256": "d73bb4d354e4c68502cc018da09452da47b4380691bcf09071c4585473dba4cc",
+      "bytes": 1298
+    },
+    {
+      "path": "src/components/ui/button.tsx",
+      "sha256": "db37f3158cd210dc925828aabf3bb3cb7d7b15879a4e191ca852b8976bc1cffb",
+      "bytes": 1890
+    },
+    {
+      "path": "src/components/ui/card.tsx",
+      "sha256": "de70fc1ad1b5e2f6e2bd7a7d0ce2d26aef1f7ae70ec49e03729ca15043d52d0d",
+      "bytes": 1828
+    },
+    {
+      "path": "src/components/ui/progress.tsx",
+      "sha256": "0ed9a59bed7d75ef04e738131d4304fc60ac36b9e744adf7dea123fd31d0da04",
+      "bytes": 1269
+    },
+    {
+      "path": "src/components/ui/separator.tsx",
+      "sha256": "cf3fb514799ef1f0ffefb092a6a6f29e9f55032f43510bf1c08b49af1a771932",
+      "bytes": 572
+    },
+    {
+      "path": "src/components/ui/skeleton.tsx",
+      "sha256": "898e3f8c0b5419f86f5df145c771bdcd82c501de49bdfad522a507696a8a8145",
+      "bytes": 526
+    },
+    {
+      "path": "src/components/ui/table.tsx",
+      "sha256": "c1c9f0893840639a93d9244d830c70483c4b107b2e7c951a643ed7090b539e4a",
+      "bytes": 1964
+    },
+    {
+      "path": "src/components/work-area.tsx",
+      "sha256": "a1ff6687baa1811bac5c707b0a2e68828b5d9c1a5fcce2336be613dad9e92040",
+      "bytes": 8186
+    },
+    {
+      "path": "src/detector/stuck-detector.ts",
+      "sha256": "686ea6d93e5c8713a89e159e8dc553183f354c4908f0d80a05decea04157a58e",
+      "bytes": 5045
+    },
+    {
+      "path": "src/index.css",
+      "sha256": "e624233a96076485049710712735f374bcd46a21a8e9a6f131b82c3bdabb0f8a",
+      "bytes": 99509
+    },
+    {
+      "path": "src/lib/building-route.ts",
+      "sha256": "332ab87a1a649edd55158cdb2932a8435d49605d257ad85f1e3668fffcf495e8",
+      "bytes": 3318
+    },
+    {
+      "path": "src/lib/contracts.ts",
+      "sha256": "0febcf9c7cbaff6dd70474fb3bc2838a96996c6cc04a1bd1687bc9677facac76",
+      "bytes": 37525
+    },
+    {
+      "path": "src/lib/herdr-terminal.ts",
+      "sha256": "0b4dbca6579c31265523ce10be0ed03e634c2b1421d65cb4a9eaa12228c17ad4",
+      "bytes": 19618
+    },
+    {
+      "path": "src/lib/states.ts",
+      "sha256": "64042ec341a6c5f49c8a3b00dd4e00ba2862336bc3f3585734977680e26a6a9e",
+      "bytes": 13664
+    },
+    {
+      "path": "src/lib/use-command-surface.ts",
+      "sha256": "b83183f18a41d7fc9616e8903fdfe48f12d3dc78dd389a71fdbc29f064da0526",
+      "bytes": 9576
+    },
+    {
+      "path": "src/lib/utils.ts",
+      "sha256": "eafb7c7dd68639abbb25381e0c203f713d6fbe9ffe6dabe0e70452fc8d96ee90",
+      "bytes": 2434
+    },
+    {
+      "path": "src/main.tsx",
+      "sha256": "2ed12a1457cd60b31c0f44f3ea59b8bbc2ddd4a49add3165228d093878fb7c24",
+      "bytes": 237
+    },
+    {
+      "path": "src/schemas/builder-artifact.ts",
+      "sha256": "fb94a5d6311bd35e4fa51ed259aec79c872e9953bf35b71e0d17006d33b80e39",
+      "bytes": 4004
+    },
+    {
+      "path": "src/schemas/lease.ts",
+      "sha256": "4fa7298ad3fca696c5f6d8bf3570ae2cca93447e1a663518bf8bc9950f3097b7",
+      "bytes": 883
+    },
+    {
+      "path": "src/schemas/quota-capacity.ts",
+      "sha256": "e8a469a287a0defaecba3f0b476039549e6cb8cba5d88b9bf9d429adc603a468",
+      "bytes": 672
+    },
+    {
+      "path": "src/schemas/room-event.ts",
+      "sha256": "69bf081c8e4dbecbc67af1ce5a297160572a1843782ac3441f394d5f35c83b3e",
+      "bytes": 840
+    },
+    {
+      "path": "src/schemas/seat-registry.ts",
+      "sha256": "2ccfaf897e8adcb527e60702deab34cbe0d52402b47d65b5c460315b9c51bdfc",
+      "bytes": 11718
+    },
+    {
+      "path": "src/schemas/stuck-event.ts",
+      "sha256": "fba3714e79875e3710007cb64ba50a400342a84408f07861e2dac032f6dfeeb4",
+      "bytes": 857
+    },
+    {
+      "path": "src/schemas/task-contract.ts",
+      "sha256": "d2774d463995dd07727fa689370f14bcc62dfdfac7541b9624c99441fbe5bdd4",
+      "bytes": 3361
+    },
+    {
+      "path": "src/schemas/verifier-artifact.ts",
+      "sha256": "45e1c070fbb1398b16abbb6a0c201bb8c0e5960c19efda7a88a5afeb3f31fe41",
+      "bytes": 3840
+    },
+    {
+      "path": "src/surfaces/attention.tsx",
+      "sha256": "2e087f2841f7cc98f753b144b85e8e735c079f9985b9132f0ea64c2ac0122456",
+      "bytes": 65524
+    },
+    {
+      "path": "src/surfaces/building.tsx",
+      "sha256": "89888bdf16dfeb62e8bbb26272e7ba97f8d0eccf2f9954ddc3523dd745c5e89f",
+      "bytes": 58968
+    },
+    {
+      "path": "src/surfaces/company-os.tsx",
+      "sha256": "333160f62183532593e867bc2b5587e444a6d337b6d87e8c478f7759327dea9f",
+      "bytes": 36384
+    },
+    {
+      "path": "src/surfaces/company.tsx",
+      "sha256": "cf3c837af1e9a175cd7b44700e911f7f60901ad230232b48d8a5249a2c94a3f6",
+      "bytes": 36589
+    },
+    {
+      "path": "src/surfaces/erp-room.tsx",
+      "sha256": "1add8d7dad81325596374ddcfee4c5c4b4235228bdb4ff9d4a27f4c83caad2ac",
+      "bytes": 9399
+    },
+    {
+      "path": "src/surfaces/evidence.tsx",
+      "sha256": "cc7857923fbb59a17e263ceb302a770941fb3240f9917221ed13649b31113456",
+      "bytes": 20619
+    },
+    {
+      "path": "src/surfaces/floor.tsx",
+      "sha256": "7f7b4451d35c3b8527d53aec9b5b5b2aa243e8ff7152ecbef03e5023c788d67e",
+      "bytes": 31136
+    },
+    {
+      "path": "src/surfaces/herdr.tsx",
+      "sha256": "53a49f0ebe308ee0125ba003788b333f0127cef53363cdbcaceb61f87484cbfb",
+      "bytes": 35364
+    },
+    {
+      "path": "src/surfaces/hoadha-room.tsx",
+      "sha256": "1e15114c9baa73d48c2a1de79d5ff061fdba5e2ca8190b4ecfc005678e7cd750",
+      "bytes": 29141
+    },
+    {
+      "path": "src/surfaces/integrity.tsx",
+      "sha256": "27d80ed89cd8b04cd3f1e933baa5c34e9ed02a810272f31111fcdeab3e956d56",
+      "bytes": 10151
+    },
+    {
+      "path": "src/surfaces/overview.tsx",
+      "sha256": "878e2b08eaef7a99a6128a872154873acafdebee86348ec8437584814577e05b",
+      "bytes": 26620
+    },
+    {
+      "path": "src/surfaces/phase-shell.tsx",
+      "sha256": "99d9132577b6427bc06d8d0fd14ef4a15ccfbc38583f7086a1c9223c0f8e387c",
+      "bytes": 5649
+    },
+    {
+      "path": "src/surfaces/process.tsx",
+      "sha256": "2890dc42a298d4f549fb3af68169c9d4ae375dbcadca8b9d16ff0af327edca00",
+      "bytes": 22334
+    },
+    {
+      "path": "src/surfaces/project-board.tsx",
+      "sha256": "0d75100ba6a27ed073b1ab39f4d8adf4d0dd4d0f7c3de83e62528ff20e3c63c5",
+      "bytes": 11393
+    },
+    {
+      "path": "src/surfaces/records.tsx",
+      "sha256": "bb082a36c7e41766a231fb8e2f28e237923ec30ace315a6e728e1cea16ad2c4e",
+      "bytes": 7977
+    },
+    {
+      "path": "src/surfaces/staff.tsx",
+      "sha256": "66e695bdf999c72009db1aef749d5ef1b88cc412c2c4c11dc7ffd2f8b6a2d998",
+      "bytes": 52978
+    },
+    {
+      "path": "src/surfaces/system.tsx",
+      "sha256": "db8791826389cb883df535e3243dcc58c42d346335df0d63085460c13134a221",
+      "bytes": 9367
+    },
+    {
+      "path": "src/surfaces/truth.tsx",
+      "sha256": "36d45f813e81168b054f40209b5252e74e0e4f31d6189544596a04c2337c04ad",
+      "bytes": 44831
+    }
+  ],
+  "summary": "52 files total: 50 under src/ and 2 named server sources; exact as of timestamp"
+}

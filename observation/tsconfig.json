@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["./**/*.tsx", "./**/*.ts", "../src/lib/use-command-surface.ts", "../src/lib/contracts.ts"]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "starq-command",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "STARQ // COMMAND — permanent Founder operating surface for Starq Dev Studio. A DERIVED_PROJECTION of canonical Starq truth. Read-only.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n data,ui -c magenta,cyan \"node server/data-service.mjs\" \"vite\"",
+    "command:start": "node scripts/command-lifecycle.mjs start",
+    "command:status": "node scripts/command-lifecycle.mjs status",
+    "command:restart": "node scripts/command-lifecycle.mjs restart",
+    "command:stop": "node scripts/command-lifecycle.mjs stop",
+    "command:recover-force": "node scripts/command-lifecycle.mjs recover --force",
+    "command:observation-start": "node scripts/command-lifecycle.mjs observation-start",
+    "command:observation-status": "node scripts/command-lifecycle.mjs observation-status",
+    "command:observation-stop": "node scripts/command-lifecycle.mjs observation-stop",
+    "test:lifecycle": "node --test scripts/lifecycle/tests/",
+    "data": "node server/data-service.mjs",
+    "pm:start": "node server/pm-service.mjs",
+    "herdr": "node integrations/herdr/herdr-service.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "start": "concurrently -n data,ui -c magenta,cyan \"node server/data-service.mjs\" \"vite preview --port 4173\"",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc -b",
+    "test": "vitest run",
+    "test:observation": "node --test scripts/lifecycle/tests/observation-profile.test.mjs",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "^1.1.2",
+    "@xterm/xterm": "^5.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.2",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.21.5": true
+  }
+}

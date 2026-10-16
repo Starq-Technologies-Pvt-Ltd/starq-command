@@ -1,0 +1,607 @@
+{
+  "schema": "starq-command-baseline-extension/v1",
+  "purpose": "Pre-change evidence extension for Design Integration B7 (§5.1–§5.7); governance/evidence only.",
+  "generated_at": "2026-10-10T14:56:25.919Z",
+  "workspace_root": "D:\\StarqTech",
+  "command_app_root": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command",
+  "relationship_to_cmd_di_0_1": {
+    "original_manifest_path": ".source-baseline-2026-10-10-pre.json",
+    "original_manifest_sha256": "456b845cd88ea5549f3fc18f68f3df0b30ae862dae746be575b1fb3d80488985",
+    "original_entry_count": 52,
+    "original_validation": "52/52 exact; 0 missing; 0 drift",
+    "relationship": "Separate additive extension. This extension adds evidence and does not rewrite CMD-DI-0-1 history."
+  },
+  "test_set": {
+    "expected_test_specification_count": 31,
+    "current_test_specification_count": 31,
+    "current_tests_tree_file_count": 34,
+    "shared_fixture_or_support_file_count": 3,
+    "accepted_audit_aggregate_sha256": "41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd",
+    "recomputed_aggregate_sha256": "41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd",
+    "aggregate_status": "REPRODUCED",
+    "aggregate_method_as_written_in_audit": "SHA-256 over sorted \"<hash>  <name>\" listing",
+    "aggregate_blocker": "SUPERSEDED 2026-10-10 - the accepted digest was reproduced from the original execution context. The original finding is preserved verbatim for the record: \"Audit §5.6 does not define path/name serialization, sort key, output encoding, or line termination sufficiently to reproduce the accepted digest unambiguously; exploratory conventional serializations did not match.\" That finding was correct against the DOCUMENT, not against the method, which was recovered intact.",
+    "aggregate_coverage": {
+      "aggregate_covers": "the 31 top-level test specifications in tests/",
+      "aggregate_excludes": "the 3 fixture/support files, by the historical non-recursive recipe (Get-ChildItem -File WITHOUT -Recurse)",
+      "excluded_files": [
+        "tests/fixtures/floor-fixture.ts",
+        "tests/fixtures/phase5-surface.json",
+        "tests/support/application-capability.ts"
+      ],
+      "excluded_files_still_individually_pinned_by_this_manifest": true,
+      "note": "Recorded as a coverage observation, not a defect. The aggregate is not the instrument for test infrastructure; file-level drift in the 3 excluded files remains detectable because they are individually pinned in entries[]."
+    },
+    "aggregate_recipe": {
+      "recovered_from": "the execution context that originally produced the digest; recovered verbatim, not inferred",
+      "language": "PowerShell 5.1",
+      "script": "$root='D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command'; $tf = Get-ChildItem -LiteralPath \"$root\\tests\" -File; $lines = $tf | Sort-Object Name | ForEach-Object { \"{0}  {1}\" -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }; $tmp = Join-Path $env:TEMP 'd2p_tests_digest.txt'; [IO.File]::WriteAllLines($tmp, $lines); (Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLower()",
+      "inclusion_rule": "Get-ChildItem -LiteralPath <root>/tests -File WITHOUT -Recurse: top-level files only",
+      "participating_file_count": 31,
+      "path_representation": "bare file Name; no directory prefix, no separator (valid only because all 31 are top level, so Name equals the relative path)",
+      "sort_rule": "CORRECTED 2026-10-10 - the original description in this manifest was WRONG. Sort-Object Name is CULTURE-SENSITIVE, not culture-invariant: it compares using CurrentCulture (en-GB at capture). It is not ordinal. See runtime_dependence.",
+      "record_syntax": "<64 lowercase hex chars> + exactly two ASCII spaces (0x20 0x20) + <Name>",
+      "encoding": "UTF-8 without BOM (.NET File.WriteAllLines default)",
+      "line_termination": "CRLF (0x0D 0x0A) from Environment.NewLine on Windows",
+      "final_newline": "PRESENT - a terminator follows the last record; file ends 74 73 0d 0a",
+      "listing_byte_length": 2803,
+      "digest_procedure": "SHA-256 over the byte sequence of the UTF-8 file, hex lowercased",
+      "determinism_runs_matching": 4,
+      "sensitivity_check": "Within Windows PowerShell 5.1, every serialization parameter varied is load-bearing: LF-only, no-trailing-terminator, single-space, recursive-34, and sorted-by-hash variants all produce different digests (5/5 differ). SCOPE CORRECTION 2026-10-10: this analysis varied serialization parameters ONLY and never varied the runtime or the string comparer. The runtime is the parameter that governs the digest ACROSS environments. See runtime_dependence.",
+      "runtime_dependence": {
+        "status": "CONFIRMED - the historical aggregate is RUNTIME-DEPENDENT",
+        "historical_runtime_pin": {
+          "digest": "41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd",
+          "runtime": "Windows PowerShell 5.1.26100.9587, Desktop edition",
+          "host_executable": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+          "clr": "4.0.30319.42000 (.NET Framework, Windows NLS collation)",
+          "culture": "en-GB",
+          "method": "the recovered recipe above, unmodified",
+          "note": "PINNED. Reproducible on this runtime only. Must not be cited as runtime-independent."
+        },
+        "counter_runtime_result": {
+          "digest": "75f329e2769ea328340bc22aa9518a44ef8b4434a0da1adcdd74b21550276966",
+          "runtime": "PowerShell 7.6.6, Core edition",
+          "clr": "10.0.12 (.NET, ICU collation)",
+          "culture": "en-GB",
+          "status": "AUTHENTIC counter-result. NOT a discrepancy and NOT an error. It is a distinct, later, runtime-specific value.",
+          "must_never_be_recorded_as": "the historical aggregate. The historical digest remains 41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd."
+        },
+        "collation_cause": {
+          "listing_bytes_identical": 2803,
+          "encoding_identical": "UTF-8 without BOM in both runtimes",
+          "newline_identical": "31 CR / 31 LF, trailing CRLF present, in both runtimes",
+          "first_record_identical": true,
+          "last_record_identical": true,
+          "first_differing_byte_offset": 1154,
+          "records_differing": 8,
+          "record_indices_differing": "13-20",
+          "cluster": "phase5* and phase7* only",
+          "mechanism": "At filename index 6, 'phase5-fixture.test.tsx' has '-' (0x2D) and 'phase5.test.ts' has '.' (0x2E). Windows NLS collation places '.' before '-'; ICU collation (and ordinal byte order) places '-' before '.'. This is the documented .NET 5+ globalization behaviour change. PowerShell 7 therefore coincides with ordinal order; Windows PowerShell 5.1 does not.",
+          "proof_not_a_culture_setting": "With the SAME culture name en-GB in both runtimes, [string]::Compare('phase5-fixture.test.tsx','phase5.test.ts', CurrentCulture) returns +1 under PS 5.1 and -1 under PS 7. The difference cannot be configured away.",
+          "comparer_matrix": {
+            "ps51": { "default": "41ddaa10...", "ordinal": "75f329e2...", "invariant": "41ddaa10...", "currentculture": "41ddaa10..." },
+            "ps7":  { "default": "75f329e2...", "ordinal": "75f329e2...", "invariant": "75f329e2...", "currentculture": "75f329e2..." }
+          }
+        },
+        "runtime_independent_candidate": {
+          "digest": "75f329e2769ea328340bc22aa9518a44ef8b4434a0da1adcdd74b21550276966",
+          "method": "explicit [System.StringComparer]::Ordinal ordering of the same 31 top-level test filenames",
+          "stability": "identical under BOTH Windows PowerShell 5.1 and PowerShell 7",
+          "status": "NEW canonical aggregate CANDIDATE for future use. NOT adopted as the historical aggregate and does NOT replace 41ddaa10... Any future adoption requires separate Founder authorization and must be published under a new digest identity."
+        },
+        "detected_by": "Vision, during Wave 0 verification, which executed the documented recipe under PowerShell 7 and obtained 75f329e2... Vision rejected Wave 0 on this evidence issue.",
+        "corrected_at": "2026-10-10",
+        "corrected_by": "@opencode, under Founder authorization for Vision rejection evidence correction only"
+      },
+      "invalid_prior_reporting": {
+        "note": "Recorded for the evidence trail. These values were reported after the B7 closure edits WITHOUT MEASUREMENT and are INVALID as evidence. They are preserved rather than erased. They never indicated any file was altered; both artifacts' mtimes correspond to that turn's own edits and no party modified them afterwards.",
+        "reported_sha256_audit_md": "b0e2c5b0e1c2a67bb25b0ea8bbf9b04eb04f5c8e4f4bcbfa7beecac2ee5d84a3",
+        "reported_bytes_audit_md": 39485,
+        "reported_sha256_extension_json": "3ba4e13a86fdbd5b4ec6ba0ea0f6f8f18b56d0c5c9c8c1b7f4d8a1f8bd7fd3c6",
+        "reported_bytes_extension_json": 21477,
+        "must_never_be_cited_as": "an artifact identity",
+        "measurement_rule_adopted": "From this correction forward, every reported byte count, SHA-256, aggregate digest and entry count must be produced by an actual command in the same verification sequence from which it is reported. No value may be inferred, predicted, carried forward, or asserted without a producing command."
+      },
+      "amended_at": "2026-10-10",
+      "amended_by": "@opencode, under Founder authorization for B7 evidence closure only",
+      "audit_reference": "DESIGN_INTEGRATION_TEST_AUDIT_2026-10-10.md §10 (additive amendment; original §5.6 text preserved)"
+    },
+    "test_specification_bytes": 569800
+  },
+  "census_pin": {
+    "path": "D:\\StarqTech\\STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md",
+    "bytes": 11984,
+    "sha256": "ca7d8cc7584c5facb484279eecab775d33101a44d1a9f8125ea4f79944998e3d",
+    "git_blob_sha1": "d5a9a5bf59f8693577861de89437a1aaa6193699",
+    "verification": "MATCH against accepted SHA-256 and Git blob identity from D:\\StarqTech bytes"
+  },
+  "sections": [
+    {
+      "id": "5.1",
+      "description": "Tailwind and PostCSS configuration",
+      "entry_count": 2,
+      "status": "PINNED"
+    },
+    {
+      "id": "5.2",
+      "description": "Vite, TypeScript, and HTML build configuration",
+      "entry_count": 3,
+      "status": "PINNED"
+    },
+    {
+      "id": "5.3",
+      "description": "Test/build gate configuration and package metadata",
+      "entry_count": 3,
+      "status": "PINNED"
+    },
+    {
+      "id": "5.4",
+      "description": "Herdr integration client and service",
+      "entry_count": 2,
+      "status": "PINNED"
+    },
+    {
+      "id": "5.5",
+      "description": "Server modules",
+      "entry_count": 8,
+      "status": "PINNED"
+    },
+    {
+      "id": "5.6",
+      "description": "Complete current tests tree, including test specifications and shared support",
+      "entry_count": 34,
+      "expected_test_specification_count": 31,
+      "current_test_specification_count": 31,
+      "current_support_fixture_file_count": 3,
+      "current_tests_tree_file_count": 34,
+      "test_specification_bytes": 569800,
+      "accepted_aggregate_sha256": "41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd",
+      "recomputed_aggregate_sha256": "41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd",
+      "aggregate_status": "REPRODUCED",
+      "aggregate_method_as_written_in_audit": "SHA-256 over sorted \"<hash>  <name>\" listing",
+      "aggregate_blocker": "SUPERSEDED 2026-10-10 - accepted digest reproduced from the original execution context. Original finding preserved for the record: \"Audit §5.6 does not define path/name serialization, sort key, output encoding, or line termination sufficiently to reproduce the accepted digest unambiguously; exploratory conventional serializations did not match.\"",
+      "aggregate_scope": "31 top-level test specifications only. The 3 fixture/support files are EXCLUDED from this aggregate by the historical non-recursive recipe, and remain individually pinned in entries[] above.",
+      "aggregate_runtime_pin": "RUNTIME-DEPENDENT. The accepted digest 41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd is PINNED to Windows PowerShell 5.1.26100.9587 / .NET Framework 4.0.30319.42000 / culture en-GB. PowerShell 7.6.6 produces the authentic counter-result 75f329e2769ea328340bc22aa9518a44ef8b4434a0da1adcdd74b21550276966 for the identical command. See test_set.aggregate_recipe.runtime_dependence.",
+      "aggregate_recipe_reference": "see test_set.aggregate_recipe and DESIGN_INTEGRATION_TEST_AUDIT_2026-10-10.md §10 and §11",
+      "status": "ALL_CURRENT_FILES_PINNED_AGGREGATE_REPRODUCED"
+    },
+    {
+      "id": "5.7",
+      "description": "Recovered governing Command baseline-to-route census",
+      "entry_count": 1,
+      "sha256": "ca7d8cc7584c5facb484279eecab775d33101a44d1a9f8125ea4f79944998e3d",
+      "git_blob_sha1": "d5a9a5bf59f8693577861de89437a1aaa6193699",
+      "status": "PINNED_AND_VERIFIED"
+    }
+  ],
+  "entries": [
+    {
+      "section": "5.1",
+      "path": "postcss.config.js",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 81,
+      "sha256": "e32657baf631d7c5f4dc67b4b2ee0ec8e7d5b3c41860e09cddce7c0377cd80bc"
+    },
+    {
+      "section": "5.1",
+      "path": "tailwind.config.js",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 5987,
+      "sha256": "ece2b068d12202c0d55358b0bcf203a6f75edc80845c882e1168728bc0826143"
+    },
+    {
+      "section": "5.2",
+      "path": "index.html",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 542,
+      "sha256": "2dab98860ba498b363a9f5c12682e2d5da222cfce6f99a6bbe14fa858c737257"
+    },
+    {
+      "section": "5.2",
+      "path": "tsconfig.json",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 573,
+      "sha256": "ee30af47cb66118c4b63589e401d3924d4d9af467599b43a50e71c4faa4bad12"
+    },
+    {
+      "section": "5.2",
+      "path": "vite.config.ts",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 1427,
+      "sha256": "cf823fc56d5ed0720d7569af00b2189f27d03f10479bba3809c3edb478bc3c91"
+    },
+    {
+      "section": "5.3",
+      "path": "package-lock.json",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 151326,
+      "sha256": "621d5518d7dcf1fc34cfa91660a20498487089f5c10f8dc0dfc3bf19e18dc5f6"
+    },
+    {
+      "section": "5.3",
+      "path": "package.json",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 2275,
+      "sha256": "f77b8a88aa2f1b355638fce2068ca9d6ce596adae77ccce2362565892d7c9259"
+    },
+    {
+      "section": "5.3",
+      "path": "vitest.config.ts",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 521,
+      "sha256": "f848fb9dbd4316b0411eea1f7951c4d1e77dfc219b05bf74e5550c930589aa93"
+    },
+    {
+      "section": "5.4",
+      "path": "integrations/herdr/herdr-client.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 16632,
+      "sha256": "d80ecd6f230e4be5136e52c6a74792b4ce9c8710c7307282331d7d445c4ef46b"
+    },
+    {
+      "section": "5.4",
+      "path": "integrations/herdr/herdr-service.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 18894,
+      "sha256": "7eb89306f4a06ef03dd099e727382c017214907c73bb5e8eeec78c40d6beba8c"
+    },
+    {
+      "section": "5.5",
+      "path": "server/building.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 7233,
+      "sha256": "4b6bf0ec3a7443f9188155369c755b94a39251caa339ad75493fcd4cca12ea9a"
+    },
+    {
+      "section": "5.5",
+      "path": "server/company-os.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 25287,
+      "sha256": "ff09f977e57a95f6d47888cfddaeee7812d8cda3769b3251d018953c8bb458a3"
+    },
+    {
+      "section": "5.5",
+      "path": "server/gates.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 6508,
+      "sha256": "7b4c8cb472df73c2696a92e1c031135a0d6c1a6f093e9c1881b82ec40382d9e8"
+    },
+    {
+      "section": "5.5",
+      "path": "server/health-floor.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 30709,
+      "sha256": "78ee00e4c4992b82601f083f8330edf200a03a981e2939ab9f62759f800efe73"
+    },
+    {
+      "section": "5.5",
+      "path": "server/path-guard.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 6944,
+      "sha256": "2968ee9fba9ca679fd46443e20fd74ded2d406d585b700bd451c5f0e1b42cfd3"
+    },
+    {
+      "section": "5.5",
+      "path": "server/paths.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 4214,
+      "sha256": "03cdfe15eda5b5a10e7f3efc7858c9fe52e808e9aeb13981d3b7ea9069e598d4"
+    },
+    {
+      "section": "5.5",
+      "path": "server/snapshot.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 14617,
+      "sha256": "d12b9fb39ea4ba0bb6478e7067d3a4eb61fdbec70b2498d80e8c1488438dbf05"
+    },
+    {
+      "section": "5.5",
+      "path": "server/staff-profile.mjs",
+      "path_base": "command_app_root",
+      "kind": "required-file",
+      "bytes": 12080,
+      "sha256": "b03b42252e2a71b06ab3bd1966c95acdcada1c14b9b758ba75a4153432d5a5e8"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/architecture.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 16503,
+      "sha256": "f5f251a3b39941d31663b98c848701c4849b8ffce269136a09e7867fd7f771c0"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/attention-render.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 16880,
+      "sha256": "732b40b0105c3996da684387116c0c7f9aa6230f7369e59cd0c10a708240b0c4"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/company-os.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 31217,
+      "sha256": "1482bcedde550d746465e0eb9f28a70389124c5965708774acf92e97156b86d3"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/contracts.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 7060,
+      "sha256": "b75e6cd63b899c2206dfbfaf5a7d7e06070864ebadbd27cdc63538158e573a3a"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/control-plane-service.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 11525,
+      "sha256": "8681230fbb144574d5d8b6f748f6cea815adf1c534f0ef3668ff3592d6767338"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/control-plane-state-machine.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 23942,
+      "sha256": "6c32b4c268f7bccebb08e5befb97748ee11d6ce6f365170163d109d6003ed2de"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/fixtures/floor-fixture.ts",
+      "path_base": "command_app_root",
+      "kind": "test-fixture-or-support",
+      "bytes": 5727,
+      "sha256": "1d6060ad77200dc45c68ff3e510850e3798872cd23e5676006f6af4ec334711a"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/fixtures/phase5-surface.json",
+      "path_base": "command_app_root",
+      "kind": "test-fixture-or-support",
+      "bytes": 1428,
+      "sha256": "3bf869e81fbd3df06d56e96c2f50f2f41bfbf47c14e2232e5ba6b04c5fb98547"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/floor-render.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 12173,
+      "sha256": "598f23aae0c893f437f88d1ce1f6d84b5febad0141f2d97ba19edefffe26efc7"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/herdr-client.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 21440,
+      "sha256": "06c067d94a0f41520a40f059f16a32b5742b1e80038f6b6c7661fc90397cea9c"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/herdr-terminal.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 23200,
+      "sha256": "b2f09fcfea710b25d6a29c979b8edd87fed7cb16a79464e139f2cd531db51850"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/path-guard.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 8181,
+      "sha256": "817d96242489807c46556a5a47cc6a0f82c286e58fe834e1c01560b61ebd6e4e"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase2.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 26610,
+      "sha256": "3f7755b645f44b40e0d9baf518a8b654e96688e4b3d6506dc642ebd250457605"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase3.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 43150,
+      "sha256": "f72d8882bf006d71e48fc9ab21c4f99389deca9e65178bf53c1b6b947ab4db45"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase4.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 24168,
+      "sha256": "090b1532caa680b334f940adf28f72886a1f8f5bdd614987734d5bd8aa60c36a"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase5-fixture.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 2101,
+      "sha256": "97981d16991da02515e6087568e70cd37f3bf95b7be382039312276dcc0db2df"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase5.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 48052,
+      "sha256": "36e53747ebdd6d3ebe5600b031c8bb68791c72ad14a8761b5da0da305fc92646"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7-corrective.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 20541,
+      "sha256": "6a0e073fbe749322d1df88a56e466516cf4c14f4f7deb338b3d3d5865ac8a59e"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7-dual-room.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 4107,
+      "sha256": "2170572b40e0383bf5f564d082d547a90bf2fb9c108d2cf40ef378967dd94e47"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7-r4r5-corrective.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 12605,
+      "sha256": "b56a466a11c792b03e9c4e34978cdcc2e4b43701461fef90026a0b970bb9d17f"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7-separate-origin.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 5056,
+      "sha256": "bea74a10e07397ca38019cb6289643a5d45ab6e3181ff5f9bcaa2a7fdd723fa2"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7-ui.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 37939,
+      "sha256": "26942456d7f0f5fe1bff090dcbdd4ffc5706b03ecf0cdee23ebb96a99dac2aef"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/phase7.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 6847,
+      "sha256": "e93135ca8657ab3194e58bbe2b7a910c4f95018b3410768156b12227e7160313"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/process-render.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 19104,
+      "sha256": "b3dca6d38993524500e68d607477d23d448eff194afb551ea4ab3f6dcb229a52"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/project-board.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 4217,
+      "sha256": "54e1e40b426cf7345fa1f93c4ddbcbc21f6f98b9bfeb6a8512a43682cc616e42"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/read-only-capability.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 35267,
+      "sha256": "c9856b271e2a87467c719519e8cf37c8c5e6f7cd63303b01fcfdd00100143d75"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/real-tree-capability-mutation.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 18405,
+      "sha256": "c80412a29574e4a690a5b71a5b8fdc167991c63a53a6bfb165a9d26c12ab398e"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/recovery-gates.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 6261,
+      "sha256": "070b39fe14fb9982104b527e58005f5a16117077bae4f58579d2243c5bfac1ca"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/render.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 7155,
+      "sha256": "e5794500439c32b2a48b0ddea9a76aab73deba88773b8684afea2128b2bb0b11"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/staff-board.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 33851,
+      "sha256": "b01bfd4cc343bd9fbee5fa2d0fc6f8372e08191e605cf808accc7977742aca83"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/standalone-lane.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 2393,
+      "sha256": "9ac21e65a8ce557707c825b7e38a077d2779f60265b0e75c90f6277ed568083f"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/structural-ownership.test.tsx",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 35243,
+      "sha256": "c4a92d7af03857d9a48be2f222724575954c6ccbd280b192c7da880a0ef9407b"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/support/application-capability.ts",
+      "path_base": "command_app_root",
+      "kind": "test-fixture-or-support",
+      "bytes": 30734,
+      "sha256": "95f81f4624cf3c3ddf8a959232c34f8521e7a48cb73d276428a70fa7123ce210"
+    },
+    {
+      "section": "5.6",
+      "path": "tests/worktree-manager.test.ts",
+      "path_base": "command_app_root",
+      "kind": "test-specification",
+      "bytes": 4607,
+      "sha256": "f56ed06fa151085a765953e01dcf0a3bc019a4430a2ee4e7012c3b4932855390"
+    },
+    {
+      "section": "5.7",
+      "path": "D:\\StarqTech\\STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md",
+      "path_base": "absolute",
+      "kind": "governing-census",
+      "bytes": 11984,
+      "sha256": "ca7d8cc7584c5facb484279eecab775d33101a44d1a9f8125ea4f79944998e3d",
+      "git_blob_sha1": "d5a9a5bf59f8693577861de89437a1aaa6193699"
+    }
+  ],
+  "individually_pinned_file_count": 53,
+  "b7_disposition": "CLOSED: all 53 extension entries individually pinned and reverified (53/53 exact, 0 discrepancies); source drift 0; the accepted §5.6 test aggregate was REPRODUCED deterministically as 41ddaa105d4db834a1b72dd7c080e0bbf1d4a35f87c8737c81255954bf8177cd using the recovered recipe recorded in test_set.aggregate_recipe. The aggregate covers the 31 top-level test specifications; the 3 fixture/support files are excluded from it by the historical non-recursive recipe and remain individually pinned above. No individual hash was changed. Closed 2026-10-10 by @opencode under Founder authorization for B7 evidence closure only. This closure does not authorize Wave 1."
+}
