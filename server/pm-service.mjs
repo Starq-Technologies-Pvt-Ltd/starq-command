@@ -919,9 +919,18 @@ function updateWorkPackage(id, body) {
 function listWorkPackages(projectId, milestoneId) {
   const d = requireDb();
   let rows;
-  if (milestoneId) rows = d.prepare('SELECT * FROM pm_work_packages WHERE milestone_id = ? ORDER BY id').all(milestoneId);
-  else if (projectId) rows = d.prepare('SELECT * FROM pm_work_packages WHERE project_id = ? ORDER BY id').all(projectId);
-  else rows = d.prepare('SELECT * FROM pm_work_packages ORDER BY id').all();
+  // Deadpool #9616: when both filters are given they must both hold, not
+  // just whichever this picked first. A milestone_id scoped to a different
+  // project must never leak that project's work packages into the result.
+  if (projectId && milestoneId) {
+    rows = d.prepare('SELECT * FROM pm_work_packages WHERE project_id = ? AND milestone_id = ? ORDER BY id').all(projectId, milestoneId);
+  } else if (milestoneId) {
+    rows = d.prepare('SELECT * FROM pm_work_packages WHERE milestone_id = ? ORDER BY id').all(milestoneId);
+  } else if (projectId) {
+    rows = d.prepare('SELECT * FROM pm_work_packages WHERE project_id = ? ORDER BY id').all(projectId);
+  } else {
+    rows = d.prepare('SELECT * FROM pm_work_packages ORDER BY id').all();
+  }
   return rows.map(hydrateWorkPackage);
 }
 
@@ -1106,7 +1115,18 @@ async function handle(req, res) {
       const pid = url.searchParams.get('project_id');
       const mid = url.searchParams.get('milestone_id');
       if (pid && !getProjectRow(pid)) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${pid}.`);
-      if (mid && !getMilestoneRow(mid)) throw new HttpError(404, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${mid}.`);
+      let milestoneRow = null;
+      if (mid) {
+        milestoneRow = getMilestoneRow(mid);
+        if (!milestoneRow) throw new HttpError(404, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${mid}.`);
+      }
+      // Deadpool #9616: a milestone_id scoped to a different project is a
+      // mismatched filter, not an empty-but-valid one — reject it explicitly
+      // rather than silently filtering down to nothing (or, before the fix,
+      // leaking the other project's rows).
+      if (pid && milestoneRow && milestoneRow.project_id !== pid) {
+        throw new HttpError(422, 'MILESTONE_CROSS_PROJECT', `Milestone ${mid} belongs to project ${milestoneRow.project_id}, not ${pid}.`);
+      }
       return send(res, 200, { project_id: pid, milestone_id: mid, work_packages: listWorkPackages(pid || null, mid || null) }, origin);
     }
     if (req.method === 'POST' && p === '/api/pm/work-packages') return send(res, 201, createWorkPackage(await readBody(req)), origin);

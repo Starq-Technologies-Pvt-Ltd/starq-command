@@ -119,6 +119,28 @@ describe('PM milestones and work packages (isolated scratch instance)', () => {
     expect(body.error).toBe('MILESTONE_CROSS_PROJECT');
   });
 
+  // Regression for Deadpool's independent-review finding (#9616): GET
+  // /api/pm/work-packages?project_id=command&milestone_id=<an ERP milestone>
+  // used to return the ERP milestone's work packages (listWorkPackages only
+  // honored milestone_id, silently ignoring project_id once both were
+  // given). Must now reject the mismatched filter combination instead of
+  // leaking cross-project rows.
+  it('rejects a cross-project milestone_id+project_id filter combination on GET work-packages (#9616)', async () => {
+    const erpMs = await (await api('POST', '/api/pm/milestones', { project_id: 'erp', title: 'ERP leak-check milestone', actor: ACTOR })).json();
+    const erpWp = await (await api('POST', '/api/pm/work-packages', { project_id: 'erp', milestone_id: erpMs.id, title: 'ERP leak-check work package', actor: ACTOR })).json();
+
+    const leaked = await api('GET', `/api/pm/work-packages?project_id=command&milestone_id=${erpMs.id}`);
+    expect(leaked.status).toBe(422);
+    const body = await leaked.json();
+    expect(body.error).toBe('MILESTONE_CROSS_PROJECT');
+
+    // Confirm the ERP work package IS real and reachable on its own project,
+    // so this is genuinely a filter-combination rejection, not a false
+    // negative from the work package never having existed.
+    const erpScoped = await (await api('GET', `/api/pm/work-packages?project_id=erp&milestone_id=${erpMs.id}`)).json();
+    expect(erpScoped.work_packages.map((w: any) => w.id)).toContain(erpWp.id);
+  });
+
   it('creates a task linked to the work package and the rollup counts it', async () => {
     const wpList = await (await api('GET', '/api/pm/work-packages?project_id=command')).json();
     const wpId = wpList.work_packages[0].id;
