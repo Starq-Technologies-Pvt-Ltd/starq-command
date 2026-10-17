@@ -70,6 +70,7 @@ export interface PmTask {
   room_authorization_ref: PmRoomRef | null;
   evidence_refs: PmRoomRef[];
   depends_on: string[];
+  work_package_id: string | null;
   notes: string;
   created_by: string;
   created_at: string;

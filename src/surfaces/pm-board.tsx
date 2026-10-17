@@ -23,12 +23,14 @@ import {
   pmTask,
   pmTasks,
   pmUpdateTask,
+  pmWorkPackages,
   type PmHistoryRow,
   type PmProject,
   type PmResult,
   type PmStatus,
   type PmTask,
   type PmTaskDetail,
+  type PmWorkPackage,
 } from '@/lib/pm-client';
 
 function requestedTaskId(): string | null {
@@ -163,6 +165,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [project, setProject] = React.useState<PmProject | null>(null);
   const [tasks, setTasks] = React.useState<PmTask[] | null>(null);
   const [handles, setHandles] = React.useState<string[]>([]);
+  const [workPackages, setWorkPackages] = React.useState<PmWorkPackage[]>([]);
   const [problem, setProblem] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<PmTaskDetail | null>(null);
@@ -177,12 +180,13 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const setActor = (value: string) => { setActorState(value); storeActor(value); };
 
   const load = React.useCallback(async (keepSelected?: string | null) => {
-    const [m, p, t] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId)]);
+    const [m, p, t, wp] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId), pmWorkPackages(projectId)]);
     if (!m.ok) { setProblem(m.message); return; }
     if (!p.ok) { setProblem(p.message); return; }
     if (!t.ok) { setProblem(t.message); return; }
     setProblem(null);
     setHandles(m.data.handles);
+    setWorkPackages(wp.ok ? wp.data.work_packages : []);
     setProject(p.data.projects.find((x) => x.id === projectId) ?? null);
     setTasks(t.data.tasks);
     const id = keepSelected && t.data.tasks.some((task) => task.id === keepSelected) ? keepSelected : null;
@@ -237,6 +241,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       project_id: projectId, actor, title: v.title, description: v.description, priority: v.priority,
       owner: v.owner, verifier: v.verifier, notes: v.notes, depends_on: v.dependsOn,
     };
+    if (v.workPackageId) body.work_package_id = v.workPackageId;
     if (v.authSequence) body.room_authorization_ref = { sequence: Number(v.authSequence), eventId: v.authEventId, purpose: v.authPurpose };
     await finish(await pmCreateTask(body), 'Task created and saved. Room post queued.');
   };
@@ -253,6 +258,8 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     if (v.verifier !== t.verifier) body.verifier = v.verifier;
     if (v.notes !== t.notes) body.notes = v.notes;
     if (JSON.stringify(v.dependsOn) !== JSON.stringify(t.depends_on)) body.depends_on = v.dependsOn;
+    const previousWp = t.work_package_id ?? '';
+    if (v.workPackageId !== previousWp) body.work_package_id = v.workPackageId || null;
     await finish(await pmUpdateTask(t.id, body), 'Changes saved.');
   };
 
@@ -351,7 +358,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
         {mode === 'create' ? (
           <div className="border-b border-border">
-            <TaskForm mode="create" initial={emptyTaskForm()} handles={handles} busy={busy} errors={errors} onSubmit={(v) => void create(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
+            <TaskForm mode="create" initial={emptyTaskForm()} handles={handles} workPackages={workPackages} busy={busy} errors={errors} onSubmit={(v) => void create(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
           </div>
         ) : null}
 
@@ -397,7 +404,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       {detail && selectedId ? (
         mode === 'edit' ? (
           <Panel title={`Edit ${detail.task.id}`}>
-            <TaskForm mode="edit" initial={taskToForm(detail.task)} handles={handles} busy={busy} errors={errors} onSubmit={(v) => void edit(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
+            <TaskForm mode="edit" initial={taskToForm(detail.task)} handles={handles} workPackages={workPackages} busy={busy} errors={errors} onSubmit={(v) => void edit(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
           </Panel>
         ) : (
           <>
