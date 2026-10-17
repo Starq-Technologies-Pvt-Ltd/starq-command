@@ -218,4 +218,48 @@ describe('Command project portfolio', () => {
     expect(host.textContent).not.toContain('Recorded blocker');
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/pm/tasks/PM-CMD-001'))).toBe(false);
   });
+
+  it('displays milestones and work packages rollups on project cards when available', async () => {
+    const cmd = {
+      ...project('command', 'Starq Command', 'CMD'),
+      milestones: { total: 4, open: 2 },
+      work_packages: { total: 8, open: 3 },
+    };
+    const portfolio = {
+      generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses,
+      projects: [cmd],
+    };
+    const metadata = {
+      projects: [{ id: cmd.id, name: cmd.name, prefix: cmd.prefix, description: 'Command OS', source_gap: null, hold: cmd.hold }],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/projects')) return { ok: true, json: async () => metadata };
+      return { ok: true, json: async () => ({ project_id: 'command', tasks: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/projects' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => {
+      root?.render(<PmPortfolioSurface />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const msMetric = host.querySelector('[data-project="command"] [data-metric="milestones"]');
+    expect(msMetric).not.toBeNull();
+    expect(msMetric!.textContent).toContain('Milestones (open / total)');
+    expect(msMetric!.textContent).toContain('2 / 4');
+
+    const wpMetric = host.querySelector('[data-project="command"] [data-metric="work-packages"]');
+    expect(wpMetric).not.toBeNull();
+    expect(wpMetric!.textContent).toContain('Work packages (open / total)');
+    expect(wpMetric!.textContent).toContain('3 / 8');
+  });
 });

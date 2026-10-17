@@ -114,6 +114,8 @@ export interface PmPortfolioProject {
   blocked: number;
   pending_room_sync: number;
   unassigned: number;
+  milestones?: { total: number; open: number };
+  work_packages?: { total: number; open: number };
 }
 
 export interface PmPortfolio {

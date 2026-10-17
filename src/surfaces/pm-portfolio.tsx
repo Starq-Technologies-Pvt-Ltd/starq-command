@@ -297,6 +297,14 @@ export function PmPortfolioSurface() {
                     <div className="text-2xs text-muted-foreground">Founder gate</div>
                     <strong>{p.founder_gate}</strong>
                   </div>
+                  <div className="rounded border border-border p-2" data-metric="milestones">
+                    <div className="text-2xs text-muted-foreground">Milestones (open / total)</div>
+                    <strong>{p.milestones ? `${p.milestones.open} / ${p.milestones.total}` : '0 / 0'}</strong>
+                  </div>
+                  <div className="rounded border border-border p-2" data-metric="work-packages">
+                    <div className="text-2xs text-muted-foreground">Work packages (open / total)</div>
+                    <strong>{p.work_packages ? `${p.work_packages.open} / ${p.work_packages.total}` : '0 / 0'}</strong>
+                  </div>
                 </div>
 
                 <div className="grid gap-2 rounded border border-border p-2 text-xs">
