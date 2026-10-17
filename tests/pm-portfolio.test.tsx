@@ -262,4 +262,54 @@ describe('Command project portfolio', () => {
     expect(wpMetric!.textContent).toContain('Work packages (open / total)');
     expect(wpMetric!.textContent).toContain('3 / 8');
   });
+
+  it('renders UNKNOWN instead of 0 when milestones or work_packages rollup fields are absent (#9672)', async () => {
+    const cmdAbsent = project('command', 'Starq Command', 'CMD');
+    const erpZero = {
+      ...project('erp', 'Starq ERP', 'ERP'),
+      milestones: { total: 0, open: 0 },
+      work_packages: { total: 0, open: 0 },
+    };
+    const portfolio = {
+      generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses,
+      projects: [cmdAbsent, erpZero],
+    };
+    const metadata = {
+      projects: [
+        { id: cmdAbsent.id, name: cmdAbsent.name, prefix: cmdAbsent.prefix, description: 'Command OS', source_gap: null, hold: cmdAbsent.hold },
+        { id: erpZero.id, name: erpZero.name, prefix: erpZero.prefix, description: 'ERP', source_gap: null, hold: erpZero.hold },
+      ],
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/projects')) return { ok: true, json: async () => metadata };
+      return { ok: true, json: async () => ({ project_id: 'command', tasks: [] }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/projects' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => {
+      root?.render(<PmPortfolioSurface />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const cmdMs = host.querySelector('[data-project="command"] [data-metric="milestones"]');
+    const cmdWp = host.querySelector('[data-project="command"] [data-metric="work-packages"]');
+    expect(cmdMs?.textContent).toContain('UNKNOWN');
+    expect(cmdMs?.textContent).not.toContain('0 / 0');
+    expect(cmdWp?.textContent).toContain('UNKNOWN');
+    expect(cmdWp?.textContent).not.toContain('0 / 0');
+
+    const erpMs = host.querySelector('[data-project="erp"] [data-metric="milestones"]');
+    const erpWp = host.querySelector('[data-project="erp"] [data-metric="work-packages"]');
+    expect(erpMs?.textContent).toContain('0 / 0');
+    expect(erpWp?.textContent).toContain('0 / 0');
+  });
 });
