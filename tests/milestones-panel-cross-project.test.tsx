@@ -164,4 +164,46 @@ describe('MilestonesPanel on erp and hoadha', () => {
     expect(values).toEqual([`MS-${prefix}-001`, `MS-${prefix}-002`]);
     expect(values.some((v) => v.endsWith('-007'))).toBe(false);
   });
+
+  it('renders an explicit UNAVAILABLE state with alert text and Retry recovery when initial load fails (#9648)', async () => {
+    let shouldFail = true;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (shouldFail) {
+        return {
+          ok: false,
+          status: 503,
+          json: async () => ({ error: 'SERVICE_UNAVAILABLE', message: 'PM database unavailable.' }),
+        };
+      }
+      const url = new URL(String(input), 'http://localhost');
+      const projectId = url.searchParams.get('project_id');
+      if (url.pathname.endsWith('/milestones')) {
+        return { ok: true, json: async () => ({ project_id: projectId, milestones: [row('command', 'CMD', 1)] }) };
+      }
+      return {
+        ok: true,
+        json: async () => ({ project_id: projectId, milestone_id: null, work_packages: [wp('command', 'CMD', 1)] }),
+      };
+    });
+
+    const host = await render('command', fetchMock);
+    expect(host.textContent).toContain('UNAVAILABLE');
+    expect(host.textContent).not.toContain('Reading the PM service');
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert).not.toBeNull();
+    expect(alert?.textContent).toContain('SERVICE_UNAVAILABLE: PM database unavailable.');
+
+    const retryBtn = Array.from(host.querySelectorAll('button')).find((b) => b.textContent === 'Retry');
+    expect(retryBtn).toBeTruthy();
+
+    shouldFail = false;
+    await act(async () => {
+      retryBtn!.dispatchEvent(new dom!.window.MouseEvent('click', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host.textContent).not.toContain('UNAVAILABLE');
+    expect(host.querySelector('[data-milestone-id="MS-CMD-001"]')?.textContent).toContain('command milestone 1');
+    expect(host.querySelector('[data-wp-id="WP-CMD-001"]')?.textContent).toContain('command work package 1');
+  });
 });

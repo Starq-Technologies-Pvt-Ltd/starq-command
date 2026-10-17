@@ -36,8 +36,10 @@ export function MilestonesPanel({ projectId, actor }: { projectId: string; actor
 
   const load = React.useCallback(async () => {
     const [ms, wp] = await Promise.all([pmMilestones(projectId), pmWorkPackages(projectId)]);
-    if (ms.ok) setMilestones(ms.data.milestones); else setErrors(failureLines(ms));
-    if (wp.ok) setWorkPackages(wp.data.work_packages); else setErrors((e) => [...e, ...failureLines(wp)]);
+    const nextErrors: string[] = [];
+    if (ms.ok) setMilestones(ms.data.milestones); else nextErrors.push(...failureLines(ms));
+    if (wp.ok) setWorkPackages(wp.data.work_packages); else nextErrors.push(...failureLines(wp));
+    setErrors(nextErrors);
   }, [projectId]);
 
   React.useEffect(() => {
@@ -88,6 +90,30 @@ export function MilestonesPanel({ projectId, actor }: { projectId: string; actor
   };
 
   if (!milestones || !workPackages) {
+    if (errors.length > 0) {
+      return (
+        <Panel title="Milestones & work packages" count="UNAVAILABLE">
+          <div className="grid gap-2 p-3" data-pm="milestones-unavailable">
+            <ul role="alert" className="text-xs text-truth-drift">
+              {errors.map((e, i) => <li key={`${i}-${e}`}>{e}</li>)}
+            </ul>
+            <div>
+              <button
+                type="button"
+                className="go-link"
+                disabled={busy}
+                onClick={() => {
+                  setErrors([]);
+                  void load();
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </Panel>
+      );
+    }
     return <Panel title="Milestones & work packages" count="LOADING"><div className="body"><p className="prose-note">Reading the PM service…</p></div></Panel>;
   }
 
@@ -97,7 +123,7 @@ export function MilestonesPanel({ projectId, actor }: { projectId: string; actor
       count={`${milestones.length} milestone${milestones.length === 1 ? '' : 's'} · ${workPackages.length} work package${workPackages.length === 1 ? '' : 's'}`}
     >
       <div className="grid gap-3 p-3" data-pm="milestones">
-        {errors.length ? <ul role="alert" className="text-xs text-truth-drift">{errors.map((e) => <li key={e}>{e}</li>)}</ul> : null}
+        {errors.length ? <ul role="alert" className="text-xs text-truth-drift">{errors.map((e, i) => <li key={`${i}-${e}`}>{e}</li>)}</ul> : null}
 
         <div className="grid gap-2 md:grid-cols-2">
           <section aria-label="Milestones" className="rounded border border-border">
