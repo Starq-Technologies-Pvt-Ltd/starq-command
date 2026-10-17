@@ -46,10 +46,23 @@ beforeAll(async () => {
   await waitForReady();
 }, 20000);
 
-afterAll(() => {
+// child.kill() does not synchronously release the scratch SQLite/WAL file
+// handles on Windows, so an immediate recursive delete throws EPERM and a
+// fully green suite is reported as a failed file. Retry briefly, then give
+// up quietly: a leftover temp dir must never fail the run.
+afterAll(async () => {
   child?.kill();
-  if (tmpDir) rmSync(tmpDir, { recursive: true, force: true });
-});
+  if (!tmpDir) return;
+  for (let i = 0; i < 20; i += 1) {
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+}, 20000);
 
 describe('PM milestones and work packages (isolated scratch instance)', () => {
   it('reports the new tables in health, with zero rows initially', async () => {
