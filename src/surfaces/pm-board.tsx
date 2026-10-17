@@ -10,6 +10,7 @@ import * as React from 'react';
 import { Chip, KV, Panel, SourceGap } from '@/components/console';
 import { PmNav } from '@/surfaces/pm-portfolio';
 import { TaskForm, emptyTaskForm, taskToForm, type TaskFormValues } from '@/components/task-form';
+import { MilestonesPanel } from '@/components/milestones-panel';
 import {
   PM_STATUSES,
   pmCreateTask,
@@ -390,6 +391,8 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
           })}
         </div>
       </Panel>
+
+      <MilestonesPanel projectId={projectId} actor={actor} />
 
       {detail && selectedId ? (
         mode === 'edit' ? (

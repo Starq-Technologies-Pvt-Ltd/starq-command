@@ -132,10 +132,57 @@ export interface PmHealth {
   db: string | null;
 }
 
+export const MILESTONE_STATUSES = ['OPEN', 'AT_RISK', 'ACHIEVED', 'MISSED'] as const;
+export type MilestoneStatus = (typeof MILESTONE_STATUSES)[number];
+export const WORK_PACKAGE_STATUSES = ['OPEN', 'IN_PROGRESS', 'DONE'] as const;
+export type WorkPackageStatus = (typeof WORK_PACKAGE_STATUSES)[number];
+
+export interface PmMilestone {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string;
+  target_date: string | null;
+  status: MilestoneStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  work_package_counts: Record<WorkPackageStatus, number>;
+  work_package_total: number;
+}
+
+export interface PmWorkPackage {
+  id: string;
+  project_id: string;
+  milestone_id: string | null;
+  title: string;
+  description: string;
+  owner: string;
+  status: WorkPackageStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  task_counts: Record<PmStatus, number>;
+  task_total: number;
+}
+
+export interface PmMilestoneDetail {
+  milestone: PmMilestone;
+  work_packages: PmWorkPackage[];
+}
+
+export interface PmWorkPackageDetail {
+  work_package: PmWorkPackage;
+  tasks: PmTask[];
+}
+
 export interface PmMeta {
   statuses: PmStatus[];
   priorities: PmPriority[];
   handles: string[];
+  milestone_statuses?: MilestoneStatus[];
+  work_package_statuses?: WorkPackageStatus[];
 }
 
 export type PmResult<T> =
@@ -193,6 +240,23 @@ export const pmUpdateTask = (id: string, body: Record<string, unknown>) =>
 export const pmLinkRoom = (id: string, body: Record<string, unknown>) =>
   call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/room-link`, body);
 export const pmRetryRoomSync = () => call<{ queued: boolean; pending_room_sync: number }>('POST', '/api/pm/room-sync/retry', {});
+
+export const pmMilestones = (projectId: string) =>
+  call<{ project_id: string; milestones: PmMilestone[] }>('GET', `/api/pm/milestones?project_id=${encodeURIComponent(projectId)}`);
+export const pmMilestone = (id: string) => call<PmMilestoneDetail>('GET', `/api/pm/milestones/${encodeURIComponent(id)}`);
+export const pmCreateMilestone = (body: Record<string, unknown>) => call<PmMilestone>('POST', '/api/pm/milestones', body);
+export const pmUpdateMilestone = (id: string, body: Record<string, unknown>) =>
+  call<PmMilestone>('PATCH', `/api/pm/milestones/${encodeURIComponent(id)}`, body);
+
+export const pmWorkPackages = (projectId: string, milestoneId?: string) =>
+  call<{ project_id: string; milestone_id: string | null; work_packages: PmWorkPackage[] }>(
+    'GET',
+    `/api/pm/work-packages?project_id=${encodeURIComponent(projectId)}${milestoneId ? `&milestone_id=${encodeURIComponent(milestoneId)}` : ''}`,
+  );
+export const pmWorkPackage = (id: string) => call<PmWorkPackageDetail>('GET', `/api/pm/work-packages/${encodeURIComponent(id)}`);
+export const pmCreateWorkPackage = (body: Record<string, unknown>) => call<PmWorkPackage>('POST', '/api/pm/work-packages', body);
+export const pmUpdateWorkPackage = (id: string, body: Record<string, unknown>) =>
+  call<PmWorkPackage>('PATCH', `/api/pm/work-packages/${encodeURIComponent(id)}`, body);
 
 export const PM_BOARD_HREF: Record<string, string> = {
   command: '#studio/command',
