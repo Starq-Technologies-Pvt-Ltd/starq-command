@@ -347,10 +347,16 @@ function initSchema(handle) {
   // Idempotent column additions for existing databases (SQLite has no
   // ADD COLUMN IF NOT EXISTS). Both are nullable, zero-impact on existing rows.
   const hasColumn = (table, col) => handle.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
+  // Codex #9641: the index must not live inside the column-add guard. If the
+  // ALTER succeeds but the process dies before the next line ran, a later
+  // startup sees the column already present, skips this branch entirely,
+  // and the index is permanently missing. CREATE INDEX IF NOT EXISTS is run
+  // unconditionally every startup instead - idempotent, resume-safe either
+  // way the prior run stopped.
   if (!hasColumn('pm_tasks', 'work_package_id')) {
     handle.exec('ALTER TABLE pm_tasks ADD COLUMN work_package_id TEXT REFERENCES pm_work_packages(id)');
-    handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_wp ON pm_tasks(work_package_id)');
   }
+  handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_wp ON pm_tasks(work_package_id)');
   if (!hasColumn('pm_projects', 'next_ms_seq')) handle.exec('ALTER TABLE pm_projects ADD COLUMN next_ms_seq INTEGER NOT NULL DEFAULT 1');
   if (!hasColumn('pm_projects', 'next_wp_seq')) handle.exec('ALTER TABLE pm_projects ADD COLUMN next_wp_seq INTEGER NOT NULL DEFAULT 1');
   const has = handle.prepare('SELECT value FROM pm_meta WHERE key = ?');
