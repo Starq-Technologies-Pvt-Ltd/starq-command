@@ -95,10 +95,16 @@ export function allowedNext(task) {
 const workspace = resolveWorkspace();
 const ROOT = workspace.root;
 const ROOM_POST = (process.env.PM_ROOM_POST || 'on') !== 'off';
-const ROOM_FROM = process.env.PM_ROOM_FROM || 'claude';
-const ROOM_INSTANCE = process.env.PM_ROOM_INSTANCE || 'claude-9489-audit-final';
+const ROOM_FROM = String(process.env.PM_ROOM_FROM || '').trim();
+const ROOM_INSTANCE = String(process.env.PM_ROOM_INSTANCE || '').trim();
 const ROOM_TAGS = process.env.PM_ROOM_TAGS || '';
 const SEND_SCRIPT = process.env.PM_ROOM_SEND_SCRIPT || (ROOT ? abs(ROOT, 'agent-comms/scripts/send.mjs') : '');
+
+function requireExplicitRoomWriter() {
+  if (!ROOM_FROM || !ROOM_INSTANCE) {
+    throw new Error('PM Room posting is enabled without explicit PM_ROOM_FROM and PM_ROOM_INSTANCE');
+  }
+}
 
 function resolveDbPath() {
   const override = process.env.PM_DB_PATH;
@@ -558,6 +564,7 @@ function roomBody(row, task, dbId) {
 }
 
 function postToRoom(body) {
+  requireExplicitRoomWriter();
   return new Promise((resolve, reject) => {
     const args = [SEND_SCRIPT, '--from', ROOM_FROM, '--instance', ROOM_INSTANCE, '--room', '--body', body];
     if (ROOM_TAGS) args.push('--tag', ROOM_TAGS);
@@ -1188,6 +1195,7 @@ const argv = process.argv.slice(2);
 if (argv.includes('--backup')) cliBackup();
 else if (argv.includes('--verify')) cliVerify(argv[argv.indexOf('--verify') + 1]);
 else {
+  if (ROOM_POST) requireExplicitRoomWriter();
   startDatabase();
   const server = http.createServer((req, res) => { void handle(req, res); });
   server.listen(PORT, HOST, () => {

@@ -1,12 +1,62 @@
 /**
  * Room Typed Lifecycle Event Adapter
  * Starq Command Architecture Doctrine Section 18 & Requirement 5H
+ *
+ * P0 D4: PRESERVED, UNREVIEWED. Carried from live Command as protective
+ * destination-guard code. Independent review is required before this counts
+ * as accepted. Do not treat overlay as authorization or acceptance.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { type RoomEventEnvelope, type RoomEventType } from '../../src/schemas/room-event.ts';
+
+const ADAPTER_DIR = path.dirname(fileURLToPath(import.meta.url));
+export const CANONICAL_ROOM_LEDGER = path.resolve('D:\\StarqTech\\agent-comms\\room.jsonl');
+
+function sameFilesystemPath(left: string, right: string): boolean {
+  const a = path.normalize(path.resolve(left));
+  const b = path.normalize(path.resolve(right));
+  const fold = (value: string) => (process.platform === 'win32' ? value.toLowerCase() : value);
+  if (fold(a) === fold(b)) return true;
+  try {
+    if (fs.existsSync(a) && fs.existsSync(b)) {
+      return fold(fs.realpathSync(a)) === fold(fs.realpathSync(b));
+    }
+    if (fs.existsSync(a) && !fs.existsSync(b)) {
+      return fold(fs.realpathSync(a)) === fold(b);
+    }
+    if (!fs.existsSync(a) && fs.existsSync(b)) {
+      return fold(a) === fold(fs.realpathSync(b));
+    }
+  } catch {
+    /* compare resolved strings only */
+  }
+  return false;
+}
+
+export function canonicalRoomLedgerPaths(): string[] {
+  return [
+    CANONICAL_ROOM_LEDGER,
+    path.resolve('D:/StarqTech/agent-comms/room.jsonl'),
+    path.resolve(process.cwd(), 'agent-comms', 'room.jsonl'),
+    path.resolve(ADAPTER_DIR, '..', '..', '..', '..', '..', 'agent-comms', 'room.jsonl'),
+  ];
+}
+
+export function assertEventsLedgerIsNotCanonicalRoom(eventsLedgerPath: string): string {
+  const resolved = path.resolve(eventsLedgerPath);
+  if (canonicalRoomLedgerPaths().some((candidate) => sameFilesystemPath(resolved, candidate))) {
+    throw new Error(
+      'REFUSED: RoomEventAdapter cannot append the typed side-ledger to canonical Room '
+      + '(agent-comms/room.jsonl), including normalized, resolved, or symlink-equivalent paths. '
+      + 'Use agent-comms/room-events.jsonl and broadcast via send.mjs.',
+    );
+  }
+  return resolved;
+}
 
 /**
  * The result of reading the typed events ledger.
@@ -57,9 +107,10 @@ export class RoomEventAdapter {
   private commsScriptPath: string;
 
   constructor(options?: { eventsLedgerPath?: string; commsScriptPath?: string }) {
-    this.eventsLedgerPath =
+    this.eventsLedgerPath = assertEventsLedgerIsNotCanonicalRoom(
       options?.eventsLedgerPath ||
-      path.resolve(process.cwd(), 'agent-comms', 'room-events.jsonl');
+      path.resolve(process.cwd(), 'agent-comms', 'room-events.jsonl'),
+    );
     this.commsScriptPath =
       options?.commsScriptPath ||
       path.resolve(process.cwd(), 'agent-comms', 'scripts', 'send.mjs');
@@ -93,7 +144,8 @@ export class RoomEventAdapter {
       payload: params.payload || {},
     };
 
-    // 1. Append to typed events JSONL
+    // 1. Append to typed events JSONL — never the canonical Room ledger.
+    assertEventsLedgerIsNotCanonicalRoom(this.eventsLedgerPath);
     fs.appendFileSync(
       this.eventsLedgerPath,
       JSON.stringify(envelope) + '\n',
