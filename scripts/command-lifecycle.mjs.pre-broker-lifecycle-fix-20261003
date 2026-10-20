@@ -1,0 +1,191 @@
+#!/usr/bin/env node
+/**
+ * STARQ // COMMAND local lifecycle owner.
+ *
+ * This file is the only launcher for the three local Command processes. It
+ * never adopts an existing process: stop/status act only on the PIDs recorded
+ * when this launcher spawned them.
+ */
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
+import { createConnection } from 'node:net';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, openSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const documentedWorkspace = process.platform === 'win32' ? 'D:\\StarqTech' : null;
+const workspaceRoot = process.env.STARQ_WORKSPACE && existsSync(process.env.STARQ_WORKSPACE)
+  ? path.resolve(process.env.STARQ_WORKSPACE)
+  : documentedWorkspace && existsSync(documentedWorkspace)
+    ? documentedWorkspace
+    : path.resolve(packageRoot, '..', '..', '..');
+const runtimeDir = path.join(packageRoot, '.command-runtime');
+const statePath = path.join(runtimeDir, 'state.json');
+const logDir = path.join(runtimeDir, 'logs');
+const node = process.execPath;
+const ports = {
+  data: Number(process.env.COMMAND_PORT || 5177),
+  building: Number(process.env.BUILDING_SERVICE_PORT || 5178),
+  herdr: Number(process.env.HERDR_SERVICE_PORT || 5179),
+  ui: Number(process.env.COMMAND_UI_PORT || 5173),
+};
+
+function ensureRuntime() {
+  mkdirSync(logDir, { recursive: true });
+}
+function readState() {
+  if (!existsSync(statePath)) return null;
+  try { return JSON.parse(readFileSync(statePath, 'utf8')); } catch { return null; }
+}
+function saveState(state) {
+  ensureRuntime();
+  writeFileSync(statePath, JSON.stringify(state, null, 2));
+}
+function logPath(name) { return path.join(logDir, `${name}.log`); }
+function openLog(name) {
+  ensureRuntime();
+  appendFileSync(logPath(name), `\n--- ${new Date().toISOString()} ---\n`);
+  return openSync(logPath(name), 'a');
+}
+function spawnOwned(name, args, env) {
+  const child = spawn(node, args, {
+    cwd: packageRoot,
+    env: { ...process.env, ...env, STARQ_WORKSPACE: workspaceRoot },
+    shell: false,
+    windowsHide: true,
+    stdio: ['ignore', openLog(name), openLog(name)],
+  });
+  return { name, pid: child.pid, log: logPath(name) };
+}
+function probe(port, host = '127.0.0.1') {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host });
+    const finish = (value) => { socket.destroy(); resolve(value); };
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+    socket.setTimeout(800, () => finish(false));
+  });
+}
+async function waitForPort(port, timeoutMs = 15000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (await probe(port)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return false;
+}
+function httpGet(port, pathname) {
+  return new Promise((resolve, reject) => {
+    import('node:http').then(({ get }) => {
+      const request = get({ hostname: '127.0.0.1', port, path: pathname, timeout: 1200 }, (response) => {
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => { body += chunk; });
+        response.on('end', () => resolve({ status: response.statusCode, body }));
+      });
+      request.on('error', reject);
+      request.on('timeout', () => { request.destroy(); reject(new Error('timeout')); });
+    }).catch(reject);
+  });
+}
+async function readiness() {
+  const checks = [];
+  for (const [name, port, endpoint] of [
+    ['data', ports.data, '/api/health'],
+    ['building', ports.building, '/api/building/health'],
+    ['herdr', ports.herdr, '/api/herdr/health'],
+    ['ui', ports.ui, '/'],
+  ]) {
+    try {
+      const response = await httpGet(port, endpoint);
+      checks.push({ name, port, status: response.status, ready: response.status >= 200 && response.status < 500 });
+    } catch (error) {
+      checks.push({ name, port, ready: false, error: error.message });
+    }
+  }
+  return checks;
+}
+function conflictPorts() {
+  return Promise.all(Object.entries(ports).map(async ([name, port]) => {
+    const owner = await portOwner(port);
+    return { name, port, busy: owner !== null, owner };
+  }));
+}
+async function portOwner(port) {
+  if (process.platform !== 'win32') return (await probe(port)) ? { pid: 'unknown', command: 'unknown' } : null;
+  const netstat = execFileSync('netstat.exe', ['-ano', '-p', 'tcp'], { encoding: 'utf8', windowsHide: true });
+  const line = netstat.split(/\r?\n/).find((entry) => new RegExp(`127\\.0\\.0\\.1:${port}\\s+.*LISTENING\\s+(\\d+)`).test(entry));
+  if (!line) return null;
+  const pid = Number(line.trim().split(/\s+/).at(-1));
+  let command = 'command unavailable';
+  try {
+    command = execFileSync('powershell.exe', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}").CommandLine`], { encoding: 'utf8', windowsHide: true }).trim() || command;
+  } catch {}
+  return { pid, command };
+}
+function ownedChildren(state) {
+  return state?.children ?? [];
+}
+function stopPid(pid) {
+  if (!pid) return { pid, stopped: false, reason: 'missing pid' };
+  if (process.platform === 'win32') {
+    const result = spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, encoding: 'utf8' });
+    return { pid, stopped: result.status === 0, detail: (result.stdout || result.stderr || '').trim() };
+  }
+  try { process.kill(pid, 'SIGTERM'); return { pid, stopped: true }; } catch (error) { return { pid, stopped: false, detail: error.message }; }
+}
+async function start() {
+  const existing = readState();
+  if (existing?.state !== 'STOPPED' && existing?.children?.some((child) => child.pid && child.pid !== process.pid)) {
+    throw new Error(`owned runtime already recorded; run command:status or command:stop first (${statePath})`);
+  }
+  const conflicts = (await conflictPorts()).filter((entry) => entry.busy);
+  if (conflicts.length) {
+    const details = conflicts.map((entry) => `${entry.name} port ${entry.port} · PID ${entry.owner.pid} · ${entry.owner.command}`).join('\n');
+    throw new Error(`PORT CONFLICT\n${details}\nRefusing to adopt or kill unrelated listeners.\nNext step: stop the listed process yourself or rerun with COMMAND_PORT, BUILDING_SERVICE_PORT and COMMAND_UI_PORT set to three free ports.`);
+  }
+  ensureRuntime();
+  const children = [
+    spawnOwned('data', [path.join(packageRoot, 'server', 'data-service.mjs')], { COMMAND_PORT: String(ports.data) }),
+    spawnOwned('building', [path.join(packageRoot, 'server', 'building-service.mjs')], { BUILDING_SERVICE_PORT: String(ports.building) }),
+    spawnOwned('herdr', [path.join(packageRoot, 'integrations', 'herdr', 'herdr-service.mjs')], { HERDR_SERVICE_PORT: String(ports.herdr) }),
+    spawnOwned('ui', [path.join(packageRoot, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1', '--port', String(ports.ui)], {
+      COMMAND_DATA_SERVICE: `http://127.0.0.1:${ports.data}`,
+      BUILDING_SERVICE: `http://127.0.0.1:${ports.building}`,
+      HERDR_SERVICE: `http://127.0.0.1:${ports.herdr}`,
+    }),
+  ];
+  const state = { version: 1, started_at: new Date().toISOString(), workspace: workspaceRoot, package_root: packageRoot, ports, children };
+  saveState(state);
+  const ready = await Promise.all(children.map(async (child) => ({ ...child, ready: await waitForPort(ports[child.name]) })));
+  const checks = await readiness();
+  const healthy = ready.every((child) => child.ready) && checks.every((check) => check.ready);
+  saveState({ ...state, ready_at: healthy ? new Date().toISOString() : null, readiness: checks, state: healthy ? 'READY' : 'FAILED' });
+  if (!healthy) throw new Error(`Command runtime failed readiness; inspect logs in ${logDir}`);
+  console.log(`STARQ // COMMAND READY http://127.0.0.1:${ports.ui}/`);
+  console.log(`workspace=${workspaceRoot}`);
+  console.log(`state=${statePath}`);
+  console.log(`logs=${logDir}`);
+}
+async function status() {
+  const state = readState();
+  if (!state) { console.log('STARQ // COMMAND STOPPED (no owned runtime state)'); return; }
+  const checks = await readiness();
+  console.log(JSON.stringify({ ...state, readiness: checks }, null, 2));
+}
+async function stop() {
+  const state = readState();
+  if (!state) { console.log('STARQ // COMMAND STOPPED (no owned runtime state)'); return; }
+  const results = ownedChildren(state).slice().reverse().map((child) => ({ name: child.name, ...stopPid(child.pid) }));
+  saveState({ ...state, state: 'STOPPED', stopped_at: new Date().toISOString(), stop_results: results });
+  console.log(JSON.stringify({ state: 'STOPPED', results }, null, 2));
+}
+async function main() {
+  const command = process.argv[2] || 'start';
+  if (command === 'start') return start();
+  if (command === 'status') return status();
+  if (command === 'stop') return stop();
+  if (command === 'restart') { await stop(); return start(); }
+  throw new Error(`unknown command ${command}; use start, status, restart, or stop`);
+}
+main().catch((error) => { console.error(`STARQ // COMMAND lifecycle error: ${error.message}`); process.exitCode = 1; });
