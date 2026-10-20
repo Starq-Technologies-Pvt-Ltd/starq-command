@@ -179,11 +179,21 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
   const setActor = (value: string) => { setActorState(value); storeActor(value); };
 
+  const failLoad = (message: string) => {
+    setProblem(message);
+    setTasks(null);
+    setProject(null);
+    setWorkPackages([]);
+    setSelectedId(null);
+    setDetail(null);
+    setMode('none');
+  };
+
   const load = React.useCallback(async (keepSelected?: string | null) => {
     const [m, p, t, wp] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId), pmWorkPackages(projectId)]);
-    if (!m.ok) { setProblem(m.message); return; }
-    if (!p.ok) { setProblem(p.message); return; }
-    if (!t.ok) { setProblem(t.message); return; }
+    if (!m.ok) { failLoad(m.message); return; }
+    if (!p.ok) { failLoad(p.message); return; }
+    if (!t.ok) { failLoad(t.message); return; }
     setProblem(null);
     setHandles(m.data.handles);
     setWorkPackages(wp.ok ? wp.data.work_packages : []);

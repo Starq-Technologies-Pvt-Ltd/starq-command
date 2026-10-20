@@ -312,4 +312,54 @@ describe('Command project portfolio', () => {
     expect(erpMs?.textContent).toContain('0 / 0');
     expect(erpWp?.textContent).toContain('0 / 0');
   });
+
+  it('does not keep a previously loaded task snapshot after a later refresh fails', async () => {
+    const command = project('command', 'Starq Command', 'CMD');
+    let taskListCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/meta')) return { ok: true, json: async () => ({ statuses, priorities: ['P0', 'P1', 'P2', 'P3'], handles: [] }) };
+      if (url.endsWith('/api/pm/projects')) {
+        return { ok: true, json: async () => ({ projects: [{ id: command.id, name: command.name, prefix: command.prefix, description: '', source_gap: null, hold: command.hold }] }) };
+      }
+      if (url.includes('/api/pm/tasks?project_id=command')) {
+        taskListCalls += 1;
+        if (taskListCalls === 1) return { ok: true, json: async () => ({ project_id: 'command', tasks: [blockedTask] }) };
+        return { ok: false, status: 503, json: async () => ({ error: 'UNAVAILABLE', message: 'PM database unavailable: integrity_check failed' }) };
+      }
+      if (url.includes('/api/pm/work-packages')) return { ok: true, json: async () => ({ project_id: 'command', work_packages: [] }) };
+      return { ok: false, status: 404, json: async () => ({ message: 'unexpected route' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/command' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => {
+      root?.render(<PmBoardSurface projectId="command" />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host.querySelector('[data-pm="board"]')).not.toBeNull();
+    expect(host.textContent).toContain('PM-CMD-001');
+    expect(host.textContent).toContain('Recorded blocker');
+
+    const refresh = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Refresh');
+    expect(refresh).toBeTruthy();
+    await act(async () => {
+      refresh!.dispatchEvent(new dom!.window.MouseEvent('click', { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(host.querySelector('[data-pm="unavailable"]')).not.toBeNull();
+    expect(host.querySelector('[data-pm="board"]')).toBeNull();
+    expect(host.textContent).toContain('UNAVAILABLE');
+    expect(host.textContent).toContain('PM service unavailable.');
+    expect(host.textContent).toContain('PM database unavailable: integrity_check failed');
+    expect(host.textContent).not.toContain('Recorded blocker');
+  });
 });
