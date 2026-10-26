@@ -2,6 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { resolveReadOnlyTarget } from './path-guard.mjs';
+import {
+  emptyHistoricalPmSnapshot,
+  loadHistoricalPmSnapshot,
+} from './historical-pm-snapshot.mjs';
 
 export const HOADHA_ROOT = '03_PROJECTS/hoadha/HOADHA_DEV_STUDIO';
 export const BUILDING_SOURCES = [
@@ -72,7 +76,7 @@ function rows(source, collection) {
     return null;
   return source.data.tasks.map((t) => ({ ...t, collection, source: source.source }));
 }
-export function buildBuilding(root, surface) {
+export function buildBuilding(root, surface, options = {}) {
   const loaded = BUILDING_SOURCES.map((s) => readBuildingSource(root, s));
   const get = (suffix) => loaded.find((s) => s.source.endsWith(suffix));
   const machine = get('roadmap.machine.json');
@@ -202,5 +206,8 @@ export function buildBuilding(root, surface) {
     erp_tasks: rows(get('/starq-erp-tasks.json'), 'starqERP'),
     sources: loaded.map(({ data, ...metadata }) => metadata),
     note: 'Source hashes prove the files read, not production deployment or independent acceptance. Command summarizes → Room proves.',
+    historical_pm: options.historicalWorkspaceRoot
+      ? loadHistoricalPmSnapshot({ workspaceRoot: options.historicalWorkspaceRoot })
+      : emptyHistoricalPmSnapshot('historicalWorkspaceRoot not supplied; canonical Nexus data is not auto-read'),
   };
 }

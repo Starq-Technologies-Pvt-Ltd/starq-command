@@ -43,6 +43,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveWorkspace } from './paths.mjs';
 import { buildBuilding, BUILDING_SOURCES } from './building.mjs';
+import { HISTORICAL_NEXUS_WORKSPACE_ROOT } from './historical-pm-snapshot.mjs';
 
 /**
  * The Building projection needs exactly one value from the ERP surface: the
@@ -73,7 +74,9 @@ export async function buildBuildingProjection() {
   const resolved = resolveWorkspace();
   const workspaceRoot = typeof resolved === 'string' ? resolved : resolved?.root ?? null;
   const surface = await erpHoldState();
-  const building = buildBuilding(workspaceRoot, surface);
+  const building = buildBuilding(workspaceRoot, surface, {
+    historicalWorkspaceRoot: HISTORICAL_NEXUS_WORKSPACE_ROOT,
+  });
   return {
     ...building,
     generated_at: new Date().toISOString(),

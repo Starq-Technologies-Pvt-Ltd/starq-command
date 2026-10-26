@@ -4,7 +4,59 @@
  */
 import * as React from 'react';
 import { Chip, GoLink, Panel, SourceGap } from '@/components/console';
-import { PM_BOARD_HREF, pmIsScratch, pmPort, pmPortfolio, pmProjects, pmQuery, pmTaskHref, pmTasks, type PmPortfolio, type PmStatus, type PmTask } from '@/lib/pm-client';
+import { PM_BOARD_HREF, pmIsScratch, pmPort, pmPortfolio, pmProjects, pmQuery, pmTaskHref, pmTasks, type PmPortfolio, type PmPortfolioProject, type PmStatus, type PmTask } from '@/lib/pm-client';
+
+function formatProjectCount(value: unknown): string {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? String(value)
+    : 'UNKNOWN';
+}
+
+function formatPortfolioTotal(
+  projects: PmPortfolioProject[],
+  field: 'open' | 'blocked' | 'founder_gate' | 'unassigned',
+): string {
+  if (projects.length === 0) return 'UNKNOWN';
+  let total = 0;
+  for (const project of projects) {
+    const value = project[field];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      return 'UNKNOWN';
+    }
+    total += value;
+  }
+  return String(total);
+}
+
+function formatLatestTaskUpdated(tasks: PmTask[] | null | undefined): string {
+  if (!tasks || tasks.length === 0) return 'UNKNOWN';
+  let latestRaw: string | null = null;
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const task of tasks) {
+    const raw = typeof task.updated_at === 'string' ? task.updated_at.trim() : '';
+    if (!raw) continue;
+    const ms = Date.parse(raw);
+    if (!Number.isFinite(ms)) continue;
+    if (ms > latestMs || (ms === latestMs && latestRaw !== null && raw > latestRaw)) {
+      latestMs = ms;
+      latestRaw = raw;
+    }
+  }
+  return latestRaw ?? 'UNKNOWN';
+}
+
+function orderBlockersBeforeGates(tasks: PmTask[]): PmTask[] {
+  const blockers: PmTask[] = [];
+  const gates: PmTask[] = [];
+  for (const task of tasks) {
+    if (task.status === 'BLOCKED') {
+      blockers.push(task);
+    } else if (task.status === 'FOUNDER_GATE') {
+      gates.push(task);
+    }
+  }
+  return [...blockers, ...gates];
+}
 
 const LANE_SHORT: Record<PmStatus, string> = {
   BACKLOG: 'Backlog', READY: 'Ready', IN_PROGRESS: 'In progress', REVIEW: 'Review',
@@ -202,19 +254,52 @@ export function PmPortfolioSurface() {
           <SourceGap reason="PM service unavailable." detail={`${problem} Start it with: npm run pm:start`} />
         ) : null}
         {data ? (
-          <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3" data-project-grid="pm-portfolio">
-            <p className="col-span-full text-2xs text-muted-foreground">
-              PM cards show records in the Command PM source. The registry also preserves canonical portfolio domains and Nexus-era workspace labels while distinguishing projects from operating capabilities and unresolved historical labels. Missing PM registration means work and status are UNKNOWN, not zero or complete. Counts and task evidence are never combined across projects.
-              {data.pending_room_sync > 0 ? ` ${data.pending_room_sync} Room post(s) are pending across this portfolio.` : ''}
-            </p>
+          <>
+            <div
+              className="mx-3 mt-2 flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-surface-0 px-3 py-2 text-xs"
+              data-portfolio-totals="pm-portfolio"
+              aria-label="Portfolio totals across registered PM boards"
+            >
+              <span className="font-semibold text-muted-foreground">
+                Registered PM board totals ({visibleProjects.length})
+              </span>
+              <div className="flex flex-wrap gap-3 mono">
+                <span data-total="open">Open: {formatPortfolioTotal(visibleProjects, 'open')}</span>
+                <span data-total="blocked">Blocked: {formatPortfolioTotal(visibleProjects, 'blocked')}</span>
+                <span data-total="founder-gate">Founder gate: {formatPortfolioTotal(visibleProjects, 'founder_gate')}</span>
+                <span data-total="unassigned">Unassigned: {formatPortfolioTotal(visibleProjects, 'unassigned')}</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3" data-project-grid="pm-portfolio">
+              <p className="col-span-full text-2xs text-muted-foreground">
+                PM cards show records in the Command PM source. The registry also preserves canonical portfolio domains and Nexus-era workspace labels while distinguishing projects from operating capabilities and unresolved historical labels. Missing PM registration means work and status are UNKNOWN, not zero or complete. Counts and task evidence are never combined across projects.
+                {data.pending_room_sync > 0 ? ` ${data.pending_room_sync} Room post(s) are pending across this portfolio.` : ''}
+              </p>
               {visibleProjects.map((p) => {
                 const canonical = PORTFOLIO_ENTRIES.find((project) => project.pmId === p.id);
                 const taskState = taskRows[p.id];
                 const tasks = taskState?.tasks ?? [];
-                const blockers = tasks.filter((task) => task.status === 'BLOCKED');
-                const gates = tasks.filter((task) => task.status === 'FOUNDER_GATE');
+                const latestUpdated = formatLatestTaskUpdated(taskState?.tasks);
+                const orderedBlockersAndGates = orderBlockersBeforeGates(tasks);
                 const closed = p.counts.CLOSED;
                 const completion = p.total > 0 ? Math.round((closed / p.total) * 100) : null;
+                const knownStatuses = new Set<string>(data.statuses);
+                const lanes = data.statuses.map((status) => ({ status, rows: tasks.filter((task) => task.status === status) }));
+                const unmapped = tasks.filter((task) => !knownStatuses.has(task.status));
+                const renderTaskRow = (task: PmTask) => (
+                  <article key={task.id} data-task={task.id} className="grid gap-1 rounded border border-border px-2 py-1.5 text-2xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <GoLink href={pmTaskHref(p.id, task.id)}>{task.id} · {task.title}</GoLink>
+                      <Chip value={LANE_SHORT[task.status] ?? task.status} tone={task.status === 'BLOCKED' ? 'stale' : 'drift'} />
+                    </div>
+                    <div><span className="text-muted-foreground">Owner:</span> {task.owner || 'UNKNOWN'} · <span className="text-muted-foreground">Verifier:</span> {task.verifier || 'UNKNOWN'}</div>
+                    <div className="text-muted-foreground">
+                      Room authorization: {task.room_authorization_ref
+                        ? `#${task.room_authorization_ref.sequence} · ${task.room_authorization_ref.purpose}`
+                        : 'UNKNOWN / none recorded'}
+                    </div>
+                  </article>
+                );
                 return (
               <article
                 key={p.id}
@@ -278,24 +363,28 @@ export function PmPortfolioSurface() {
                     <dt className="text-muted-foreground">Next target</dt>
                     <dd>UNKNOWN · no current PM target field</dd>
                   </div>
+                  <div className="flex justify-between gap-2" data-project-last-updated={p.id}>
+                    <dt className="text-muted-foreground">Last updated</dt>
+                    <dd className="mono text-right">{latestUpdated}</dd>
+                  </div>
                 </dl>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="rounded border border-border p-2">
                     <div className="text-2xs text-muted-foreground">Open / total</div>
-                    <strong>{p.open} / {p.total}</strong>
+                    <strong>{formatProjectCount(p.open)} / {formatProjectCount(p.total)}</strong>
                   </div>
                   <div className="rounded border border-border p-2">
                     <div className="text-2xs text-muted-foreground">Unassigned</div>
-                    <strong>{p.unassigned}</strong>
+                    <strong>{formatProjectCount(p.unassigned)}</strong>
                   </div>
                   <div className="rounded border border-border p-2">
                     <div className="text-2xs text-muted-foreground">Blocked</div>
-                    <strong>{p.blocked}</strong>
+                    <strong>{formatProjectCount(p.blocked)}</strong>
                   </div>
                   <div className="rounded border border-border p-2">
                     <div className="text-2xs text-muted-foreground">Founder gate</div>
-                    <strong>{p.founder_gate}</strong>
+                    <strong>{formatProjectCount(p.founder_gate)}</strong>
                   </div>
                   <div className="rounded border border-border p-2" data-metric="milestones">
                     <div className="text-2xs text-muted-foreground">Milestones (open / total)</div>
@@ -318,17 +407,26 @@ export function PmPortfolioSurface() {
                   <p className="text-2xs text-muted-foreground">This is the PM board's CLOSED lane count; it does not claim independent project acceptance.</p>
                 </div>
 
-                <section className="grid gap-2 border-t border-border pt-2" aria-label={`${p.name} recorded blockers and Founder gates`}>
+                <section
+                  className="grid gap-2 border-t border-border pt-2"
+                  aria-label={`${p.name} recorded blockers and Founder gates`}
+                  data-blockers-and-gates={p.id}
+                >
                   <h4 className="text-2xs font-semibold">Recorded blockers and Founder gates</h4>
                   {taskState?.error ? (
                     <p className="text-2xs text-muted-foreground">Task details unavailable: {taskState.error}</p>
                   ) : !taskState ? (
                     <p className="text-2xs text-muted-foreground">Task details are UNKNOWN.</p>
-                  ) : blockers.length === 0 && gates.length === 0 ? (
+                  ) : orderedBlockersAndGates.length === 0 ? (
                     <p className="text-2xs text-muted-foreground">No records in BLOCKED or FOUNDER_GATE lanes.</p>
                   ) : (
-                    [...blockers, ...gates].map((task) => (
-                      <article key={task.id} className="grid gap-1 rounded border border-border px-2 py-1.5 text-2xs">
+                    orderedBlockersAndGates.map((task) => (
+                      <article
+                        key={task.id}
+                        data-blocker-or-gate={task.id}
+                        data-blocker-or-gate-status={task.status}
+                        className="grid gap-1 rounded border border-border px-2 py-1.5 text-2xs"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <GoLink href={pmTaskHref(p.id, task.id)}>{task.id} · {task.title}</GoLink>
                           <Chip value={task.status} tone={task.status === 'BLOCKED' ? 'stale' : 'drift'} />
@@ -338,12 +436,45 @@ export function PmPortfolioSurface() {
                         {task.notes ? <p className="whitespace-pre-wrap text-muted-foreground">{task.notes}</p> : null}
                         {task.depends_on.length ? <div className="text-muted-foreground">Recorded dependencies: {task.depends_on.join(', ')}</div> : null}
                         <div className="text-muted-foreground">
+                          Room authorization: {task.room_authorization_ref
+                            ? `#${task.room_authorization_ref.sequence} · ${task.room_authorization_ref.purpose}`
+                            : 'UNKNOWN / none recorded'}
+                        </div>
+                        <div className="text-muted-foreground">
                           Evidence refs: {task.evidence_refs.length
                             ? task.evidence_refs.map((ref) => `#${ref.sequence} [${ref.kind}] ${ref.purpose}`).join(' · ')
                             : 'UNKNOWN / none recorded'}
                         </div>
                       </article>
                     ))
+                  )}
+                </section>
+
+                <section className="grid gap-2 border-t border-border pt-2" aria-label={`${p.name} taskboard`} data-taskboard={p.id}>
+                  <h4 className="text-2xs font-semibold">Taskboard · all recorded PM rows</h4>
+                  {taskState?.error ? (
+                    <p className="text-2xs text-muted-foreground">Task details unavailable: {taskState.error}</p>
+                  ) : !taskState ? (
+                    <p className="text-2xs text-muted-foreground">Task details are UNKNOWN.</p>
+                  ) : tasks.length === 0 ? (
+                    <p className="text-2xs text-muted-foreground">No PM task rows recorded for this board.</p>
+                  ) : (
+                    <div className="flex items-start gap-2 overflow-x-auto pb-1" data-lane-board={p.id}>
+                      {lanes.map(({ status, rows }) => (
+                        <div key={status} data-lane={status} className="grid w-56 shrink-0 content-start gap-1 rounded border border-border p-1.5">
+                          <h5 className="text-2xs font-semibold text-muted-foreground">{LANE_SHORT[status]} · {rows.length}</h5>
+                          {rows.length === 0
+                            ? <p className="text-2xs text-muted-foreground">No rows</p>
+                            : rows.map(renderTaskRow)}
+                        </div>
+                      ))}
+                      {unmapped.length > 0 ? (
+                        <div data-lane="UNMAPPED" className="grid w-56 shrink-0 content-start gap-1 rounded border border-border p-1.5">
+                          <h5 className="text-2xs font-semibold text-muted-foreground">Unmapped status · {unmapped.length}</h5>
+                          {unmapped.map(renderTaskRow)}
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </section>
 
@@ -377,7 +508,8 @@ export function PmPortfolioSurface() {
                   : 'No projects match this filter.'}
               </p>
             ) : null}
-          </div>
+            </div>
+          </>
         ) : null}
         <section className="grid grid-cols-1 gap-3 px-3 pb-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Canonical portfolio entries without PM records">
           {visibleCanonicalGaps.map((project) => (

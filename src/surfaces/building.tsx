@@ -51,6 +51,7 @@ import { StudioGroupLegend } from '@/components/shell';
 import { CommandBoardSurface } from '@/surfaces/command-board';
 import { PmBoardSurface } from '@/surfaces/pm-board';
 import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
+import { HistoricalPmSurface } from '@/surfaces/historical-pm';
 
 /**
  * CMD-PM-MIN. The writable PM boards need only the PM service, so they are
@@ -1210,6 +1211,7 @@ function RoomContent({
       return (
         <>
           <PmBoardSurface projectId="hoadha" />
+          <GoLink href="#building">Historical Nexus records (read-only, not native tasks) →</GoLink>
           <HoadhaRoom tab={route.tab} building={building} surface={surface} />
         </>
       );
@@ -1221,6 +1223,7 @@ function RoomContent({
       return (
         <>
           <PmBoardSurface projectId="erp" />
+          <GoLink href="#building">Historical Nexus records (read-only, not native tasks) →</GoLink>
           <ErpRoom tab={route.tab} building={building} surface={surface} />
         </>
       );
@@ -1534,7 +1537,12 @@ export function BuildingSurface({
     if (!isProjectRoom)
       return (
         <div className="room-root" data-room="studio">
-          {route.view === 'overview' ? <ExecutiveOverview surface={surface} /> : <CompanyOverview building={b} />}
+          {route.view === 'overview' ? <ExecutiveOverview surface={surface} /> : (
+            <>
+              <CompanyOverview building={b} />
+              <HistoricalPmSurface historical={b.historical_pm} />
+            </>
+          )}
         </div>
       );
   }

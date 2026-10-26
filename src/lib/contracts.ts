@@ -1295,12 +1295,52 @@ export interface CompanySurface extends CommandSurface {
   company_os: CompanyOsProjection;
 }
 
+export interface HistoricalPmRecord {
+  kind: 'historical_snapshot';
+  actionable: false;
+  board: string;
+  source_path: string;
+  source_sha256: string;
+  source_row_index: number;
+  source_id: string;
+  status: unknown;
+  relations: Record<string, unknown>;
+  raw: Record<string, unknown>;
+}
+
+export interface HistoricalPmProjection {
+  authority: string;
+  access: string;
+  actionable: false;
+  reason: string | null;
+  files: Array<{
+    source: string;
+    board: string | null;
+    state: string;
+    reason: string | null;
+    sha256: string | null;
+    byteLength: number | null;
+    count: number;
+    expected: number | null;
+  }>;
+  records: HistoricalPmRecord[];
+  counts: { erp: number; hoadha_core: number; hoadha_social: number; hoadha_concierge: number; total: number };
+  expected_counts: { erp: number; hoadha_core: number; hoadha_social: number; hoadha_concierge: number; total: number };
+  unique_source_ids: string[];
+  duplicate_source_ids: string[];
+  count_match: boolean;
+  unique_id_match: boolean;
+  pm_tasks_created: 0;
+  pm_status_log_created: 0;
+}
+
 export interface BuildingProjection {
   authority: string; access: string; company: string; floor: string;
   capacity: { state: string; reason: string };
   projects: { id: string; name: string; classification: string; state: string; source: string }[];
   sources: { source: string; state: string; sha256?: string; modified_at?: string; reason?: string }[];
   erp_tasks: BuildingRecord[] | null; note: string;
+  historical_pm: HistoricalPmProjection;
   hoadha: {
     integrity: string; source_status: string; current_wave: string; execution: string; execution_basis: string; production: string; integration: string;
     loops: { id: string; name: string; state: string; blocker: string; tasks: string[] }[];

@@ -133,6 +133,20 @@ describe('Command project portfolio', () => {
     expect(host.textContent).toContain('GroupPermanent project');
     expect(host.textContent).toContain('Where can people discover and act on what is commercially possible?');
     expect(host.textContent).toContain('3 of 5 · first board redefinition wave after Command');
+    const taskboard = host.querySelector('[data-taskboard="command"]');
+    expect(taskboard).not.toBeNull();
+    const taskRow = taskboard?.querySelector('[data-task="PM-CMD-001"]');
+    expect(taskRow?.textContent).toContain('PM-CMD-001 · Recorded blocker');
+    expect(taskRow?.textContent).toContain('Blocked');
+    expect(taskRow?.textContent).toContain('Owner: claude');
+    expect(taskRow?.textContent).toContain('Verifier: vision');
+    expect(taskRow?.textContent).toContain('Room authorization: UNKNOWN / none recorded');
+    expect(taskboard?.querySelector('[data-lane="BLOCKED"] [data-task="PM-CMD-001"]')).not.toBeNull();
+    expect(taskboard?.querySelector('[data-lane="BACKLOG"] [data-task="PM-CMD-001"]')).toBeNull();
+    const laneBoard = taskboard?.querySelector('[data-lane-board="command"]');
+    expect(laneBoard?.className).toContain('overflow-x-auto');
+    expect(laneBoard?.querySelector('[data-lane="BLOCKED"] [data-task="PM-CMD-001"]')).not.toBeNull();
+    expect(taskRow?.querySelector('a')?.getAttribute('href')).toContain('PM-CMD-001');
     expect(host.textContent).toContain('UNKNOWN · no current PM target field');
     expect(host.textContent).toContain('Operating capability · not a product project');
     expect(host.textContent).toContain('Commercial operating arm · not a product project');
@@ -361,5 +375,90 @@ describe('Command project portfolio', () => {
     expect(host.textContent).toContain('PM service unavailable.');
     expect(host.textContent).toContain('PM database unavailable: integrity_check failed');
     expect(host.textContent).not.toContain('Recorded blocker');
+  });
+
+  it('renders a task with unmapped status in the UNMAPPED lane only, not in any declared lane, and its link resolves', async () => {
+    const command = project('command', 'Starq Command', 'CMD');
+    const unmappedTask = {
+      id: 'PM-CMD-UNMAPPED-001',
+      project_id: 'command',
+      title: 'Status outside declared list',
+      description: 'Task with a status not in PM declared statuses.',
+      priority: 'P2',
+      status: 'ON_HOLD',
+      prior_status: 'BACKLOG',
+      owner: 'opencode',
+      verifier: 'codex',
+      room_authorization_ref: null,
+      evidence_refs: [],
+      depends_on: [],
+      notes: '',
+      created_by: 'opencode',
+      created_at: '2026-10-25T00:00:00.000Z',
+      updated_at: '2026-10-25T00:00:00.000Z',
+      closed_at: null,
+      allowed_next: [],
+      pending_room_sync: 0,
+    };
+    const countsWithUnmapped = { ...command.counts, UNMAPPED: 1 };
+    const projectWithUnmapped = { ...command, total: 1, open: 1, counts: countsWithUnmapped };
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) {
+        return {
+          ok: true,
+          json: async () => ({
+            generated_at: '2026-10-25T00:00:00.000Z',
+            pending_room_sync: 0,
+            statuses,
+            projects: [projectWithUnmapped],
+          }),
+        };
+      }
+      if (url.endsWith('/api/pm/projects')) {
+        return { ok: true, json: async () => ({ projects: [{ id: command.id, name: command.name, prefix: command.prefix, description: 'Command OS', source_gap: null, hold: command.hold }] }) };
+      }
+      if (url.includes('/api/pm/tasks?project_id=command')) {
+        return { ok: true, json: async () => ({ project_id: 'command', tasks: [unmappedTask] }) };
+      }
+      return { ok: false, status: 404, json: async () => ({ message: 'unexpected route' }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/projects' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => {
+      root?.render(<PmPortfolioSurface />);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const taskboard = host.querySelector('[data-taskboard="command"]');
+    expect(taskboard).not.toBeNull();
+
+    const unmappedLane = taskboard!.querySelector('[data-lane="UNMAPPED"]');
+    expect(unmappedLane).not.toBeNull();
+    expect(unmappedLane!.textContent).toContain('Unmapped status · 1');
+
+    const taskInUnmapped = unmappedLane!.querySelector('[data-task="PM-CMD-UNMAPPED-001"]');
+    expect(taskInUnmapped).not.toBeNull();
+    expect(taskInUnmapped!.textContent).toContain('PM-CMD-UNMAPPED-001 · Status outside declared list');
+
+    statuses.forEach((status) => {
+      const declaredLane = taskboard!.querySelector(`[data-lane="${status}"]`);
+      if (declaredLane) {
+        expect(declaredLane.querySelector('[data-task="PM-CMD-UNMAPPED-001"]')).toBeNull();
+      }
+    });
+
+    const taskLink = taskInUnmapped!.querySelector('a');
+    expect(taskLink).not.toBeNull();
+    expect(taskLink!.getAttribute('href')).toContain('PM-CMD-UNMAPPED-001');
+    expect(parseBuildingRoute(taskLink!.getAttribute('href')!)).toEqual({ view: 'studio', room: null, tab: 'Overview', projectId: 'command' });
   });
 });
