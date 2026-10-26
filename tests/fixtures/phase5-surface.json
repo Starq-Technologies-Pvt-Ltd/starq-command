@@ -1,0 +1,7 @@
+{
+  "process_truth": {"available":true,"state":"OK","generated_at":"2026-09-29T00:00:00Z","reconciliation":{"known_discrepancies_present":true,"known_discrepancies":[{"id":"D2","item":"fixture decision","resolution":"UNRESOLVED","founder_decision_required":true}]},"hold_state_present":true,"hold_state":{"implementation":"ON_HOLD","authority":"DEC-100","effective":"2026-09-28","restart_requires":"explicit authorization","restart_gate_conditions":[]},"restart_wave_after_authorization":[],"corrective_tasks_present":true,"corrective_tasks":[],"process_families":[{"id":"O2C","name":"Order to Cash","critical_blocker":"G1","critical_blocker_present":true,"headline":"fixture","stages":[{"stage":"Payment","state":"schema-only","blocked_by":"G1","blocked_by_present":true}]}]},
+  "work_truth": {"available":true,"state":"OK","global_blocker_present":true,"global_blocker":{"id":"HOLD","type":"founder_imposed","authority":"DEC-100","description":"hold","effect":"no implementation"}},
+  "execution_truth": {"available":true,"state":"STALE","generated_at":"2026-09-29T00:00:00Z","ledger":{"recorded_sha256_prefix":"aaaa","live_sha256_prefix":"bbbb"},"conflicts_present":true,"conflicts":[]},
+  "floor": {"constraints":[]}, "provenance":{"state":"OK","checked":1,"drifted":[],"missing":[],"sources":[]},
+  "health_floor":{"tool_health":{"reconciliation_gates":{"gates":[{"id":"gate","label":"gate","state":"UNKNOWN"}]}}}
+}

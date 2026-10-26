@@ -1,0 +1,261 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://starq.invalid/schemas/command-board-1.0.0.json",
+  "title": "STARQ Command MODS offline planning board",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "board_id",
+    "schema_version",
+    "scope",
+    "revision",
+    "previous_board_sha256",
+    "status",
+    "last_reconciled_room_head",
+    "source_manifest",
+    "reconciliation",
+    "tasks"
+  ],
+  "properties": {
+    "board_id": {
+      "const": "STARQ-COMMAND-MODS"
+    },
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "scope": {
+      "type": "object"
+    },
+    "revision": {
+      "const": 1
+    },
+    "previous_board_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "status": {
+      "enum": [
+        "CANDIDATE_NOT_ACCEPTED",
+        "ACCEPTED_OFFLINE_INTEGRITY_ONLY"
+      ]
+    },
+    "last_reconciled_room_head": {
+      "$ref": "#/definitions/roomRef"
+    },
+    "source_manifest": {
+      "type": "object"
+    },
+    "reconciliation": {
+      "type": "object"
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 33,
+      "maxItems": 33,
+      "items": {
+        "$ref": "#/definitions/task"
+      }
+    }
+  },
+  "definitions": {
+    "roomRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequence",
+        "eventId",
+        "recordHash",
+        "previousRecordHash",
+        "senderHandle",
+        "purpose"
+      ],
+      "properties": {
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "eventId": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "recordHash": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "previousRecordHash": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "senderHandle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "path",
+        "sha256",
+        "source_row_index"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "source_row_index": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "overlayRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effect",
+        "room_ref"
+      ],
+      "properties": {
+        "effect": {
+          "type": "string",
+          "minLength": 1
+        },
+        "room_ref": {
+          "$ref": "#/definitions/roomRef"
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "programme",
+        "source_qualifier",
+        "source_state",
+        "source_owner_at_checkpoint",
+        "source_record",
+        "current_owner",
+        "current_verifier",
+        "workflow_stage",
+        "disposition",
+        "disposition_basis",
+        "current_authorization_status",
+        "authorization_refs",
+        "independent_verdict_refs",
+        "blocker",
+        "evidence_refs",
+        "room_overlay_refs",
+        "supersedes",
+        "superseded_by"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "programme": {
+          "type": "string"
+        },
+        "source_qualifier": {
+          "type": "string"
+        },
+        "source_state": {
+          "type": "string"
+        },
+        "source_owner_at_checkpoint": {
+          "type": "string"
+        },
+        "source_record": {
+          "type": "object"
+        },
+        "current_owner": {
+          "const": "UNKNOWN"
+        },
+        "current_verifier": {
+          "const": "UNKNOWN"
+        },
+        "workflow_stage": {
+          "const": "unknown"
+        },
+        "disposition": {
+          "enum": [
+            "undecided",
+            "accepted_scoped",
+            "rejected",
+            "closed_scope",
+            "superseded",
+            "unknown"
+          ]
+        },
+        "disposition_basis": {
+          "type": "string"
+        },
+        "current_authorization_status": {
+          "const": "not_authorized_for_new_task_execution"
+        },
+        "authorization_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/roomRef"
+          }
+        },
+        "independent_verdict_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/roomRef"
+          }
+        },
+        "blocker": {
+          "type": "object"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/evidenceRef"
+          }
+        },
+        "room_overlay_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/overlayRef"
+          }
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "superseded_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
+

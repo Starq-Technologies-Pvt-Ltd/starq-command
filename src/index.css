@@ -1,0 +1,3148 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * SPACE GROTESK — self-hosted, variable.
+ *
+ * Founder QA seq 8411: expand Space Grotesk across human-facing UI. It is
+ * served from this origin rather than a CDN because STARQ // COMMAND is a
+ * local-first, read-only operating surface: it must render identically with
+ * no outbound network dependency, and a font that fails to load silently
+ * changes every measurement on the page.
+ *
+ * One variable file covers 300-700. `font-display: swap` is deliberate —
+ * the fallback stack is declared in tailwind.config.js and is metrically
+ * close enough that the swap is not a layout event.
+ */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/*
+ * STARQ design tokens.
+ *
+ * Near-black / graphite with crisp density, fine borders, restrained frost.
+ * These are the Starq tokens, not a re-skin of a default dashboard theme.
+ */
+@layer base {
+  :root {
+    --radius: 0.5rem;
+
+    --background: 220 20% 4%;
+    --foreground: 210 16% 92%;
+
+    --surface-0: 220 22% 4%;
+    --surface-1: 220 18% 6.5%;
+    --surface-2: 220 16% 9%;
+    --surface-3: 220 15% 12%;
+
+    --card: 220 18% 6.5%;
+    --card-foreground: 210 16% 92%;
+
+    --popover: 220 20% 7%;
+    --popover-foreground: 210 16% 92%;
+
+    --primary: 205 90% 58%;
+    --primary-foreground: 220 30% 6%;
+
+    --secondary: 220 14% 14%;
+    --secondary-foreground: 210 14% 88%;
+
+    --muted: 220 14% 12%;
+    --muted-foreground: 215 10% 58%;
+
+    --accent: 220 14% 16%;
+    --accent-foreground: 210 14% 90%;
+
+    --destructive: 358 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 14% 15%;
+    --input: 220 14% 18%;
+    --ring: 205 90% 58% / 0.55;
+
+    /* Truth semantics — never decorative. */
+    --truth-ok: 152 58% 46%;
+    --truth-ok-soft: 152 58% 46% / 0.14;
+    --truth-stale: 38 92% 56%;
+    --truth-stale-soft: 38 92% 56% / 0.14;
+    --truth-drift: 358 74% 60%;
+    --truth-drift-soft: 358 74% 60% / 0.14;
+    --truth-unknown: 215 12% 52%;
+    --truth-unknown-soft: 215 12% 52% / 0.14;
+    --truth-hold: 268 70% 66%;
+    --truth-hold-soft: 268 70% 66% / 0.14;
+    --truth-founder: 44 96% 60%;
+    --truth-founder-soft: 44 96% 60% / 0.14;
+
+    /* Process-stage classification — matches the canonical stage key. */
+    --stage-implemented: 152 58% 46%;
+    --stage-partial: 205 88% 56%;
+    --stage-schema-only: 268 70% 66%;
+    --stage-test-only: 38 92% 56%;
+    --stage-absent: 358 74% 60%;
+    --stage-unknown: 215 12% 52%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+      @apply bg-surface-0 text-foreground antialiased;
+      font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+      text-rendering: optimizeLegibility;
+      /*
+       * The console's base reading size. Founder QA seq 8410 measured the
+       * product's body copy at 11px with a 9px floor; 13px is the floor at
+       * which a dense table row is still comfortable to read for a full
+       * operating session. Panels that genuinely need more density set their
+       * own size explicitly rather than inheriting a small default.
+       */
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+  /* Fine borders, crisp density: a restrained scrollbar, never a chunky one. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--input));
+    background-clip: content-box;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-0;
+  }
+}
+
+@layer components {
+  /*
+   * ═══════════════════════════════════════════════════════════════════════
+   * VISION VISUAL PASS — the three-tier text ladder (gap map WF-HIER-03,
+   * WF-VIS-01).
+   *
+   * The finding: uppercase micro-labels, monospace values and hairlines were
+   * used for nearly every datum, so the eye had to decode a micro-tier before
+   * it could read a plain-language sentence. The measured result was a page
+   * whose largest text was 15px and whose body was 11px, with six competing
+   * tiers at 9-10.5px.
+   *
+   * This is a LADDER, not a reskin. Three named tiers, and every value on the
+   * product is assigned exactly one of them:
+   *
+   *   .tier-answer    the route's answer. Sentence case, never uppercase.
+   *                   The only large text in the product. One per viewport.
+   *   .tier-record    a comparable row's primary value. Sentence case.
+   *                   This is what an operator scans a column of.
+   *   .tier-prov      provenance, paths, hashes, ids, counts. Monospace,
+   *                   uppercase micro-label at its existing size, and it is
+   *                   the ONLY tier allowed to shout in caps.
+   *
+   * The ladder replaces the previous rule that "everything uppercase and
+   * tracked is a heading". It does NOT remove the micro band — density is the
+   * console's identity and Phase 7's guards assert it — it stops the micro
+   * band from being the answer.
+   * ═══════════════════════════════════════════════════════════════════════ */
+
+  /* TIER 1 — the route answer. */
+      .tier-answer {
+        font-family: theme('fontFamily.sans');
+        font-size: 21px;
+        font-weight: 600;
+        line-height: 1.2;
+        letter-spacing: -0.021em;
+        color: hsl(var(--foreground));
+      }
+
+      /*
+       * TIER 1b — THE PAGE TITLE ITSELF.
+       *
+       * Founder QA seq 8410: "current H1 treatment is too weak." The measured
+       * H1 was 17px while the surrounding chrome ran 9-10.5px, so the page
+       * title read as one step above body rather than as the document's
+       * strongest element. It is now 25px at weight 600 in Space Grotesk, with
+       * the room mark carried alongside it rather than replacing it.
+       */
+      .tier-title {
+        font-family: theme('fontFamily.sans');
+        font-size: 25px;
+        font-weight: 600;
+        line-height: 1.12;
+        letter-spacing: -0.026em;
+        color: hsl(var(--foreground));
+      }
+
+      /* TIER 2 — a comparable row's value. */
+      .tier-record {
+        font-family: theme('fontFamily.sans');
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: hsl(var(--foreground));
+      }
+
+      .tier-body {
+        font-family: theme('fontFamily.sans');
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.45;
+        color: hsl(var(--foreground));
+      }
+
+      .tier-body-strong {
+        font-family: theme('fontFamily.sans');
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.45;
+        color: hsl(var(--foreground));
+      }
+
+      .tier-label {
+        font-family: theme('fontFamily.sans');
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: hsl(var(--muted-foreground));
+      }
+
+      .tier-label-mono {
+        font-family: theme('fontFamily.mono');
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.35;
+        letter-spacing: 0.02em;
+        color: hsl(var(--muted-foreground));
+        overflow-wrap: break-word;
+      }
+
+      .tier-micro {
+        font-family: theme('fontFamily.sans');
+        font-size: 10px;
+        font-weight: 500;
+        line-height: 1.35;
+        color: hsl(var(--muted-foreground));
+      }
+
+      /*
+       * TIER 2b — PROSE.
+       *
+       * The measured defect this exists to fix: the 300-character duty capacity
+       * notes and the exception headlines were set in 10.5px monospace, so a
+       * sentence and a digest were typographically identical. Prose is now
+       * Space Grotesk at 13px/1.5. This is the class any explanatory sentence
+       * uses, and it is deliberately NOT uppercase and NOT tracked.
+       */
+      .tier-prose {
+        font-family: theme('fontFamily.sans');
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.5;
+        color: hsl(var(--foreground) / 0.88);
+        overflow-wrap: break-word;
+      }
+
+      /* TIER 3 — provenance and metadata. The only caps tier. */
+      .tier-prov {
+        font-family: theme('fontFamily.mono');
+        font-size: 11px;
+        letter-spacing: 0.02em;
+        color: hsl(var(--muted-foreground));
+      }
+
+    /*
+      PANEL HIERARCHY (gap map WF-DESK-02, WF-VIS-02).
+
+      The finding was that nearly every block carried the same border at the
+      same contrast, so the eye scanned borders instead of content and "inspect
+      next" looked identical to "context only". Three ranks, expressed as
+      border weight and surface lightness — NOT colour and NOT decoration:
+
+        .rank-primary    the work pane. Strongest edge, lightest surface.
+        .rank-support    supporting context. Normal edge (the default).
+        .rank-method     provenance/method. Recedes, and never carries a rail.
+    */
+    .command-panel.rank-primary {
+      border-color: hsl(var(--foreground) / 0.18);
+      background: hsl(var(--surface-2) / 0.72);
+    }
+    .command-panel.rank-primary > .head,
+    .command-panel.rank-primary > header:first-child {
+      background: hsl(var(--surface-3) / 0.5);
+    }
+    .command-panel.rank-method {
+      border-color: hsl(var(--border) / 0.7);
+      background: hsl(var(--surface-0) / 0.45);
+    }
+    .command-panel.rank-method > .head,
+    .command-panel.rank-method > header:first-child {
+      background: transparent;
+      border-bottom-color: hsl(var(--border) / 0.6);
+    }
+
+    /* Frost: a single hairline highlight, the product's only depth cue. */
+    .frost {
+    background-image: linear-gradient(180deg, hsl(var(--foreground) / 0.045), transparent 42%);
+  }
+
+  .hairline {
+    @apply border border-border;
+  }
+
+  /* Tabular figures everywhere numbers are compared vertically. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+
+  /*
+      MICRO LABEL — a field label, in sentence case.
+
+      Founder QA seq 8410 found 18 distinct letter-spacing values in use and
+      flagged excessive all-caps presentation copy. Uppercase is now reserved
+      for machine/status tokens (`.label-token`), not for labels a human reads
+      as words. Weight and colour carry the label; case does not shout.
+
+      The two tiers still differ by TRACKING as well as weight, which is what the
+      R5 micro-band guard protects: `.label-sec` is a group heading that
+      introduces several `.label-micro` rows beneath it, and if the two collapse
+      to one tier the ladder loses a step. The guard is frozen Phase 7 surface,
+      so the separation is preserved here rather than in the test.
+    */
+    .label-micro {
+      @apply text-micro font-medium tracking-[0.14em] text-muted-foreground;
+    }
+
+    /*
+      THE ONLY UPPERCASE TIER.
+
+      Reserved for values that are literally machine tokens — declared states,
+      truth verdicts, sequence and count markers. Applied to the token itself,
+      never to a sentence. This is the line seq 8411 asked for: caps mean
+      "this came from canonical source as a token", not "this is a heading".
+    */
+    .label-token {
+      @apply text-micro font-semibold uppercase tracking-[0.1em] text-muted-foreground;
+    }
+
+  /*
+    MICRO BAND, SECOND TIER (Goose R5).
+
+    Below 11px the band previously held five near-identical tiers — .stat .k at
+    9px/600, .chip at 9.5px/500, dt at 9.5px/400, .label-micro at 10px/500,
+    plus inline text-[9px]/[9.5px]. Five tiers at the same optical size is one
+    tier with noise. This class is the explicit SECOND tier: heavier and
+    lettered further than .label-micro, for a group heading that introduces
+    several .label-micro rows beneath it. Weight and tracking now separate the
+    two levels, where before only size did.
+
+    The ladder is: .command-panel h2 (uppercase, tracked) → .label-sec (this,
+    the section marker) → .label-micro (the field label inside it).
+  */
+  .label-sec {
+        @apply text-[11px] font-semibold tracking-[0.16em] text-foreground/80;
+      }
+
+  /*
+      ROOM STRIP — WF-SHELL-03.
+
+      The room dimension used to live inside the 40px top bar, sharing a row with
+      the founder identity and the workspace read-out. It is now its own labelled
+      band directly beneath, so "which room am I in" has a visibly labelled
+      answer and the founder-identity row stops competing with it.
+
+      The strip is one line and it is thin. It is a navigation control, not a
+      header, and the Founder instruction for WF-DESK-01 was to reduce
+      unnecessary shell cost without redesigning the structure — so this adds a
+      single ~26px band and takes the room chips out of the top bar rather than
+      growing the chrome.
+    */
+    .room-strip {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      border-bottom: 1px solid hsl(var(--border) / 0.7);
+      background: hsl(var(--surface-1) / 0.5);
+      padding: 0.15rem 0.65rem;
+    }
+    .room-strip-inner {
+      display: flex;
+      min-width: 0;
+      align-items: center;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .room-strip-label {
+      font-family: theme('fontFamily.sans');
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: hsl(var(--muted-foreground) / 0.8);
+    }
+
+    /*
+      RAIL IDENTITY — STARQ // COMMAND as a wordmark, not a database value.
+    */
+    .wordmark {
+      font-family: theme('fontFamily.sans');
+      font-size: 12.5px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: hsl(var(--foreground));
+    }
+    .wordmark-sub {
+      font-family: theme('fontFamily.sans');
+      font-size: 10.5px;
+      font-weight: 500;
+      line-height: 1.2;
+      color: hsl(var(--muted-foreground));
+    }
+
+    /*
+      NAVIGATION — human-facing, so sans and sentence case.
+    */
+    .nav-item-label {
+      font-family: theme('fontFamily.sans');
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.25;
+    }
+    .nav-item-hint {
+      font-family: theme('fontFamily.sans');
+      font-size: 10.5px;
+      font-weight: 400;
+      line-height: 1.25;
+      color: hsl(var(--muted-foreground) / 0.85);
+    }
+
+    /*
+      GO LINK — the forward-navigation affordance (gap map WF-VIS-03).
+
+      Founder QA seq 8410 measured `GoLink` as bare `inline-flex` + chevron: no
+      colour, no underline, no hover state, so it was typographically identical
+      to the prose it sat inside. This is the most repeated navigation affordance
+      in the product and it was invisible as a link.
+
+      Restrained on purpose — underline plus accent chevron, no box and no fill.
+      It has to read as a link inside a dense panel without competing with a
+      truth chip, which is a far more important signal on this product.
+    */
+    .go-link {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0.2rem;
+      white-space: nowrap;
+      color: hsl(var(--foreground));
+      text-decoration: underline;
+      text-decoration-color: hsl(var(--foreground) / 0.28);
+      text-underline-offset: 0.18em;
+      text-decoration-thickness: 1px;
+      transition: color 120ms ease-out, text-decoration-color 120ms ease-out;
+    }
+    .go-link:hover,
+    .go-link:focus-visible {
+      color: hsl(var(--primary));
+      text-decoration-color: hsl(var(--primary) / 0.85);
+      text-decoration-thickness: 2px;
+    }
+    /*
+    A link whose label is a sentence rather than a label.
+
+    `.go-link` is nowrap so short affordances stay on one comparable line.
+    That is wrong for a long pointer, and at 430px it pushed the seq 8417
+    System -> Evidence link to 474px wide inside a 430px viewport. That was a
+    real unclipped overflow introduced by this pass; the regression sweep caught
+    it, not the eye. This class lets a sentence-length label wrap instead.
+  */
+  .go-link-wrap {
+    white-space: normal;
+    overflow-wrap: break-word;
+    align-items: baseline;
+  }
+  .go-link-chevron {
+      align-self: center;
+      color: hsl(var(--muted-foreground));
+      transition: transform 120ms ease-out, color 120ms ease-out;
+    }
+    .go-link:hover .go-link-chevron,
+    .go-link:focus-visible .go-link-chevron {
+      color: hsl(var(--primary));
+      transform: translateX(1px);
+    }
+
+    /*
+      SLIM STATUS — the persistent DERIVED_PROJECTION / READ-ONLY footprint.
+
+      Founder QA seq 8411: "reduce the persistent DERIVED_PROJECTION / READ-ONLY
+      footprint; preserve truth/provenance meaning; prefer slim status treatment
+      with details available on demand."
+
+      The truth is NOT removed and NOT demoted. The authority declaration
+      remains inline as a token, because an operator must never have to click to
+      learn that what they are reading is a projection. What moves behind the
+      disclosure is the SUPPORTING detail — the contract version, the generation
+      timestamp, the workspace path — which is provenance an operator consults
+      when auditing, not on every glance.
+
+      A status is not a report: the verdict stays, the paperwork folds.
+    */
+    .slim-status {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      min-width: 0;
+    }
+    .slim-status > summary {
+      display: inline-flex;
+      cursor: pointer;
+      list-style: none;
+      align-items: center;
+      gap: 0.35rem;
+      border: 1px solid hsl(var(--border));
+      border-radius: var(--radius);
+      background: hsl(var(--surface-1));
+      padding: 0.1rem 0.4rem;
+      font-family: theme('fontFamily.mono');
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: hsl(var(--muted-foreground));
+      white-space: nowrap;
+    }
+    .slim-status > summary::-webkit-details-marker {
+      display: none;
+    }
+    .slim-status > summary:hover {
+      color: hsl(var(--foreground));
+      border-color: hsl(var(--foreground) / 0.24);
+    }
+    .slim-status-body {
+      position: absolute;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-top: 0.25rem;
+      min-width: 17rem;
+      border: 1px solid hsl(var(--border));
+      border-radius: var(--radius);
+      background: hsl(var(--popover));
+      padding: 0.5rem 0.6rem;
+      box-shadow: 0 16px 40px -20px hsl(0 0% 0% / 0.85);
+    }
+
+    /*
+      PRE-COMMENT BLOCK — the vertical budget instrument.
+
+      Founder QA seq 8410 measured the real cost of orientation copy. On
+      #attention/exceptions at 430x932 the first declared record sat at 794px
+      inside the pane — 97.4% of the viewport consumed before a single record
+      was visible, and on #attention/conflicts it was 103.1%, i.e. entirely
+      below the fold.
+
+      The fix is NOT to delete the copy. Phase 5 render guards assert the scope
+      statements are present in RENDERED markup, and they are load-bearing:
+      "nothing here is inferred from message text" is the claim that keeps this
+      surface honest. So the copy stays, and it moves into a disclosure CLOSED
+      by default.
+
+      A one-line statement of the same claim stays inline, because orientation
+      should not require a click. The detail is one click away for an operator
+      auditing how the surface reads.
+    */
+    .pre-comment {
+      border-left: 2px solid hsl(var(--border));
+      padding-left: 0.6rem;
+    }
+    .pre-comment > summary {
+      cursor: pointer;
+      list-style: none;
+      font-family: theme('fontFamily.sans');
+      font-size: 12.5px;
+      font-weight: 500;
+      line-height: 1.35;
+      color: hsl(var(--muted-foreground));
+    }
+    .pre-comment > summary::-webkit-details-marker {
+      display: none;
+    }
+    .pre-comment > summary::after {
+      content: ' more';
+      font-family: theme('fontFamily.mono');
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      color: hsl(var(--primary) / 0.85);
+    }
+    .pre-comment[open] > summary::after {
+      content: ' less';
+    }
+    .pre-comment-body {
+      padding-top: 0.4rem;
+    }
+
+    /*
+      SCROLL AFFORDANCE — mobile discoverability for contained wide data.
+
+      Founder QA seq 8410 measured three stacked horizontal scroll regions on
+      #studio/staff at 430x932 (ratios 1.68 / 1.93 / 1.82) with nothing
+      indicating a second one existed below the first. The Founder instruction
+      is explicit that legitimate contained scrolling must NOT become clipping,
+      so the surface keeps its scroll and gains a visible hint.
+
+      pointer-events:none, so it can never intercept a swipe or a selection.
+      The hint is a right-edge marker, not a fade: a fade over live data
+      obscures a value, which is exactly the defect this wave exists to remove.
+    */
+    .scroll-hint {
+      position: relative;
+    }
+    .scroll-hint::after {
+      content: 'scroll →';
+      position: absolute;
+      top: 0.15rem;
+      right: 0.2rem;
+      z-index: 2;
+      pointer-events: none;
+      border-radius: 3px;
+      background: hsl(var(--surface-0) / 0.88);
+      padding: 0 0.25rem;
+      font-family: theme('fontFamily.mono');
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      color: hsl(var(--muted-foreground) / 0.8);
+      opacity: 0;
+      transition: opacity 120ms ease-out;
+    }
+    .scroll-hint:hover::after,
+    .scroll-hint:focus-within::after {
+      opacity: 1;
+    }
+    /* Touch has no hover, so on pointer-coarse the hint is simply present. */
+    @media (pointer: coarse) {
+      .scroll-hint::after {
+        opacity: 1;
+      }
+    }
+
+    /*
+        RAW VIEWER — the canonical-bytes inspector (seq 8411).
+
+        A deliberate code viewer rather than a `<pre>` that happens to scroll:
+        bounded height, wrapped long lines so a single 2000-character JSON value
+        cannot force a horizontal scroll across the whole detail pane, monospace
+        because these ARE machine values, and a copy affordance so an operator does
+        not have to hand-select a wall of text to take a digest prefix.
+
+        Collapsed by default. The bytes are still fetched on selection — this is a
+        presentation decision, not a lazy read.
+      */
+      .raw-viewer > summary {
+        cursor: pointer;
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        background: hsl(var(--surface-1));
+        padding: 0.2rem 0.5rem;
+        font-family: theme('fontFamily.sans');
+        font-size: 12px;
+        color: hsl(var(--muted-foreground));
+      }
+      .raw-viewer > summary::-webkit-details-marker {
+        display: none;
+      }
+      .raw-viewer > summary:hover {
+        color: hsl(var(--foreground));
+        border-color: hsl(var(--foreground) / 0.24);
+      }
+      .raw-viewer-bar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.4rem;
+      }
+      .raw-viewer-bar .tier-prov {
+        min-width: 0;
+        flex: 1 1 auto;
+        overflow-wrap: anywhere;
+      }
+      .raw-viewer-body {
+        max-height: 20rem;
+        overflow: auto;
+        margin-top: 0.4rem;
+        border: 1px solid hsl(var(--border));
+        border-radius: 3px;
+        background: hsl(var(--surface-0) / 0.6);
+        padding: 0.5rem;
+        font-family: theme('fontFamily.mono');
+        font-size: 11.5px;
+        line-height: 1.5;
+        /* wrap long values rather than forcing a pane-wide horizontal scroll */
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        color: hsl(var(--muted-foreground));
+      }
+
+      /*
+         SOURCE VIEWER — seq 8417 correction 2.
+
+         The inspection body of the selected canonical source. Two shapes:
+
+           .source-viewer-code  the literal bytes. Monospace, bounded, wrapped. This
+                                is the record.
+           .md-body             a DOCUMENT rendered for reading. Sans, real heading
+                                scale, comfortable measure.
+
+         The measure on prose is capped at ~78ch on purpose: a doctrine paragraph
+         set across a 1200px pane is unreadable, and this is the one place on the
+         product where the content IS prose rather than a table value.
+
+         The caveat line under the rendered view is not decoration. It states that
+         the rendering is for reading and that the literal source is available —
+         so nobody mistakes a readable document for the record itself.
+       */
+       .source-viewer {
+         display: flex;
+         flex-direction: column;
+         gap: 0.35rem;
+         min-width: 0;
+       }
+       .source-viewer-bar {
+         display: flex;
+         align-items: center;
+         gap: 0.4rem;
+       }
+       .source-viewer-bar .spacer {
+         flex: 1 1 auto;
+       }
+       .source-viewer-code {
+         max-height: 26rem;
+         overflow: auto;
+         border: 1px solid hsl(var(--border));
+         border-radius: 3px;
+         background: hsl(var(--surface-0) / 0.6);
+         padding: 0.6rem 0.7rem;
+         font-family: theme('fontFamily.mono');
+         font-size: 11.5px;
+         line-height: 1.55;
+         white-space: pre-wrap;
+         overflow-wrap: anywhere;
+         color: hsl(var(--muted-foreground));
+       }
+       .source-viewer-caveat {
+         border-left: 2px solid hsl(var(--truth-unknown) / 0.5);
+         padding-left: 0.5rem;
+         font-family: theme('fontFamily.sans');
+         font-size: 11.5px;
+         line-height: 1.45;
+         color: hsl(var(--muted-foreground));
+       }
+
+       .md-body {
+         max-height: 32rem;
+         overflow-y: auto;
+         max-width: 78ch;
+         border: 1px solid hsl(var(--border));
+         border-radius: 3px;
+         background: hsl(var(--surface-0) / 0.45);
+         padding: 0.75rem 0.9rem;
+       }
+       .md-body .md-p {
+         margin: 0 0 0.55rem;
+         font-family: theme('fontFamily.sans');
+         font-size: 13px;
+         line-height: 1.55;
+         color: hsl(var(--foreground) / 0.9);
+         overflow-wrap: break-word;
+       }
+       .md-body .md-h {
+         margin: 0.9rem 0 0.4rem;
+         font-family: theme('fontFamily.sans');
+         font-weight: 600;
+         color: hsl(var(--foreground));
+         line-height: 1.25;
+         letter-spacing: -0.012em;
+       }
+       .md-body .md-h:first-child {
+         margin-top: 0;
+       }
+       .md-body .md-h1 {
+         font-size: 18px;
+       }
+       .md-body .md-h2 {
+         font-size: 15.5px;
+       }
+       .md-body .md-h3 {
+         font-size: 13.5px;
+       }
+       .md-body .md-h4 {
+         font-size: 12.5px;
+         color: hsl(var(--foreground) / 0.88);
+       }
+       .md-body .md-li {
+         margin: 0 0 0.3rem;
+         padding-left: 1rem;
+         position: relative;
+         font-family: theme('fontFamily.sans');
+         font-size: 13px;
+         line-height: 1.5;
+         color: hsl(var(--foreground) / 0.88);
+         overflow-wrap: break-word;
+       }
+       .md-body .md-li::before {
+         content: '\2013';
+         position: absolute;
+         left: 0.25rem;
+         color: hsl(var(--muted-foreground));
+       }
+       .md-body .md-quote {
+         margin: 0 0 0.55rem;
+         border-left: 2px solid hsl(var(--border));
+         padding-left: 0.6rem;
+         font-family: theme('fontFamily.sans');
+         font-size: 12.5px;
+         line-height: 1.5;
+         color: hsl(var(--muted-foreground));
+       }
+       .md-body .md-code {
+         margin: 0 0 0.6rem;
+         overflow-x: auto;
+         border: 1px solid hsl(var(--border));
+         border-radius: 3px;
+         background: hsl(var(--surface-0) / 0.7);
+         padding: 0.5rem 0.6rem;
+         font-family: theme('fontFamily.mono');
+         font-size: 11.5px;
+         line-height: 1.5;
+         color: hsl(var(--muted-foreground));
+       }
+       .md-body .md-rule {
+         margin: 0.75rem 0;
+         border: 0;
+         border-top: 1px solid hsl(var(--border));
+       }
+       .md-body .md-gap {
+         height: 0.35rem;
+       }
+
+       /*
+         COMMAND FOOTER — seq 8417 correction 1.
+
+         One compact status band. The projection verdict and the authority tokens
+         stay inline; the doctrine sits behind a disclosure.
+
+         The old band carried `truncate`, which at narrow widths cut the authority
+         note off mid-sentence — the Founder could see the start of the doctrine
+         and not the end of it. There is no truncation here: the disclosure opens
+         upward into a wrapped block, so the note is read whole or not at all.
+       */
+       /* Separator inside the merged Attention qualifier band (seq 8417 c.5). */
+  .qualifier-div {
+    width: 1px;
+    align-self: stretch;
+    background: hsl(var(--border));
+    margin: 0.15rem 0.15rem;
+  }
+
+  .command-footer {
+    display: flex;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    position: relative;
+    align-items: center;
+    gap: 0.3rem 0.45rem;
+    border-top: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-1) / 0.6);
+    padding: 0.2rem 0.7rem;
+    font-family: theme('fontFamily.mono');
+    font-size: 10.5px;
+    color: hsl(var(--muted-foreground));
+    min-height: 1.5rem;
+  }
+       .command-footer-token {
+         white-space: nowrap;
+       }
+       .command-footer-dot {
+         width: 2px;
+         height: 2px;
+         border-radius: 999px;
+         background: currentColor;
+         opacity: 0.6;
+       }
+       /*
+         The spacer that pushes the disclosure to the right edge. It is `min-width:0`
+         and allowed to collapse so that at phone width the disclosure WRAPS to a
+         second line instead of overflowing the band.
+
+         Measured before this fix: 493px of content in a 430px viewport, i.e. the
+         footer scrolled sideways. `flex-wrap` on the parent plus a collapsible
+         spacer makes it wrap; there is no truncation anywhere in this element,
+         which is the whole point of correction 1.
+       */
+       .command-footer-sep {
+         flex: 1 1 auto;
+         min-width: 0;
+       }
+       .command-footer-more {
+         position: relative;
+         flex: 0 0 auto;
+       }
+       .command-footer-more > summary {
+         cursor: pointer;
+         list-style: none;
+         font-family: theme('fontFamily.sans');
+         font-size: 11.5px;
+         color: hsl(var(--muted-foreground) / 0.9);
+         text-decoration: underline;
+         text-underline-offset: 0.15em;
+         text-decoration-color: hsl(var(--foreground) / 0.2);
+         white-space: nowrap;
+       }
+       .command-footer-more > summary::-webkit-details-marker {
+         display: none;
+       }
+       .command-footer-more > summary:hover {
+         color: hsl(var(--foreground));
+         text-decoration-color: hsl(var(--foreground) / 0.5);
+       }
+       /*
+         Opens UPWARD, out of the 24px band, so the disclosure never costs the
+         page a row and never pushes the work area it is qualifying.
+       */
+       .command-footer-body {
+         position: absolute;
+         bottom: calc(100% + 0.3rem);
+         left: 0;
+         z-index: 45;
+         display: flex;
+         width: min(34rem, calc(100vw - 2rem));
+         flex-direction: column;
+         gap: 0.35rem;
+         border: 1px solid hsl(var(--border));
+         border-radius: var(--radius);
+         background: hsl(var(--popover));
+         padding: 0.6rem 0.7rem;
+         box-shadow: 0 -12px 32px -18px hsl(0 0% 0% / 0.85);
+         font-family: theme('fontFamily.sans');
+         font-size: 12.5px;
+         line-height: 1.5;
+         color: hsl(var(--foreground) / 0.9);
+       }
+       .command-footer-note {
+         color: hsl(var(--muted-foreground));
+         font-size: 12px;
+       }
+
+       /*
+         DUTY VERDICT — a declared state token beside prose.
+
+          It is a token, so it stays monospace and machine-cased. It is coloured by
+          the EXISTING truth tokens only, and only for the four states those tokens
+          actually name. Anything unrecognised stays muted rather than being given a
+          healthy-looking colour by omission — the same rule `toneOf` enforces in
+          the component layer, expressed here for a value that arrives pre-declared.
+        */
+        .duty-verdict {
+          font-family: theme('fontFamily.mono');
+          font-size: 11px;
+          letter-spacing: 0.02em;
+          text-transform: uppercase;
+          color: hsl(var(--muted-foreground));
+        }
+        .duty-verdict[data-duty-state='ACTIVE'],
+        .duty-verdict[data-duty-state='AVAILABLE'] {
+          color: hsl(var(--truth-ok));
+        }
+        .duty-verdict[data-duty-state='OFFLINE'],
+        .duty-verdict[data-duty-state='BLOCKED'] {
+          color: hsl(var(--truth-drift));
+        }
+        .duty-verdict[data-duty-state='DEGRADED'],
+        .duty-verdict[data-duty-state='STALE'] {
+          color: hsl(var(--truth-stale));
+        }
+
+        /*
+          INLINE NOTE — the per-row disclosure on Capacity.
+
+          Full canonical prose, one click away, inside the row that declares it. The
+          complete text is never truncated away: this is a disclosure, not a summary,
+          and the text inside it is rendered verbatim.
+        */
+        .inline-note {
+          display: inline;
+        }
+        .inline-note > summary {
+          display: inline;
+          cursor: pointer;
+          list-style: none;
+          margin-left: 0.15rem;
+          font-family: theme('fontFamily.mono');
+          font-size: 10px;
+          letter-spacing: 0.06em;
+          color: hsl(var(--primary) / 0.9);
+          text-decoration: underline;
+          text-underline-offset: 0.15em;
+          white-space: nowrap;
+        }
+        .inline-note > summary::-webkit-details-marker {
+          display: none;
+        }
+        .inline-note[open] > summary {
+          color: hsl(var(--muted-foreground));
+        }
+        .inline-note > p {
+                  display: block;
+                  margin-top: 0.35rem;
+                  border-left: 2px solid hsl(var(--border));
+                  padding-left: 0.5rem;
+                }
+
+                /*
+                  COMPANY IDENTITY — the organisation as a name, not a datum (seq 8411).
+
+                  The Founder instruction was that Starq Technologies "must not read as a
+                  database value". It previously occupied a `Stat` cell beside "Declared
+                  floors: 6", which made the name of the organisation and a count of its
+                  floors the same kind of object.
+
+                  It is now the first cell of the rail and is typographically distinct: a
+                  display-size sans name, a plain-language statement of what it is, and the
+                  canonical projection value kept underneath in monospace as provenance. The
+                  declared value is shown verbatim — Command does not rename a canonical
+                  source — but it is a qualifier on the identity, not the identity itself.
+                */
+                .company-identity {
+                  display: flex;
+                  min-width: 0;
+                  flex-direction: column;
+                  gap: 0.1rem;
+                  justify-content: center;
+                  border-left: 2px solid hsl(var(--room));
+                  padding: 0.3rem 0.65rem;
+                  background: hsl(var(--room-soft) / 0.6);
+                }
+                .company-identity-name {
+                  font-family: theme('fontFamily.sans');
+                  font-size: 15px;
+                  font-weight: 600;
+                  letter-spacing: -0.014em;
+                  line-height: 1.2;
+                  color: hsl(var(--foreground));
+                }
+                .company-identity-role {
+                  font-family: theme('fontFamily.sans');
+                  font-size: 12px;
+                  font-weight: 400;
+                  line-height: 1.3;
+                  color: hsl(var(--muted-foreground));
+                }
+                .company-identity-declared {
+                  font-family: theme('fontFamily.sans');
+                  font-size: 11px;
+                  line-height: 1.3;
+                  color: hsl(var(--muted-foreground) / 0.8);
+                }
+
+        .surface-grid {
+          background-image:
+            linear-gradient(hsl(var(--foreground) / 0.022) 1px, transparent 1px),
+            linear-gradient(90deg, hsl(var(--foreground) / 0.022) 1px, transparent 1px);
+          background-size: 32px 32px;
+        }
+  .mobile-nav-trigger { display: none; }
+
+  .executive-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 0.6rem;
+    padding: 0.6rem 1rem 0.9rem;
+    align-items: start;
+  }
+  .executive-grid > .command-panel { grid-column: span 6; }
+  .executive-grid > .executive-focus { grid-column: 1 / -1; }
+  .executive-room-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; padding: 0.7rem; }
+  .executive-room-card { display: flex; min-width: 0; flex-direction: column; gap: 0.25rem; border: 1px solid hsl(var(--border)); border-left: 2px solid hsl(var(--room)); background: hsl(var(--surface-0) / 0.65); padding: 0.65rem; text-decoration: none; }
+  .executive-room-card:hover { background: hsl(var(--room-soft)); }
+  /* Room name leads, state is the comparable value, detail recedes. */
+  .executive-room-card .room-name { overflow-wrap: anywhere; font-size: 12.5px; font-weight: 600; color: hsl(var(--foreground)); }
+  .executive-room-card .room-state { overflow-wrap: anywhere; font-family: theme('fontFamily.mono'); font-size: 11px; letter-spacing: 0.03em; color: hsl(var(--room)); }
+  .executive-room-card span { overflow-wrap: anywhere; font-size: 11px; color: hsl(var(--muted-foreground)); }
+  .executive-room-card span:last-child { margin-top: 0.25rem; font-size: 10px; color: hsl(var(--primary)); }
+  .executive-list { display: flex; flex-direction: column; gap: 0.45rem; }
+  .executive-list li { display: flex; min-width: 0; flex-direction: column; gap: 0.1rem; border-left: 2px solid hsl(var(--room)); padding-left: 0.55rem; font-size: 11.5px; color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
+
+/*
+  EXECUTIVE HEADLINE (gap map WF-OV-01).
+
+  The finding was that no item on Overview was identified as the most material
+  current concern, so the Founder performed the synthesis manually. This band
+  is the synthesis, and it is one bounded row: projection state, each room's
+  state, and the declared attention count — with every value carrying its own
+  qualifier so the band never over-claims.
+
+  Layout only. Hierarchy and density are Vision's later wave.
+*/
+.executive-headline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1px;
+  border: 1px solid hsl(var(--border));
+  border-left: 2px solid hsl(var(--room));
+  background: hsl(var(--border) / 0.5);
+  margin-bottom: 0.5rem;
+}
+.executive-headline .headline-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.15rem;
+  background: hsl(var(--surface-0) / 0.85);
+  padding: 0.4rem 0.6rem;
+}
+.executive-headline .headline-item .tnum {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.014em;
+  color: hsl(var(--foreground));
+}
+.executive-headline .headline-item .hint {
+  overflow-wrap: anywhere;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: hsl(var(--muted-foreground));
+}
+/*
+  The primary work pane. `.executive-grid` gives every panel equal weight by
+  default, which was the original defect: the eye had no way to tell the pane
+  that answers "what needs attention" from the one that carries a room card.
+*/
+.executive-grid > .executive-primary {
+  grid-column: span 12;
+  border-left: 2px solid hsl(var(--truth-founder));
+}
+
+/*
+  Building node metadata (gap map WF-BLD-02). Room state travels WITH the room
+  node as a qualifier line, so Building can show "current room state beside
+  each room" without re-rendering an executive stat rail.
+*/
+.building-node .node-state {
+  font-family: theme('fontFamily.mono');
+  font-size: 9px;
+  color: hsl(var(--room));
+}
+/*
+  Declared-but-unprojected floors, grouped and collapsed. A floor with no
+  operational provider has nothing to inspect, and giving it equal weight with
+  the one operating floor is what made the topology read as an inventory.
+*/
+.building-unprojected {
+  margin-left: 1rem;
+  border: 1px dashed hsl(var(--border));
+}
+.building-unprojected > summary {
+  cursor: pointer;
+  padding: 0.3rem 0.55rem;
+  font-family: theme('fontFamily.mono');
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.building-unprojected-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-top: 1px dashed hsl(var(--border));
+  padding: 0.4rem;
+}
+  .surface-peer-label { padding: 0.5rem 1rem 0; font-family: theme('fontFamily.mono'); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em; color: hsl(var(--room)); }
+  .building-tree { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem; }
+  .building-node { display: flex; min-width: 0; flex-direction: column; gap: 0.15rem; border-left: 2px solid hsl(var(--border)); padding: 0.45rem 0.65rem; background: hsl(var(--surface-0) / 0.55); text-decoration: none; }
+  .building-node.root { border-left-color: hsl(var(--room)); background: hsl(var(--room-soft)); }
+  .building-node.floor { margin-left: 1rem; border-left-color: hsl(var(--room)); }
+  .building-node.unknown { margin-left: 1rem; }
+  .building-node strong { overflow-wrap: anywhere; font-size: 11px; color: hsl(var(--foreground)); }
+  .building-node span { overflow-wrap: anywhere; font-size: 10px; color: hsl(var(--muted-foreground)); }
+  .building-rooms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; margin-left: 2rem; }
+  .building-node.room { border-left-color: hsl(var(--room)); }
+  .building-node.room:hover { background: hsl(var(--room-soft)); }
+  .building-relations { overflow-wrap: anywhere; }
+  .command-table-wrap { max-width: 100%; overflow-x: auto; }
+
+  @media (max-width: 900px) {
+    .executive-grid { grid-template-columns: 1fr; }
+    .executive-grid > .command-panel, .executive-grid > .executive-primary { grid-column: auto; }
+  }
+  @media (max-width: 600px) {
+    .executive-grid { padding-inline: 0.65rem; }
+    .executive-room-grid { grid-template-columns: 1fr; }
+    /*
+      100vw (Tailwind w-screen) is wider than the layout viewport once a
+      vertical scrollbar exists. At 320px that was a 10px document scroll
+      (scrollWidth 320, clientWidth 310). Width is the containing block,
+      and only the horizontal axis is clipped so the page can still grow
+      downward.
+    */
+    .command-app {
+      min-height: 100%;
+      height: auto !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      overflow-x: clip !important;
+      overflow-y: visible !important;
+    }
+    .command-app > nav { position: fixed; inset: 0 auto 0 0; z-index: 50; transform: translateX(-100%); }
+    .command-app.rail-open > nav { transform: translateX(0); box-shadow: 12px 0 30px hsl(var(--background) / 0.55); }
+    .mobile-nav-trigger { display: inline-flex; align-items: center; border: 1px solid hsl(var(--border)); background: hsl(var(--surface-2)); padding: 0.15rem 0.35rem; color: hsl(var(--muted-foreground)); font-family: theme('fontFamily.mono'); font-size: 9px; }
+    .surface-grid { overflow-x: hidden; }
+    .command-context { padding: 0; }
+    /*
+      DELIBERATELY NOT `display: none`.
+      Goose R1 (seq 8381) was: the rail's Projection state block was hidden
+      below 800px, which deleted the "N/M conditions in sync" count outright.
+      The count was re-homed onto the pinned context bar so it could never be
+      lost again. Hiding .context-status here would reinstate exactly that
+      defect at a new selector — the count would vanish on every phone and
+      narrow tablet, which are the widths where a silent projection looks most
+      like a healthy one.
+
+      So the status row COMPACTS instead: it wraps, it keeps every value, and
+      it stays one band the operator can scan.
+    */
+    .context-location,
+    .context-status { gap: 0.45rem; padding-inline: 0.65rem; line-height: 1.5rem; white-space: normal; overflow: visible; flex-wrap: wrap; }
+    .command-context .spacer { display: none; }
+    .command-context .focus { max-width: 100%; flex: 1 1 100%; flex-wrap: wrap; line-height: 1.2rem; }
+    .room-head .right { margin-left: 0; width: 100%; }
+    /*
+      `overflow-wrap: anywhere` HERE was the character-by-character wrapping
+      defect. `anywhere` affects min-content sizing, so a long canonical path
+      set the container's minimum width and the browser then broke the token
+      one character per line — measured 38px wide, 85px tall for
+      `starqNexus/data/starq-erp-tasks.json` at 430x932. `break-word` keeps
+      overflow containment while preferring the path's own separators.
+    */
+    .command-panel { max-width: 100%; overflow-wrap: break-word; }
+    .building-rooms { grid-template-columns: 1fr; margin-left: 1rem; }
+    /*
+      The 320px measurement found three layout overflows besides the 100vw
+      shell. The top bar is one nowrap row, so the room strip was 74px wide
+      around 141px of content and the founder line collapsed to 0. Table
+      wraps kept the table's min-content, so the panel and #command-main
+      grew to 378px and the main's overflow-x:hidden clipped it. Nowrap
+      footnotes, chips, and the 1px screen-reader clip reported a
+      scrollWidth larger than their box.
+    */
+    .command-app > div > header {
+      height: auto;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      row-gap: 0.25rem;
+    }
+    .command-app > div > header > * {
+      flex: 1 1 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .command-app > div > header > .room-strip,
+    .room-strip,
+    .room-strip-inner {
+      flex: 1 1 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .command-app > div,
+    .surface-grid,
+    .room-root,
+    .command-stack,
+    .command-panel,
+    .command-panel .head,
+    .command-panel .body,
+    .command-table-wrap,
+    .command-tabs {
+      min-width: 0;
+      max-width: 100%;
+    }
+    .stat .s,
+    .chip,
+    .stale-detail,
+    .stale-detail-body,
+    .stale-detail-body p,
+    .command-context .room-root > * {
+      min-width: 0;
+      max-width: 100%;
+      white-space: normal;
+      overflow: visible;
+      text-overflow: unset;
+      overflow-wrap: anywhere;
+    }
+    .sr-only {
+      white-space: normal !important;
+      word-break: break-all;
+    }
+  }
+}
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Phase 7 — dense Building command console.
+
+ * The shell below is a console, not a document. Three rules govern it:
+ *
+ *   1. NO REPORT SCROLL. A room answers its questions above the fold. Long
+ *      lists live inside a bounded pane with its own scrollbar, so the page
+ *      itself never becomes a wall of stacked cards.
+ *   2. THE FIRST SCREEN CARRIES THE ANSWER. Room identity, room state and
+ *      current focus are pinned, so an operator knows which room they are in
+ *      and what it is doing without scrolling or reading.
+ *   3. ROOMS DIFFER BY ACCENT, NEVER BY LANGUAGE. ERP and Hoadha share one
+ *      Building vocabulary — same hairlines, same type scale, same truth
+ *      chips — and are told apart by a room accent token alone.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* Room accents. Identity only — never a truth verdict. */
+    --room-erp: 205 88% 56%;
+    --room-erp-soft: 205 88% 56% / 0.13;
+    --room-hoadha: 271 74% 68%;
+    --room-hoadha-soft: 271 74% 68% / 0.13;
+    --room-studio: 152 46% 52%;
+    --room-studio-soft: 152 46% 52% / 0.12;
+  }
+
+  /*
+   * The room accent is scoped, not global. Setting it on a room root tints
+   * that room's chrome only; nested truth chips keep their own tokens, so an
+   * ERP room can still render a violet ON HOLD chip without the room accent
+   * leaking into the verdict.
+   */
+  .room-root {
+    --room: var(--room-studio);
+    --room-soft: var(--room-studio-soft);
+  }
+  .room-root[data-room='erp'] {
+    --room: var(--room-erp);
+    --room-soft: var(--room-erp-soft);
+  }
+  .room-root[data-room='hoadha'] {
+    --room: var(--room-hoadha);
+    --room-soft: var(--room-hoadha-soft);
+  }
+}
+
+@layer components {
+  /* ── Pinned orientation bar ─────────────────────────────────────────────
+   * GAP MAP WF-SHELL-02: "the context strip contains many tokens and status
+   * segments; it is technically contained but becomes a crowded multi-line
+   * band and is difficult to scan as a location indicator."
+   *
+   * The fix is structural, not cosmetic: LOCATION and STATUS are now two
+   * separate rows with separate jobs.
+   *
+   *   .context-location  company -> floor -> room -> section. Location only.
+   *                      Tokens stay whole; they never wrap mid-word and never
+   *                      interleave with a diagnostic value.
+   *   .context-status    PROJECTION / SOURCES / CURRENT FOCUS. Status only.
+   *
+   * A breadcrumb that carries every global diagnostic dimension is not a
+   * breadcrumb, so the two concerns no longer share a line.
+   */
+  .command-context {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-height: 0;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-1));
+    font-size: 11px;
+    min-width: 0;
+  }
+  .context-location,
+  .context-status {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0 1rem;
+    min-height: 1.6rem;
+    line-height: 1.6rem;
+    white-space: normal;
+    overflow: hidden;
+    min-width: 0;
+    scrollbar-width: none;
+  }
+  .context-location::-webkit-scrollbar,
+  .context-status::-webkit-scrollbar {
+    display: none;
+  }
+  /* The status row reads as a supporting rail, not a second location bar. */
+  .context-status {
+    border-top: 1px solid hsl(var(--border) / 0.6);
+    font-size: 10px;
+    line-height: 1.4rem;
+    min-height: 1.4rem;
+  }
+  .command-context a {
+    text-decoration: none;
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .command-context a:hover {
+    color: hsl(var(--foreground));
+    border-bottom-color: hsl(var(--room, var(--primary)));
+  }
+  .command-context > *,
+  .context-location > *,
+  .context-status > * {
+    flex: 0 0 auto;
+    min-width: 0;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .context-status .spacer,
+  .command-context .spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .command-context .focus {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: hsl(var(--foreground));
+    max-width: min(34vw, 26rem);
+    white-space: normal;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    word-break: normal;
+  }
+  .command-context .focus::before {
+    content: '';
+    width: 2px;
+    height: 11px;
+    border-radius: 1px;
+    background: hsl(var(--room, var(--primary)));
+  }
+  .command-context .room-root {
+    display: inline-flex !important;
+    min-width: 0;
+    max-width: 100%;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .command-context .room-root > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* ── Bounded stale detail (gap map WF-SHELL-04) ──────────────────────────
+   * The STALE state and its consequence stay in the rail above. The hashes
+   * that evidence it and the hint explaining regeneration are one click away,
+   * so the explanation stops out-ranking the work area it was pushing down. */
+  .stale-detail {
+    margin-left: auto;
+    min-width: 0;
+  }
+  .stale-detail > summary {
+    cursor: pointer;
+    list-style: none;
+    font-family: theme('fontFamily.mono');
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .stale-detail > summary::-webkit-details-marker {
+    display: none;
+  }
+  .stale-detail-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    border-top: 1px solid hsl(var(--border) / 0.6);
+    margin-top: 0.2rem;
+    padding-top: 0.2rem;
+  }
+
+  /* ── Room header: identity at a glance ──────────────────────────────── */
+  .room-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    padding: 0.7rem 1rem 0.6rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: linear-gradient(
+      100deg,
+      hsl(var(--room-soft)) 0%,
+      hsl(var(--surface-0)) 62%
+    );
+  }
+  .room-head .mark {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    border-radius: 5px;
+    border: 1px solid hsl(var(--room) / 0.45);
+    background: hsl(var(--room-soft));
+    color: hsl(var(--room));
+    font-family: theme('fontFamily.mono');
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  /*
+      PAGE TITLE — WF-DESK-01 / the "H1 too weak" finding (seq 8410 -> 8411).
+
+      Measured: 17px, while the chrome around it ran 9-10.5px. The page title
+      read as one step above body rather than as the strongest element on the
+      screen, which is not what an H1 is for on an operating surface.
+
+      25px Space Grotesk at 600, with the subtitle promoted to a real reading
+      size rather than 11.5px, so the identity band states what you are looking
+      at in a size you can actually read. This is a typographic change only —
+      the element, its position and its ownership of the page title are
+      unchanged, and no structure was reversed to achieve it.
+    */
+    .room-head h1 {
+        font-family: theme('fontFamily.sans');
+        font-size: 25px;
+        font-weight: 600;
+        letter-spacing: -0.026em;
+        line-height: 1.12;
+        color: hsl(var(--foreground));
+      }
+      .room-head .sub {
+        font-family: theme('fontFamily.sans');
+        font-size: 13px;
+        font-weight: 400;
+        color: hsl(var(--muted-foreground));
+        line-height: 1.4;
+      }
+  .room-head .right {
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  /*
+      Stat rail (gap map WF-HIER-02).
+
+      The finding was that every count got the same visual weight, so counts
+      became the product's language even where the contract says a count
+      establishes nothing. Two weights, and the distinction is DECLARED rather
+      than applied by eye: `.stat` is supporting evidence, `.stat[data-rank=
+      'primary']` is the route's defining state and is the only cell whose value
+      is set at display size.
+
+      A cell's qualifier is never removed to achieve this — an "evidence only"
+      count still shows its number, it just stops competing with the answer.
+    */
+    .stat-rail {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+      border-bottom: 1px solid hsl(var(--border));
+    }
+    .stat {
+      padding: 0.5rem 0.85rem;
+      border-right: 1px solid hsl(var(--border));
+      min-width: 0;
+    }
+    .stat:last-child {
+      border-right: 0;
+    }
+    .stat .k {
+      display: block;
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      color: hsl(var(--muted-foreground));
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* Supporting evidence: present, comparable, not shouting. */
+    .stat .v {
+      display: block;
+      font-family: theme('fontFamily.sans');
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      font-variant-numeric: tabular-nums;
+      color: hsl(var(--foreground) / 0.88);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    /* THE route-defining state. One per rail, by declaration not by eye. */
+    .stat[data-rank='primary'] {
+      background: hsl(var(--foreground) / 0.035);
+    }
+    .stat[data-rank='primary'] .v {
+      font-size: 13px;
+      letter-spacing: -0.015em;
+      color: hsl(var(--foreground));
+    }
+    .stat .v.unknown {
+      font-size: 11px;
+      color: hsl(var(--truth-unknown));
+    }
+    .stat .s {
+      display: block;
+      font-size: 10px;
+      line-height: 1.35;
+      color: hsl(var(--muted-foreground) / 0.85);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  .stat[data-tone='ok'] .v {
+    color: hsl(var(--truth-ok));
+  }
+  .stat[data-tone='stale'] .v {
+    color: hsl(var(--truth-stale));
+  }
+  .stat[data-tone='drift'] .v {
+    color: hsl(var(--truth-drift));
+  }
+  .stat[data-tone='room'] .v {
+    color: hsl(var(--room));
+  }
+
+  /* ── Room tab rail ──────────────────────────────────────────────────── */
+  .command-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: hsl(var(--surface-1) / 0.94);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid hsl(var(--border));
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .command-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .command-tabs a {
+    position: relative;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 12.5px;
+    font-weight: 500;
+    padding: 0.45rem 0.7rem;
+    color: hsl(var(--muted-foreground));
+    text-decoration: none;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+  }
+  .command-tabs a .count {
+    font-family: theme('fontFamily.mono');
+    font-size: 9px;
+    padding: 0 3px;
+    border-radius: 2px;
+    background: hsl(var(--surface-3));
+    color: hsl(var(--muted-foreground));
+  }
+  .command-tabs a:hover {
+    color: hsl(var(--foreground));
+    background: hsl(var(--foreground) / 0.03);
+  }
+  .command-tabs a[aria-current] {
+    color: hsl(var(--foreground));
+    border-bottom-color: hsl(var(--room));
+    background: hsl(var(--room-soft));
+  }
+  .command-tabs a[aria-current] .count {
+    background: hsl(var(--room) / 0.22);
+    color: hsl(var(--foreground));
+  }
+
+  /* ── Panel ──────────────────────────────────────────────────────────── */
+  .command-panel {
+    margin: 0;
+    padding: 0;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    background: hsl(var(--surface-1));
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /*
+        Primary PANEL HEADING — the record tier, in sentence case.
+
+        This was 11px/600/UPPERCASE, which is the same treatment as `.label-sec`
+        (10px/600/uppercase) and `.stat .k` (9.5px/600/uppercase): three
+        different meanings wearing one costume. A panel head is a SECTION TITLE,
+        so it moves to the record tier. Caps and letterspacing are retained on
+        the micro band, where they belong (gap map WF-HIER-03, WF-VIS-01).
+
+        The bare `.command-panel h2` selector is kept deliberately. The R5
+        regression guard (phase7-corrective.test.ts) asserts the h2/h3 ladder by
+        slicing the CSS BETWEEN these two literal selectors, so renaming or
+        qualifying the h2 selector silently voids a real guard rather than
+        failing it loudly. See `h3` below for the weight relationship it holds.
+      */
+      .command-panel h2 {
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        text-transform: none;
+        color: hsl(var(--foreground));
+      }
+      .command-panel > h2,
+      .command-panel > header > h2,
+      .command-panel .head h2 {
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        text-transform: none;
+        color: hsl(var(--foreground));
+      }
+      .command-panel .head .label-sec {
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        text-transform: none;
+        color: hsl(var(--foreground));
+      }
+    .command-panel .head {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      padding: 0.45rem 0.7rem;
+      border-bottom: 1px solid hsl(var(--border));
+      background: hsl(var(--surface-0) / 0.6);
+    }
+    .command-panel .head .spacer {
+      flex: 1 1 auto;
+    }
+    .command-panel .body {
+      padding: 0.7rem;
+      min-width: 0;
+    }
+    .command-panel h1 {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.012em;
+    }
+    /*
+            h3 is a sub-heading UNDER an h2, so it steps DOWN in weight. The R5
+            guard asserts h2=600 and h3=500 for exactly this reason: I had raised
+            h3 to 600 while restyling h2, which made a sub-heading the same weight
+            as its parent — the precise "competing with its parent" failure R5 was
+            written to prevent. The weight relationship is the guard's subject
+            matter, so it is preserved: h2 600, h3 500.
+          */
+          .command-panel h3 {
+            font-size: 11.5px;
+            font-weight: 500;
+            color: hsl(var(--foreground) / 0.92);
+          }
+    /*
+      Body copy was 11px muted. That is the tier an operator actually READS —
+      blocker text, record summaries, method prose — so it steps up to the
+      record tier's leading. Metadata is explicitly exempted below and stays
+      where it was; density is the console's identity and this does not spend it.
+    */
+    .command-panel p,
+    .command-panel ul,
+    .command-panel li {
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .command-panel p.text-2xs,
+    .command-panel li.text-2xs,
+    .command-panel .prose-note {
+      font-size: 12.5px;
+      line-height: 1.5;
+    }
+  .command-panel a,
+  .command-context a {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .command-panel ul {
+    font-size: 11px;
+    line-height: 1.6;
+    margin: 0.3rem 0;
+    padding-left: 1rem;
+    list-style: none;
+  }
+  .command-panel li {
+    position: relative;
+    overflow-wrap: anywhere;
+  }
+  .command-panel li::before {
+    content: '';
+    position: absolute;
+    left: -0.6rem;
+    top: 0.55em;
+    width: 3px;
+    height: 3px;
+    border-radius: 999px;
+    background: hsl(var(--muted-foreground) / 0.6);
+  }
+
+  /* ── Layout scaffolding ─────────────────────────────────────────────── */
+  .command-split {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.6rem;
+  }
+  .command-split.wide {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  }
+  .command-split.narrow {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.7fr);
+  }
+  .command-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.6rem;
+    min-width: 0;
+  }
+  /*
+    WF-VIS-04 (measured this wave): a grid or flex child defaults to
+    `min-width: auto`, which means it refuses to shrink below its content. A
+    wide table inside a card therefore pushed its own track past the viewport:
+    measured at a 770px right edge inside a 768px viewport on ERP Integrity.
+    `min-width: 0` lets the track shrink and hands the overflow to the inner
+    table wrapper, which already scrolls. This is containment, not composition
+    — no card, grid or column is restructured by it.
+  */
+  .command-stack .grid > *,
+  .command-stack .flex > * {
+    min-width: 0;
+  }
+  /*
+    WF-VIS-05 (measured this wave): a table whose cells cannot wrap has a
+    min-content width. When that exceeds its card, the table was painted past
+    the card and past the viewport edge — measured at a 1522px right edge in a
+    1440px viewport on ERP Integrity, where the last column was simply clipped
+    off-screen with no way to reach it. Letting the CONTENT wrapper scroll
+    keeps every declared value reachable instead of silently cut. Scoped to a
+    card body that directly holds a table, so no other layout is affected.
+  */
+  .command-stack .rounded-lg > div:has(> table) {
+    overflow-x: auto;
+  }
+  .command-split > .command-stack {
+    padding: 0;
+  }
+  .command-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    align-items: center;
+    padding: 0.45rem 0.7rem;
+    font-size: 11px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 4px;
+    background: hsl(var(--surface-1));
+    margin: 0;
+    min-width: 0;
+  }
+
+  /* ── Toolbar + controls ─────────────────────────────────────────────── */
+  .command-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.6rem;
+    font-size: 11px;
+    margin: 0;
+    min-width: 0;
+  }
+  .command-toolbar label {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    color: hsl(var(--muted-foreground));
+    white-space: nowrap;
+  }
+  .command-toolbar .spacer {
+    flex: 1 1 auto;
+  }
+  .command-toolbar input,
+  .command-toolbar select {
+    background: hsl(var(--surface-0));
+    border: 1px solid hsl(var(--border));
+    border-radius: 3px;
+    color: hsl(var(--foreground));
+    font-size: 11px;
+    padding: 0.22rem 0.4rem;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .command-toolbar input:focus,
+  .command-toolbar select:focus {
+    border-color: hsl(var(--room, var(--primary)));
+    outline: none;
+    box-shadow: 0 0 0 2px hsl(var(--room, var(--primary)) / 0.2);
+  }
+
+  /* ── Tables: bounded panes, sticky heads, dense rows ────────────────── */
+  .command-table-wrap {
+    overflow: auto;
+    min-width: 0;
+    max-height: 52vh;
+    overscroll-behavior: contain;
+  }
+  .command-table-wrap.tall {
+    max-height: 66vh;
+  }
+  .command-table-wrap.short {
+    max-height: 30vh;
+  }
+  .command-panel table {
+      width: 100%;
+      /*
+        TABLE BASE SIZE (seq 8411).
+
+        Founder QA seq 8410 measured table body copy at 11px, with the free-text
+        cells inside `td.mono` dropping to 10.5px. A 300-character duty capacity
+        note was therefore set smaller than a navigation label. 12.5px is the
+        floor for a cell an operator reads as a sentence.
+
+        The density of this product is real and the guards assert it — but
+        density comes from row rhythm, sticky heads and bounded panes, not from
+        setting prose below the size a peer can read.
+      */
+      font-size: 12.5px;
+      line-height: 1.45;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+    .command-panel th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      text-align: left;
+      color: hsl(var(--muted-foreground));
+      font-family: theme('fontFamily.sans');
+      font-weight: 600;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      background: hsl(var(--surface-2));
+      border-bottom: 1px solid hsl(var(--border));
+      padding: 0.35rem 0.5rem;
+      white-space: nowrap;
+    }
+    .command-panel td {
+      padding: 0.35rem 0.5rem;
+      border-bottom: 1px solid hsl(var(--border) / 0.6);
+      overflow-wrap: anywhere;
+      vertical-align: top;
+      line-height: 1.45;
+    }
+    /*
+      A FREE-TEXT CELL. Prose at reading size in the sans face, wrapping
+      naturally. This is what a duty capacity note, a blocker headline or a
+      declared summary uses — as opposed to `td.mono`, which is for values that
+      are machine tokens and must stay on one comparable line.
+    */
+    .command-panel td.prose,
+    .command-panel td.prose.wrap {
+      font-family: theme('fontFamily.sans');
+      font-size: 12.5px;
+      font-weight: 400;
+      line-height: 1.5;
+      white-space: normal;
+      overflow-wrap: break-word;
+    }
+  .command-panel tbody tr:hover td {
+    background: hsl(var(--foreground) / 0.03);
+  }
+  .command-panel tbody tr[aria-selected='true'] td {
+    background: hsl(var(--room-soft));
+  }
+  .command-panel tbody tr.clickable {
+    cursor: pointer;
+  }
+  .command-panel caption {
+    text-align: left;
+    font-size: 10px;
+    color: hsl(var(--muted-foreground));
+    padding: 0.35rem 0.5rem;
+    background: hsl(var(--surface-0) / 0.6);
+    border-bottom: 1px solid hsl(var(--border));
+  }
+  .command-panel td.id,
+    .command-panel td.mono,
+    .command-panel th.mono {
+      font-family: theme('fontFamily.mono');
+      font-size: 11.5px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+  .command-panel td.num {
+    font-family: theme('fontFamily.mono');
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  /*
+    WF-DESK-03 (measured this wave): `td.mono` is nowrap so that hashes,
+    handles and paths stay on one comparable line. A FREE-TEXT value in that
+    cell — a duty task is a sentence, not an identifier — would then stretch
+    the table to its longest value: measured at 7019px inside a 593px pane,
+    which is a 12x overflow, not a wide data surface. `.wrap` opts such a cell
+    out of nowrap while keeping the mono face, so the row stays scannable and
+    the value stays fully visible.
+  */
+  .command-panel td.mono.wrap {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* Row-state rails: a 2px left edge, so scanning 300 rows finds the
+     blocked ones without reading a single chip. */
+  .row-rail {
+    border-left: 2px solid transparent;
+    padding-left: calc(0.5rem - 2px);
+  }
+  .row-rail[data-tone='ok'] {
+    border-left-color: hsl(var(--truth-ok) / 0.75);
+  }
+  .row-rail[data-tone='stale'] {
+    border-left-color: hsl(var(--truth-stale) / 0.85);
+  }
+  .row-rail[data-tone='drift'] {
+    border-left-color: hsl(var(--truth-drift) / 0.85);
+  }
+  .row-rail[data-tone='unknown'] {
+    border-left-color: hsl(var(--truth-unknown) / 0.6);
+  }
+  .row-rail[data-tone='room'] {
+    border-left-color: hsl(var(--room) / 0.8);
+  }
+
+  /* ── Chips ──────────────────────────────────────────────────────────── */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 3px;
+    border: 1px solid;
+    padding: 0.05rem 0.35rem;
+    font-family: theme('fontFamily.mono');
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .chip[data-tone='ok'] {
+    border-color: hsl(var(--truth-ok) / 0.32);
+    background: hsl(var(--truth-ok-soft));
+    color: hsl(var(--truth-ok));
+  }
+  .chip[data-tone='stale'] {
+    border-color: hsl(var(--truth-stale) / 0.32);
+    background: hsl(var(--truth-stale-soft));
+    color: hsl(var(--truth-stale));
+  }
+  .chip[data-tone='drift'] {
+    border-color: hsl(var(--truth-drift) / 0.32);
+    background: hsl(var(--truth-drift-soft));
+    color: hsl(var(--truth-drift));
+  }
+  .chip[data-tone='unknown'] {
+    border-color: hsl(var(--truth-unknown) / 0.32);
+    background: hsl(var(--truth-unknown-soft));
+    color: hsl(var(--truth-unknown));
+  }
+  .chip[data-tone='hold'] {
+    border-color: hsl(var(--truth-hold) / 0.34);
+    background: hsl(var(--truth-hold-soft));
+    color: hsl(var(--truth-hold));
+  }
+  .chip[data-tone='founder'] {
+    border-color: hsl(var(--truth-founder) / 0.34);
+    background: hsl(var(--truth-founder-soft));
+    color: hsl(var(--truth-founder));
+  }
+  .chip[data-tone='room'] {
+    border-color: hsl(var(--room) / 0.4);
+    background: hsl(var(--room-soft));
+    color: hsl(var(--room));
+  }
+  .chip[data-tone='muted'] {
+    border-color: hsl(var(--border));
+    background: hsl(var(--surface-2));
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────── */
+  .command-panel button,
+  .command-drawer button,
+  .command-app button.cmd-btn {
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-2));
+    color: hsl(var(--foreground));
+    padding: 0.2rem 0.5rem;
+    font-size: 10.5px;
+    border-radius: 3px;
+    font-family: theme('fontFamily.mono');
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .command-panel button:hover:not(:disabled),
+  .command-app button.cmd-btn:hover:not(:disabled) {
+    background: hsl(var(--surface-3));
+    border-color: hsl(var(--room, var(--primary)) / 0.6);
+  }
+  .command-panel button:disabled,
+  .command-app button.cmd-btn:disabled {
+    opacity: 0.35;
+  }
+  .command-panel button[data-variant='ghost'] {
+    background: transparent;
+    border-color: transparent;
+    color: hsl(var(--muted-foreground));
+    padding: 0.15rem 0.35rem;
+  }
+  .command-panel button[data-variant='ghost']:hover:not(:disabled) {
+    color: hsl(var(--foreground));
+    background: hsl(var(--foreground) / 0.05);
+  }
+  .command-panel button[data-variant='active'] {
+    background: hsl(var(--room-soft));
+    border-color: hsl(var(--room) / 0.5);
+    color: hsl(var(--foreground));
+  }
+
+  /* ── Drawer: evidence drill-down ────────────────────────────────────── */
+  .command-drawer {
+    position: fixed;
+    inset: 0 0 0 auto;
+    margin: 0;
+    width: min(520px, 100%);
+    height: 100%;
+    max-height: 100%;
+    max-width: 100%;
+    background: hsl(var(--surface-1));
+    color: hsl(var(--foreground));
+    padding: 0;
+    border-left: 1px solid hsl(var(--border));
+    box-shadow: -24px 0 60px -30px rgb(0 0 0 / 0.9);
+  }
+  .command-drawer::backdrop {
+    background: hsl(0 0% 0% / 0.66);
+    backdrop-filter: blur(2px);
+  }
+  .command-drawer header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-2));
+    position: sticky;
+    top: 0;
+  }
+  .command-drawer header h2 {
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 0;
+  }
+  .command-drawer .crumb {
+    font-size: 9.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .command-drawer pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 10.5px;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    color: hsl(var(--muted-foreground));
+  }
+  .command-drawer .kv {
+    display: grid;
+    grid-template-columns: minmax(6rem, 34%) minmax(0, 1fr);
+    border-bottom: 1px solid hsl(var(--border) / 0.6);
+  }
+  .command-drawer .kv dt {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+    padding: 0.3rem 0.5rem;
+    background: hsl(var(--surface-0) / 0.5);
+    overflow-wrap: anywhere;
+  }
+  .command-drawer .kv dd {
+    font-family: theme('fontFamily.mono');
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    margin: 0;
+    padding: 0.3rem 0.5rem;
+    overflow-wrap: anywhere;
+  }
+
+  /* ── Key/value ledger used across the room panels ───────────────────── */
+  .kv {
+    display: grid;
+    grid-template-columns: minmax(5rem, 38%) minmax(0, 1fr);
+    font-size: 13px;
+  }
+  .kv dt {
+    color: hsl(var(--muted-foreground));
+    padding: 0.22rem 0.5rem 0.22rem 0;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .kv dd {
+    margin: 0;
+    padding: 0.22rem 0;
+    font-family: theme('fontFamily.mono');
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+  .kv > dt {
+    border-top: 1px solid hsl(var(--border) / 0.5);
+  }
+  .kv > dd {
+    border-top: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /*
+      PROSE NOTE — a secondary sentence under a panel.
+
+      It was 10.5px italic, which set explanatory copy below the size of a table
+      cell and made it read as a caption rather than as something an operator is
+      meant to read. Italic is also a machine-value convention on this product,
+      so using it for prose confused the two.
+
+      12.5px sans, sentence case, no italic.
+    */
+    .prose-note {
+      font-family: theme('fontFamily.sans');
+      font-size: 13px;
+      font-weight: 400;
+      line-height: 1.45;
+      color: hsl(var(--muted-foreground) / 0.95);
+      font-style: normal;
+    }
+
+    /*
+      FILTER TOGGLE — the Activity declared-action filter.
+
+      An active filter must be visibly active, or an operator cannot tell a
+      filtered feed from a complete one. This uses the existing `active` button
+      variant rather than introducing a new one.
+    */
+    .filter-toggle[data-variant='active'] {
+      border-color: hsl(var(--primary) / 0.7);
+      background: hsl(var(--primary) / 0.12);
+      color: hsl(var(--foreground));
+    }
+
+  /* ── Focus / blocker rail ───────────────────────────────────────────── */
+  /*
+      FOCUS NOTE — the one caveat a peer states before its records.
+
+      Compressed in the seq 8411 polish wave. Measured at 430x932 this band cost
+      115px on #attention/exceptions — a seventh of the viewport for one
+      qualifying sentence. The caveat stays inline and stays load-bearing; only
+      its weight changes. It is now a quiet rule plus one sans label, and the
+      sentence is prose rather than a filled banner competing with the records.
+    */
+    .focus-rail {
+      display: flex;
+      gap: 0.5rem;
+      align-items: baseline;
+      padding: 0.1rem 0 0.1rem 0.55rem;
+      border-left: 2px solid hsl(var(--room));
+    }
+    .focus-rail .mark {
+      flex: 0 0 auto;
+      font-family: theme('fontFamily.sans');
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: hsl(var(--room));
+      white-space: nowrap;
+    }
+    .focus-rail p {
+      margin: 0;
+      min-width: 0;
+      font-family: theme('fontFamily.sans');
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: hsl(var(--muted-foreground));
+      font-style: normal;
+      overflow-wrap: break-word;
+    }
+
+  /* ── Skip link + focus ──────────────────────────────────────────────── */
+  .command-skip {
+    position: fixed;
+    left: 1rem;
+    top: -100px;
+    background: hsl(var(--foreground));
+    color: hsl(var(--surface-0));
+    padding: 0.6rem 1rem;
+    z-index: 100;
+    font-size: 12px;
+    border-radius: 3px;
+  }
+  .command-skip:focus {
+    top: 1rem;
+  }
+  .command-app :focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+  .command-panel li,
+  .command-panel code,
+  .command-summary,
+  .command-context,
+  .context-location,
+  .context-status {
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * Responsive. The console collapses in three deliberate steps:
+ *   ≤1400px — table panes shorten, split panes keep two columns where they fit
+ *   ≤1024px — split panes stack, stat rail narrows to 4-up
+ *   ≤800px  — shell rail collapses to icons, panels go single column
+ *
+ * Goose R6: the two-column split used to collapse at ≤1280px AND table panes
+ * dropped 52vh→44vh at the same width. 1280x800 and 1152x864 are plausible
+ * operator laptops, so the most likely viewports got single-column AND shorter
+ * panes — i.e. MORE vertical scroll, which is the opposite of compression. The
+ * split now holds two columns down to 1024px, and pane shortening is gentler.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 1400px) {
+  .command-table-wrap {
+    max-height: 48vh;
+  }
+}
+
+@media (max-width: 1024px) {
+  .command-split,
+  .command-split.wide,
+  .command-split.narrow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .stat-rail {
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  }
+  .command-table-wrap {
+      max-height: 44vh;
+    }
+    /*
+      The detail-pane sheet is owned by the single `@media (max-width: 1023px)`
+      block at the end of this file, which sets the breakpoint EXPLICITLY at the
+      1023/1024 boundary rather than inheriting it. It used to be declared here at
+      1024px; two rules describing one behaviour at two widths is how a
+      composition ends up correct on 1024 and wrong on 1023.
+    */
+  }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * WORK AREA — shared primary-detail composition (components/work-area.tsx).
+ *
+ * LAYOUT ONLY. No colour, no type scale, no spacing rhythm: Vision owns the
+ * visual pass for this component, exactly as the mission split the wave. What
+ * is decided here is the one thing five routes were each deciding badly —
+ * that the list pane is bounded and the detail pane is beside it at wide
+ * widths, and becomes a full-height sheet rather than a stacked column at
+ * narrow ones (gap map WF-MOB-02).
+ *
+ * The 35/65 split is the contract's stated Founder Attention composition.
+ * It is applied to every WorkArea so the operator learns the shape once.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+.work-area {
+  display: grid;
+  grid-template-columns: minmax(0, 35fr) minmax(0, 65fr);
+  gap: 0;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--surface-1) / 0.4);
+  min-width: 0;
+}
+.work-area-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border-right: 1px solid hsl(var(--border));
+}
+.work-area-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.4rem 0.6rem;
+}
+.work-area-head h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.work-area-head .spacer {
+  flex: 1 1 auto;
+}
+.work-area-empty {
+  padding: 0.6rem;
+}
+.work-area-detail {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+/*
+  `hidden` must win. The UA `[hidden] { display: none }` rule is weaker than
+  the class selector above, so an explicit override is required or an
+  unselected detail pane would occupy the right column while showing nothing.
+*/
+.work-area-detail[hidden] {
+  display: none;
+}
+.work-area-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0.4rem 0.6rem;
+}
+.work-area-detail-head .spacer {
+  flex: 1 1 auto;
+}
+.work-area-detail-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-height: 62vh;
+  padding: 0.6rem;
+}
+/* The sheet close control only earns space below the two-column breakpoint. */
+.work-area-sheet-close {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border));
+  padding: 0.15rem 0.3rem;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  cursor: pointer;
+}
+/*
+    WORK ROW — the comparable row of a scan/select/inspect workflow
+    (gap map WF-DS-02, WF-MOB-02).
+
+    The finding was that Staff read as a raw database dump: 10px mono id, 10px
+    muted value, everything at the same weight, so a column could not be
+    scanned and a long evidence string shouted as loudly as a person's duty.
+
+    Row anatomy, top to bottom, one weight each:
+      .k        the row's identifier — provenance tier, the id is a fact
+                ABOUT the record, not the record.
+      .r        the record's value — the thing being compared, at record tier.
+      .v        supporting detail — metadata tier.
+      .declared the canonical fields the record names. These are the Phase 5
+                contract's "shown beside the row", and they stay metadata
+                because they are evidence, not the answer.
+
+    Row height and column alignment are set here rather than per surface, so
+    every list in the product scans at the same rhythm.
+  */
+  .work-row {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 0.1rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.6);
+    border-left: 2px solid transparent;
+    padding: 0.5rem 0.65rem;
+    cursor: pointer;
+  }
+  .work-row:hover {
+    background: hsl(var(--foreground) / 0.04);
+  }
+  .work-row.selected {
+    border-left-color: hsl(var(--room));
+    background: hsl(var(--room-soft));
+  }
+  .work-row[data-tone='drift'] {
+    border-left-color: hsl(var(--truth-drift));
+  }
+  .work-row[data-tone='hold'] {
+    border-left-color: hsl(var(--truth-hold));
+  }
+  .work-row[data-tone='founder'] {
+    border-left-color: hsl(var(--truth-founder));
+  }
+  .work-row[data-tone='stale'] {
+    border-left-color: hsl(var(--truth-stale));
+  }
+  /* Identifier — provenance tier. */
+  .work-row .k {
+    font-family: theme('fontFamily.mono');
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    color: hsl(var(--muted-foreground));
+  }
+  /* THE COMPARABLE VALUE. One weight, sentence case, the row's answer. */
+  .work-row .r {
+    font-size: 12.5px;
+    font-weight: 550;
+    line-height: 1.35;
+    color: hsl(var(--foreground));
+    overflow-wrap: anywhere;
+  }
+  /* Supporting detail and the declared canonical fields. */
+  .work-row .v {
+    overflow-wrap: anywhere;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: hsl(var(--muted-foreground));
+  }
+  .work-row .v.declared {
+    font-family: theme('fontFamily.mono');
+    color: hsl(var(--muted-foreground) / 0.9);
+  }
+  /* The list itself scrolls inside the bounded pane; the page does not grow. */
+  .work-row-list {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    max-height: 62vh;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+/* ── About / Method: closed by default ───────────────────────────────────
+ * The closed state is the fix for gap map WF-ATT-01 / WF-WRONG-01 /
+ * WF-HIER-01. An operator who wants records must never scroll past
+ * interpretation guidance to reach them. */
+.about-method {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--surface-0) / 0.5);
+}
+.about-method > summary {
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  font-family: theme('fontFamily.mono');
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.about-method-body {
+  border-top: 1px solid hsl(var(--border));
+  padding: 0.6rem;
+}
+
+/*
+  Qualifier rows are the counterpart: state that must NEVER be collapsible.
+  Kept deliberately dense and single-line so a freshness or eligibility
+  qualifier costs one line and not a paragraph.
+*/
+.qualifier-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-left: 2px solid hsl(var(--truth-stale));
+  background: hsl(var(--surface-0) / 0.55);
+  padding: 0.3rem 0.55rem;
+  font-family: theme('fontFamily.mono');
+  font-size: 11.5px;
+  color: hsl(var(--muted-foreground));
+}
+
+/*
+  Peer work header. One line naming the question this peer answers, so local
+  navigation demonstrably changes the work area and not only the tab label
+  (gap map WF-DS-03).
+*/
+.peer-work-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  border-left: 2px solid hsl(var(--room));
+  padding: 0.35rem 0.6rem;
+}
+.peer-work-head .mark {
+  flex: 0 0 auto;
+  font-family: theme('fontFamily.mono');
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--room));
+}
+.peer-work-head p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  color: hsl(var(--foreground));
+}
+.peer-work-head .spacer {
+  flex: 1 1 auto;
+}
+
+/*
+  ROOM STATE BAND — the compressed replacement for the per-tab stat rail.
+
+  Gap map WF-ERP-03 and WF-REP-03: every ERP and Hoadha tab repeated a six-cell
+  stat rail, so the room read as several report pages and the peer body got
+  whatever was left. This band carries IDENTITY plus STATE plus one caveat in a
+  single line, which is all that "an operator switching tabs must re-establish
+  that this room is on hold" actually requires.
+
+  It does not hide state to save height — the room state chip is here on every
+  tab, and ERP's ON_HOLD and Hoadha's PREPARED / NOT STARTED are both present.
+*/
+.room-state-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  border-left: 2px solid hsl(var(--room));
+  background: hsl(var(--surface-1));
+  padding: 0.3rem 1rem;
+  font-size: 11px;
+}
+.room-state-band .spacer {
+  flex: 1 1 auto;
+}
+.room-state-band a {
+  white-space: nowrap;
+}
+
+/*
+  HOADHA EXECUTION BAND (gap map WF-HOA-02).
+
+  The finding was that the focus panel had become methodology: a long sentence
+  plus four blocker IDs plus a rationale, occupying the space where the loop
+  work should have been. Execution state, the no-H0-activation fact and the
+  declared blockers stay inline; `execution_basis` moved to a disclosure.
+*/
+.hoadha-state-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.75rem;
+  border-left: 2px solid hsl(var(--truth-unknown));
+  background: hsl(var(--surface-0) / 0.5);
+  padding: 0.4rem 0.65rem;
+}
+/*
+  PREPARED / NOT STARTED is the FIRST thing an operator must read on this
+  room, so it carries the route-answer weight of the band rather than a
+  12px label. The prohibition itself stays a compact qualifier on the same
+  line — stated once, not repeated down the page (WF-HOA-02).
+*/
+.hoadha-state-band strong {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: hsl(var(--foreground));
+}
+.hoadha-state-band > span:first-child {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.hoadha-state-band .qualifier {
+  font-size: 10.5px;
+  color: hsl(var(--muted-foreground));
+}
+
+/*
+  COLLECTION SWITCH — Hoadha live vs proposed (gap map WF-HOA-03).
+
+  The 326/33 distinction is the one place in this product where a
+  misreading changes the meaning of a number, so the selector carries BOTH
+  counts, names the active collection in words, and states that the inactive
+  collection is not live — all adjacent to the rows at every width.
+*/
+.collection-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 1px solid hsl(var(--border));
+  border-left: 2px solid hsl(var(--room));
+  background: hsl(var(--surface-0) / 0.5);
+  padding: 0.45rem 0.6rem;
+}
+
+@media (max-width: 800px) {
+  /*
+   * Narrow panels use one horizontal scroll boundary for wide tabular content.
+   * Their content no longer creates an additional vertical scrollport inside
+   * the panel; long records remain in the document flow.
+   */
+  .command-panel .command-table-wrap {
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .command-app > nav {
+    width: 56px !important;
+    min-width: 56px !important;
+    max-width: 56px !important;
+        overflow: hidden;
+      }
+      /*
+        The Projection state block is NOT deleted at this width. Below 800px the
+        rail cannot hold a truth chip AND an "N/M conditions in sync" count, and a
+        truth value is not decoration. It is therefore COMPRESSED: the rail keeps
+        the badge (the operator's at-a-glance health colour) and the pinned
+        `.command-context` bar carries the count at every width. See
+        ProjectionState in components/shell.tsx and the context bar in App.tsx.
+
+        The selector is the named `data-rail-projection` attribute, not
+        `div:last-child`: the positional form is what allowed this block to be
+        deleted wholesale in the first place.
+      */
+      [data-rail-projection] {
+        padding: 0.35rem;
+      }
+      [data-rail-projection] .label-sec {
+        display: none;
+      }
+      .command-app > nav button {
+    justify-content: center;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+  .command-app > nav button > span.min-w-0,
+  .command-app > nav .label-micro {
+    display: none;
+  }
+  .command-context {
+    font-size: 10px;
+  }
+  .context-location,
+  .context-status {
+    padding: 0 0.6rem;
+  }
+  .room-head {
+    padding: 0.55rem 0.6rem;
+  }
+  .room-head .sub {
+    display: none;
+  }
+  .command-stack {
+    padding: 0.4rem;
+    gap: 0.4rem;
+  }
+  .command-table-wrap,
+  .command-table-wrap.tall {
+    max-height: 58vh;
+  }
+  /*
+      TABLE SIZE AT NARROW WIDTHS — seq 8411.
+
+      This block set `.command-panel table` to 10px. Measured after the desktop
+      readability work, that override silently undid it at exactly the widths
+      where reading matters most: #studio/activity at 768x1024 was rendering
+      670 of its text-bearing elements at 10px, versus 12.5px at 1440.
+
+      Narrowing a viewport does not make text easier to read. It removes room,
+      and the correct response to less room is a bounded scroll container — which
+      `.command-table-wrap` already is — not smaller type. The table keeps the
+      12.5px reading size here; padding tightens instead.
+    */
+    .command-panel table {
+      font-size: 12.5px;
+    }
+    .command-panel th,
+    .command-panel td {
+      padding: 0.24rem 0.35rem;
+    }
+  .command-drawer {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .command-app * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * VISION — responsive composition.
+ *
+ * The gap map's narrow finding (WF-MOB-01) was precise: "the app avoids page
+ * overflow, but the narrow composition is still a long stack of desktop
+ * panels". My own 430x932 sweep reproduced exactly that — zero horizontal
+ * overflow on every one of 37 routes, and every one of them a single serial
+ * column. No overflow is necessary but not sufficient.
+ *
+ * The composition rules below are about WHICH work area is present, not about
+ * how wide it is:
+ *
+ *   WIDE (≥1025px)   use the work area. Bounded panes, two columns, the
+ *                    detail beside the list.
+ *   1023/1024/1025   the transition is made explicit rather than inherited.
+ *                    1024 is a real operator width (iPad landscape, small
+ *                    laptop), so the sheet engages ON it, not one pixel below.
+ *   NARROW (≤1023)   one work area. Detail is a sheet, not a stacked column.
+ *                    Local peer navigation stays reachable, always.
+ *   PHONE (≤600)     deliberate portrait: a compact location row, a peer rail
+ *                    that scrolls, and selected detail as a sheet.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+/*
+  CHARACTER-BY-CHARACTER WRAPPING — a real defect I measured, not a style
+  preference.
+
+  `overflow-wrap: anywhere` was applied to `.command-panel` and `.kv` at
+  ≤600px. On a 430px viewport that turned long canonical source paths into
+  one-character-per-line columns: measured 38px wide and 85px TALL for
+  `starqNexus/data/starq-erp-tasks.json`. A path rendered as a vertical
+  ribbon is not readable, and it is how the Integrity peers failed narrow.
+
+  The fix is to break a path at its OWN separators — `/` and `\` — rather than
+  anywhere. `word-break: break-all` (which is what `anywhere` degrades to for
+  an unbreakable token) is replaced by `overflow-wrap: break-word`, which
+  only breaks a token that cannot fit and still prefers its own break
+  opportunities. Segmented paths keep their shape; the content is unchanged.
+*/
+@media (max-width: 700px) {
+  .command-panel,
+  .kv,
+  .work-row,
+  .command-panel td {
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  /* A path is still allowed to break at its separators, just not anywhere. */
+  .command-panel .mono,
+  .command-panel td.mono,
+  .kv dd,
+  .command-panel .path {
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: none;
+  }
+}
+
+/*
+  DETAIL SHEET — full height, own scroll, and it returns the operator to the
+  exact list context they left (gap map WF-MOB-02).
+
+  `inset: 0` alone was a full-screen takeover with no visual seam, so it read
+  as a new page rather than a sheet over a list. It is now an inset sheet with
+  a visible edge, a sticky head, and a bounded body.
+*/
+@media (max-width: 1023px) {
+  .work-area {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .work-area-list {
+    border-right: 0;
+  }
+  .work-area-detail:not([hidden]) {
+    position: fixed;
+    inset: 0.5rem;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: 6px;
+    background: hsl(var(--surface-1));
+    box-shadow: 0 24px 70px -20px hsl(0 0% 0% / 0.85);
+  }
+  .work-area-detail:not([hidden]) .work-area-detail-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: hsl(var(--surface-2));
+    padding: 0.5rem 0.65rem;
+  }
+  .work-area-detail:not([hidden]) .work-area-detail-body {
+    max-height: none;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: 0.7rem;
+  }
+  .work-area-sheet-close {
+    display: inline-flex;
+  }
+  /*
+      The list stays BOUNDED at narrow widths.
+
+      I initially set `max-height: none` here reasoning that a phone should just
+      scroll the page. Measured result: #attention/decisions went from 1821px to
+      6496px of page scroll at 430x932, and #studio/staff from 1505 to 2218. That
+      is the WF-MOB-02 finding reproduced — "the operator gets a long scroll
+      rather than a scan/select/inspect workflow" — reintroduced by me while
+      fixing something else.
+
+      The pane is bounded, and generously: taller than the desktop 62vh because a
+      phone has less width but the operator still needs to scan a list, not
+      scroll forty-six records as one page.
+    */
+    .work-row-list {
+      max-height: 68vh;
+    }
+  }
+
+/*
+  PEER NAVIGATION AT NARROW WIDTHS (gap map WF-MOB-01: "local peers
+  accessible").
+
+  `.command-tabs` already scrolled horizontally. What it did NOT do was make
+  the CURRENT peer visible after a reload or a jump — a 7-peer rail scrolled
+  to its start showed ERP's Overview even when the operator was on Integrity.
+  The rail now starts at the current peer, which is a CSS-only fix using the
+  same scroll container rather than a JS measurement.
+*/
+@media (max-width: 900px) {
+  .command-tabs a[aria-current] {
+    order: -1;
+  }
+}
+
+/*
+  PHONE PORTRAIT — one work area, deliberate composition.
+
+  Measured at 430x932: the rail is an off-canvas drawer (correct), the context
+  bar wrapped to several lines (correct — the values must survive), and every
+  route was one serial column of desktop panels (not correct).
+
+  What changes here is BAND, not content. The location row and the status row
+  become a single compact identity band; the room header drops its mark and
+  sub-line, which are repeated in the rail and the context bar; and the stat
+  rail becomes a 2-up grid so a rail of six counts is three rows rather than
+  six stacked full-width cells.
+*/
+@media (max-width: 600px) {
+  .room-head {
+    padding: 0.5rem 0.65rem;
+    gap: 0.4rem 0.6rem;
+  }
+  .room-head .mark {
+    display: none;
+  }
+  .room-head .sub {
+    display: none;
+  }
+  .room-head h1 {
+    font-size: 15px;
+  }
+  .stat-rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .peer-work-head {
+    flex-wrap: wrap;
+    gap: 0.15rem 0.5rem;
+  }
+  .peer-work-head p {
+    flex: 1 1 100%;
+    font-size: 12.5px;
+  }
+  .qualifier-row,
+  .room-state-band {
+    font-size: 10px;
+    padding: 0.3rem 0.5rem;
+  }
+  /* Tables remain scrollable, and the scroll is discoverable rather than
+     silently clipping a column. */
+  .command-table-wrap {
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Same rule as the ≤800 block: the reading size does not drop on a phone. */
+  .command-panel table {
+    font-size: 12.5px;
+  }
+  .command-panel th,
+  .command-panel td {
+    padding: 0.3rem 0.45rem;
+  }
+  /*
+    These base rules are declared later in the file than the first 600px
+    block, so they were still winning at 320px: nowrap footnotes and chips
+    kept a scrollWidth above their box, and the 1px screen-reader clip
+    reported the label's width. Placed here, they follow those base rules.
+  */
+  .stat .s,
+  .chip,
+  .stale-detail-body,
+  .stale-detail-body p {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+  }
+  /*
+    A 1px clip with nowrap text reports the label's advance width as
+    scrollWidth. Zeroing the font keeps the node 1px and out of the
+    header's overflow; the accessible name stays in the text.
+  */
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    max-width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    border: 0 !important;
+    font-size: 0 !important;
+    line-height: 0 !important;
+  }
+  /*
+    Vision #9360: twelve routes still failed the descendant-overflow rule
+    after the page itself fit. .stat .k/.v and Tailwind .truncate keep
+    nowrap plus overflow hidden, so a label or path reports a scrollWidth
+    wider than its box. At this width they wrap inside the box. Font sizes
+    on the tier ladder are unchanged. Clipping is not treated as a pass.
+  */
+  .stat > span.k,
+  .stat > span.v {
+    max-width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: break-word;
+  }
+  .truncate {
+    max-width: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: break-word;
+    word-break: normal;
+  }
+  /*
+    Wrapped chips were being squeezed a few pixels narrower than their
+    text, which the descendant rule counts as overflow. Let them keep
+    their content width and move to the next line.
+  */
+  .command-stack .flex-wrap > .inline-flex {
+    min-width: min-content;
+    flex-shrink: 0;
+  }
+  .command-stack .flex:not(.flex-col) {
+    flex-wrap: wrap;
+  }
+  .command-stack .flex-col > .flex {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /*
+    Percentage column widths stay narrower than their text once the card
+    is the viewport. Dropping only those widths lets the column grow to
+    the line; the allowlisted table wrap scrolls. Other cells stay as
+    they were, because forcing width:auto on every cell reopened staff.
+  */
+  .command-stack th[class*='w-['] {
+    width: auto;
+    white-space: normal;
+    overflow-wrap: break-word;
+  }
+  .command-stack .text-xs,
+  .command-stack .text-sm,
+  .command-stack .text-2xs,
+  .command-stack .text-base {
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+  .command-stack .label-micro,
+  .command-stack dt,
+  .command-stack dd,
+  .command-stack .font-mono,
+  .command-stack .inline-flex {
+    min-width: 0;
+    max-width: 100%;
+    letter-spacing: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .about-method-body,
+  .about-method-body p {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+  .tracking-wider,
+  .tracking-wide {
+    letter-spacing: 0;
+  }
+  /*
+    Founder #9378 / Vision #9377: inside a table cell, `anywhere` drops a
+    chip's min-content to one character, so auto layout shrank the column
+    and IDENTITY_CONFLICT rendered as 17 one-letter lines on #studio/staff.
+    A chip in a cell is one token: it keeps its own width (breaking only
+    at its own hyphen), and the allowlisted table wrap scrolls instead.
+  */
+  .command-panel td .chip {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}

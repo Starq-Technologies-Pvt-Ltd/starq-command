@@ -1,0 +1,722 @@
+/**
+ * STARQ // COMMAND lifecycle OWNER — the only component that starts, stops or
+ * recovers the control plane, and the only place that decides whether a
+ * recorded process may be signalled.
+ *
+ * Ownership of a control-plane child is proven by ALL of:
+ *   - exact executable path == the configured D: node runtime,
+ *   - exact OS creation time == the creation time captured right after spawn,
+ *   - the per-launch instance proof over the child's control pipe (HMAC of the
+ *     launch token, which never leaves the owner/child pair).
+ * Command-line text is never ownership evidence.
+ *
+ * Graceful stop is the only stop. Forced termination exists solely in
+ * recover({force:true}), re-proves executable + creation time immediately
+ * before each forced signal, and never touches a pid it cannot prove.
+ *
+ * Every OS seam is injectable (deps) so the whole decision table runs offline.
+ */
+import { spawn, execFile } from 'node:child_process';
+import { openSync, closeSync, appendFileSync, writeSync, mkdirSync, readFileSync } from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE } from './config.mjs';
+import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from './state.mjs';
+import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
+import { proveInstance, requestShutdown } from './control.mjs';
+import { checkHealth } from './health.mjs';
+import { buildHealthPreflight } from './preflight.mjs';
+import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
+import { readGates, readObservationGates, readStandaloneHerdrGate } from './gates.mjs';
+import { readHerdrStatus } from '../../../herdr-floor/src/herdr-status.mjs';
+import { nativeContainment, resolvePid } from '../../../herdr-floor/src/launcher.mjs';
+import { containmentOptions } from '../../../herdr-floor/src/containment-config.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const CHILD_HOST = path.resolve(HERE, '..', 'lifecycle-child.mjs');
+
+export const RESULT = Object.freeze({
+  READY: 'READY', STOPPED: 'STOPPED', REFUSED: 'REFUSED', START_FAILED: 'START_FAILED',
+  ROLLBACK_INCOMPLETE: 'ROLLBACK_INCOMPLETE', STOP_INCOMPLETE: 'STOP_INCOMPLETE',
+});
+export const EXIT = Object.freeze({
+  READY: 0, STOPPED: 0, REFUSED: 1, START_FAILED: 2, STOP_INCOMPLETE: 2, ROLLBACK_INCOMPLETE: 3,
+});
+
+const sleepReal = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function brokerRequestReal(host, port, method, pathname, token, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const headers = { 'X-Starq-Lifecycle-Token': token };
+    if (method === 'POST') { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = '2'; }
+    const req = http.request({ host, port, method, path: pathname, headers, timeout: timeoutMs }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { body += c; });
+      res.on('end', () => {
+        let json = null;
+        try { json = JSON.parse(body); } catch {}
+        resolve({ status: res.statusCode, body: json });
+      });
+    });
+    req.on('timeout', () => req.destroy(new Error('broker request timeout')));
+    req.on('error', reject);
+    if (method === 'POST') req.write('{}');
+    req.end();
+  });
+}
+
+function forceKillReal(pid) {
+  return new Promise((resolve) => {
+    execFile('taskkill.exe', ['/PID', String(pid), '/T', '/F'], { windowsHide: true, shell: false, timeout: 15000 },
+      (err, stdout, stderr) => resolve({ ok: !err, detail: String(stdout || stderr || err?.message || '').trim() }));
+  });
+}
+
+export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {} }) {
+  const jobs = () => nativeContainment(containmentOptions(cfgOf().workspace_root, runtimeDir));
+  const inspectionOptions = inspectionTools ? { powershellExe: inspectionTools.powershell } : {};
+  const listenerOptions = inspectionTools ? { netstatExe: inspectionTools.netstat } : {};
+  const d = {
+    inspect: deps.inspect ?? ((pids) => inspectProcesses(pids, inspectionOptions)),
+    inspectInfrastructure: deps.inspectInfrastructure ?? ((pins) => inspectDeclaredInfrastructure(pins, inspectionOptions)),
+    listListeners: deps.listListeners ?? (() => listListeners(listenerOptions)),
+    spawnChild: deps.spawnChild ?? (async (exe, args, opts, reserve) => {
+      const child = jobs().launch({ argv: [exe, ...args], ...opts }, reserve);
+      if (!await resolvePid(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
+      return child;
+    }),
+    proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),
+    requestShutdown: deps.requestShutdown ?? ((child) => requestShutdown(child)),
+    checkHealth: deps.checkHealth ?? ((host, comp) => checkHealth(host, comp)),
+    brokerRequest: deps.brokerRequest ?? brokerRequestReal,
+    readFile: deps.readFile ?? ((f) => readFileSync(f, 'utf8')),
+    forceKill: deps.forceKill ?? forceKillReal,
+    sleep: deps.sleep ?? sleepReal,
+    pollMs: deps.pollMs ?? 250,
+    selfPid: deps.selfPid ?? process.pid,
+    treeClosed: deps.treeClosed ?? (async (child) => child.containment ? (await jobs().status(child.containment)).closed === true : false),
+    treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
+    prerequisites: deps.prerequisites ?? ((cfg) => cfg.profile?.name === OBSERVATION_PROFILE
+      ? readObservationGates(cfg.workspace_root, cfg)
+      : readGates(cfg.workspace_root)),
+    standaloneHerdrGate: deps.standaloneHerdrGate ?? ((cfg) => readStandaloneHerdrGate(cfg.workspace_root)),
+    // Read-only `herdr status` through the pinned binary; reached only after G-PROFILE resolves.
+    probeStandaloneHerdr: deps.probeStandaloneHerdr ?? ((entry) => readHerdrStatus({ bin: entry.executable })),
+  };
+  const statePath = path.join(runtimeDir, 'state.json');
+  const lockPath = lockFile;
+  const logsDir = path.join(runtimeDir, 'logs');
+  const journalPath = path.join(runtimeDir, 'lifecycle-journal.jsonl');
+
+  const journal = (event, data = {}) => {
+    try {
+      mkdirSync(runtimeDir, { recursive: true });
+      appendFileSync(journalPath, `${JSON.stringify({ at: new Date().toISOString(), event, ...data })}\n`, 'utf8');
+    } catch {}
+  };
+  const refuse = (reason, extra = {}) => { journal('refused', { reason, ...extra }); return { result: RESULT.REFUSED, reason, ...extra }; };
+  const save = (doc) => writeState(statePath, doc);
+  const cfgOf = () => loadConfig(configFile, configOptions);
+  const comp = (cfg, name) => cfg.components.find((c) => c.name === name);
+
+  async function withLock(op, fn) {
+    let lock;
+    try {
+      lock = await acquireLock(lockPath, op, { inspect: d.inspect, selfPid: d.selfPid });
+    } catch (err) {
+      if (err instanceof LockedError || err instanceof InspectionError) return refuse(err.message, { code: 'LOCKED' });
+      throw err;
+    }
+    try { return await fn(); } finally { releaseLock(lock); }
+  }
+
+  // ── Ownership ───────────────────────────────────────────────────────────
+  /** @returns {Promise<Map<string,{verdict, detail}>>} verdict: OWNED|UNPROVEN|GONE|FOREIGN|UNKNOWN */
+  async function classify(cfg, children, { prove = true } = {}) {
+    const out = new Map();
+    const live = children.filter((c) => c.status !== 'EXITED');
+    let infos;
+    try {
+      infos = await d.inspect(live.map((c) => c.pid));
+    } catch (err) {
+      for (const c of live) out.set(c.name, { verdict: 'UNKNOWN', detail: `inspection failed: ${err.message}` });
+      return out;
+    }
+    for (const c of live) {
+      const v = osVerdict(c, infos.get(c.pid), cfg.node);
+      if (v.verdict !== 'MATCH') { out.set(c.name, v); continue; }
+      if (!prove) { out.set(c.name, { verdict: 'MATCH', detail: v.detail }); continue; }
+      const proof = await d.proveInstance(c);
+      out.set(c.name, proof.ok ? { verdict: 'OWNED', detail: `${v.detail}; ${proof.detail}` } : { verdict: 'UNPROVEN', detail: proof.detail });
+    }
+    return out;
+  }
+
+  async function waitGone(cfg, child) {
+    if (child.containment && !deps.treeClosed) {
+      const deadline = Date.now() + cfg.timeouts_ms.graceful_exit;
+      for (;;) {
+        const proof = await jobs().status(child.containment);
+        if (proof.owned && proof.closed && proof.active === 0) return 'GONE';
+        if (!proof.owned || Date.now() >= deadline) return proof.owned ? 'STILL_RUNNING' : 'UNKNOWN';
+        await d.sleep(d.pollMs);
+      }
+    }
+    const deadline = Date.now() + cfg.timeouts_ms.graceful_exit;
+    let last = 'UNKNOWN';
+    for (;;) {
+      try {
+        const v = osVerdict(child, (await d.inspect([child.pid])).get(child.pid), cfg.node).verdict;
+        last = (v === 'GONE' || v === 'FOREIGN') ? 'GONE' : v === 'MATCH' ? 'STILL_RUNNING' : 'UNKNOWN';
+      } catch { last = 'UNKNOWN'; }
+      if (last === 'GONE') return await d.treeClosed(child) ? 'GONE' : 'UNKNOWN';
+      if (Date.now() >= deadline) return last;
+      await d.sleep(d.pollMs);
+    }
+  }
+
+  // ── Broker lifecycle channel ────────────────────────────────────────────
+  function brokerToken(cfg) {
+    try { return d.readFile(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token)).trim() || null; } catch { return null; }
+  }
+  async function broker(cfg, method, pathname, timeoutMs = cfg.timeouts_ms.broker_request) {
+    const token = brokerToken(cfg);
+    if (!token) return { status: 0, body: null, error: 'broker lifecycle token unavailable' };
+    try {
+      return await d.brokerRequest(cfg.host, comp(cfg, 'herdrBroker').port, method, pathname, token, timeoutMs);
+    } catch (err) {
+      return { status: 0, body: null, error: err.message };
+    }
+  }
+
+  /** Graceful stop of one owned child. Never forces. */
+  async function stopChild(cfg, doc, child) {
+    const [v] = [(await classify(cfg, [child])).get(child.name)];
+    if (v.verdict === 'GONE' || v.verdict === 'FOREIGN') {
+      if (!await d.treeClosed(child)) return { outcome: 'UNKNOWN', detail: 'root absent; descendant closeout unproven' };
+      Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: v.detail });
+      appendEvent(doc, 'child.already_gone', { name: child.name, detail: v.detail }); save(doc);
+      return { outcome: 'GONE', detail: v.detail };
+    }
+    if (v.verdict !== 'OWNED') return { outcome: v.verdict, detail: v.detail };
+    child.status = 'STOPPING'; appendEvent(doc, 'child.stopping', { name: child.name }); save(doc);
+    if (child.name === 'herdrBroker') {
+      const token = brokerToken(cfg);
+      if (token) {
+        await broker(cfg, 'POST', '/api/lifecycle/drain');
+        const r = await broker(cfg, 'POST', '/api/lifecycle/shutdown');
+        if (r.status !== 202) return { outcome: 'SHUTDOWN_REFUSED', detail: `broker refused shutdown: ${r.status} ${r.body?.code ?? r.error ?? ''}` };
+      } else {
+        return { outcome: 'SHUTDOWN_REFUSED', detail: 'broker lifecycle channel required for agent closeout' };
+      }
+    } else {
+      const ack = await d.requestShutdown(child);
+      if (!ack.ok) return { outcome: 'SHUTDOWN_REFUSED', detail: ack.detail };
+    }
+    const outcome = await waitGone(cfg, child);
+    if (outcome === 'GONE') {
+      Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString() });
+      appendEvent(doc, 'child.exited', { name: child.name }); save(doc);
+    }
+    return { outcome, detail: outcome === 'GONE' ? 'exited gracefully' : 'did not exit within grace' };
+  }
+
+  // ── START ───────────────────────────────────────────────────────────────
+  async function start() {
+    return withLock('start', async () => {
+      let cfg;
+      try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
+      if (cfg.profile?.name === OBSERVATION_PROFILE) {
+        const hazards = findObservationEnvHazards(env);
+        if (hazards.length) return refuse(`observer environment is contaminated: ${hazards.join(', ')}`, { code: 'OBSERVATION_ENV_UNSAFE', hazards });
+      }
+      const gates = await d.prerequisites(cfg);
+      if (!Array.isArray(gates) || !gates.length || gates.some((g) => g.resolved !== true)) return refuse('verified lifecycle prerequisites are unresolved', { code: 'PREREQUISITES', gates });
+      const overrides = findEnvOverrides(env, cfg);
+      if (overrides.length) return refuse(`runtime overrides are rejected; lifecycle.config.json is the only port truth: ${overrides.join(', ')}`, { code: 'PORT_OVERRIDE_REJECTED' });
+
+      // Full-floor startup retains its broker manifest guard unchanged. The
+      // observation profile has no broker by schema, so there is no admission
+      // mechanism or worker manifest in its component graph.
+      if (cfg.profile?.name === OBSERVATION_PROFILE) {
+        const names = cfg.components.map((c) => c.name);
+        if (JSON.stringify(names) !== JSON.stringify(['data', 'building', 'ui'])) {
+          return refuse('observation profile component graph changed after validation', { code: 'OBSERVATION_COMPOSITION' });
+        }
+      } else {
+        try {
+          const man = JSON.parse(d.readFile(cfg.abs(comp(cfg, 'herdrBroker').manifest)));
+          const auto = (man.agents ?? []).filter((a) => a.startup_policy === 'AUTO').map((a) => a.id);
+          if (auto.length) return refuse(`manifest has AUTO rows that would launch at broker boot: ${auto.join(', ')}`, { code: 'AUTO_AGENT' });
+          if (path.resolve(man.workspace_root ?? '').toLowerCase() !== path.resolve(cfg.workspace_root).toLowerCase()) {
+            return refuse(`manifest workspace_root ${man.workspace_root} != ${cfg.workspace_root}`, { code: 'MANIFEST_ROOT' });
+          }
+        } catch (err) { return refuse(`herdr manifest unreadable: ${err.message}`, { code: 'MANIFEST_UNREADABLE' }); }
+      }
+
+      const prior = readState(statePath);
+      if (prior.kind === 'CORRUPT' || prior.kind === 'UNREADABLE') return refuse(`state file ${prior.kind}: ${prior.reason}`, { code: 'STATE_' + prior.kind });
+      if (prior.kind === 'OK') {
+        const s = prior.state;
+        const settled = !(s.pending_launches?.length) && ['STOPPED', 'START_FAILED'].includes(s.state) && s.children.every((c) => c.status === 'EXITED' && c.tree_closeout_verified === true);
+        if (!settled) return refuse(`previous runtime is ${s.state} with unsettled children; run stop or recover first`, { code: 'NOT_STOPPED' });
+      }
+
+      let listeners;
+      try { listeners = await d.listListeners(); } catch (err) { return refuse(`listener inspection failed: ${err.message}`, { code: 'INSPECTION_FAILED' }); }
+      const ports = new Set(cfg.components.map((c) => c.port));
+      const busy = listeners.filter((l) => ports.has(l.port));
+      if (busy.length) return refuse(`ports occupied: ${busy.map((b) => `${b.port}<-pid ${b.pid}`).join(', ')}`, { code: 'PORT_CONFLICT', busy });
+
+      if (prior.kind === 'OK' || prior.kind === 'LEGACY_STOPPED') archiveState(statePath, 'previous');
+      const doc = {
+        schema: STATE_SCHEMA, version: 2, state: 'STARTING', attempt_id: randomBytes(8).toString('hex'),
+        config_sha256: cfg.sha256, profile: cfg.profile?.name ?? null, workspace: cfg.workspace_root,
+        ports: Object.fromEntries(cfg.components.map((c) => [c.name, c.port])),
+        started_at: new Date().toISOString(), ready_at: null, stopped_at: null, children: [], readiness: [], events: [],
+      };
+      appendEvent(doc, 'start.begin', { order: topoOrder(cfg.components).map((c) => c.name) });
+      save(doc);
+      journal('start.begin', { attempt: doc.attempt_id });
+
+      let failure = null;
+      for (const c of topoOrder(cfg.components)) {
+        try {
+          await launchOne(cfg, doc, c);
+        } catch (err) {
+          failure = { component: c.name, error: err.message };
+          appendEvent(doc, 'start.component_failed', failure); save(doc);
+          break;
+        }
+      }
+      if (!failure) {
+        doc.state = 'READY'; doc.ready_at = new Date().toISOString(); appendEvent(doc, 'start.ready'); save(doc);
+        journal('start.ready', { attempt: doc.attempt_id });
+        return { result: RESULT.READY, state: doc };
+      }
+
+      // Unwind ONLY what this attempt created, newest first, gracefully, through proven ownership.
+      const unwound = [];
+      let clean = true;
+      for (const child of doc.children.filter((c) => c.attempt_id === doc.attempt_id && c.status !== 'EXITED').reverse()) {
+        const r = await stopChild(cfg, doc, child);
+        unwound.push({ name: child.name, ...r });
+        if (r.outcome !== 'GONE') clean = false;
+      }
+      doc.state = clean ? 'START_FAILED' : 'ROLLBACK_INCOMPLETE';
+      appendEvent(doc, 'start.rolled_back', { clean, unwound }); save(doc);
+      journal('start.failed', { failure, unwound, clean });
+      return { result: clean ? RESULT.START_FAILED : RESULT.ROLLBACK_INCOMPLETE, failure, unwound, state: doc };
+    });
+  }
+
+  async function launchOne(cfg, doc, c) {
+    if (!deps.spawnChild) {
+      const current = await d.prerequisites(cfg);
+      if (!Array.isArray(current) || !current.length || current.some((g) => g.resolved !== true)) throw new Error(`${c.name}: pre-launch policy/profile proof changed or remains UNKNOWN`);
+    }
+    mkdirSync(logsDir, { recursive: true });
+    const log = path.join(logsDir, `${c.name}.log`);
+    appendFileSync(log, `\n--- ${new Date().toISOString()} attempt ${doc.attempt_id} ---\n`, 'utf8');
+    const fd = openSync(log, 'a');
+    const instance = randomBytes(16).toString('hex');
+    const token = randomBytes(32).toString('base64url');
+    const observationOnly = cfg.profile?.name === OBSERVATION_PROFILE;
+    const childEnv = observationOnly
+      ? {
+        SystemRoot: cfg.system_root,
+        WINDIR: cfg.system_root,
+        PATH: path.join(cfg.system_root, 'System32'),
+        TEMP: path.join(cfg.system_root, 'Temp'),
+        TMP: path.join(cfg.system_root, 'Temp'),
+      }
+      : { ...env };
+    for (const k of Object.keys(childEnv)) if (k.startsWith('STARQ_LC_')) delete childEnv[k];
+    delete childEnv.COMMAND_OBSERVATION_ONLY;
+    for (const k of Object.keys(childEnv)) if (k.startsWith('PM_')) delete childEnv[k];
+    if (observationOnly) {
+      for (const k of Object.keys(childEnv)) if (k.startsWith('HERDR_') || k === 'COMMAND_UI_ORIGIN') delete childEnv[k];
+    }
+    Object.assign(childEnv, componentEnv(cfg, c.name), {
+      STARQ_WORKSPACE: cfg.workspace_root,
+      STARQ_LC_NAME: c.name, STARQ_LC_INSTANCE: instance, STARQ_LC_TOKEN: token, STARQ_LC_KIND: c.kind,
+      STARQ_LC_ENTRY: cfg.abs(c.entry), STARQ_LC_PORT: String(c.port), STARQ_LC_HOST: cfg.host,
+      STARQ_LC_ROOT: cfg.abs(c.cwd), ...(c.vite_config ? { STARQ_LC_VITE_CONFIG: cfg.abs(c.vite_config) } : {}),
+    });
+    let child;
+    try {
+      child = await d.spawnChild(cfg.node, [CHILD_HOST], {
+        cwd: cfg.abs(c.cwd), env: childEnv, shell: false, windowsHide: true, detached: true, stdio: ['ignore', fd, fd],
+      }, (containment) => {
+        doc.pending_launches ??= [];
+        doc.pending_launches.push({ name: c.name, instance_id: instance, containment });
+        save(doc); // before the trusted bootstrap can create a workload
+      });
+    } finally { closeSync(fd); }
+    if (!Number.isInteger(child?.pid) || child.pid <= 0) throw new Error(`${c.name}: spawn produced no pid`);
+    child.unref?.();
+    const rec = {
+      name: c.name, attempt_id: doc.attempt_id, instance_id: instance, token, pid: child.pid,
+      exe: null, created_at: null, launched_at: new Date().toISOString(), status: 'LAUNCHED', log,
+      containment: child.containment ?? null,
+    };
+    doc.children.push(rec);
+    doc.pending_launches = (doc.pending_launches ?? []).filter((p) => p.instance_id !== instance);
+    appendEvent(doc, 'child.launched', { name: c.name, pid: child.pid }); save(doc); // persisted before anything else
+
+    const info = (await d.inspect([rec.pid])).get(rec.pid); // InspectionError propagates as a launch failure
+    if (!info?.found) throw new Error(`${c.name}: pid ${rec.pid} exited immediately (see ${log})`);
+    if (!info.exe || !info.created) throw new Error(`${c.name}: pid ${rec.pid} is not inspectable`);
+    if (!sameExe(info.exe, cfg.node)) throw new Error(`${c.name}: pid ${rec.pid} runs ${info.exe}, not ${cfg.node}`);
+    Object.assign(rec, { exe: info.exe, created_at: info.created, status: 'IDENTIFIED' });
+    appendEvent(doc, 'child.identified', { name: c.name, pid: rec.pid, created_at: rec.created_at }); save(doc);
+
+    const until = (ms) => Date.now() + ms;
+    let deadline = until(cfg.timeouts_ms.identity);
+    let proof;
+    for (;;) {
+      proof = await d.proveInstance(rec);
+      if (proof.ok || Date.now() >= deadline) break;
+      await d.sleep(d.pollMs);
+    }
+    if (!proof.ok) throw new Error(`${c.name}: instance not proven: ${proof.detail}`);
+
+    deadline = until(cfg.timeouts_ms.health);
+    let health;
+    for (;;) {
+      health = await d.checkHealth(cfg.host, c);
+      if (health.ok || Date.now() >= deadline) break;
+      const still = osVerdict(rec, (await d.inspect([rec.pid])).get(rec.pid), cfg.node);
+      if (still.verdict !== 'MATCH') throw new Error(`${c.name}: process ${still.verdict} before healthy (${still.detail})`);
+      await d.sleep(d.pollMs);
+    }
+    if (!health.ok) throw new Error(`${c.name}: health contract not met: ${health.detail}`);
+    const rows = (await d.listListeners()).filter((l) => l.port === c.port);
+    if (!rows.length || rows.some((l) => l.pid !== rec.pid)) {
+      throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${rows.map((r) => r.pid).join(',') || 'none'})`);
+    }
+    rec.status = 'READY';
+    doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), { name: c.name, port: c.port, ready: true, detail: health.detail }];
+    appendEvent(doc, 'child.ready', { name: c.name }); save(doc);
+  }
+
+  // ── STOP (graceful only) ────────────────────────────────────────────────
+  async function stop({ stopAgents = false } = {}) {
+    return withLock('stop', async () => {
+      let cfg;
+      try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
+      if (cfg.profile?.name === OBSERVATION_PROFILE && stopAgents) return refuse('worker admission is absent from the observation profile; --stop-agents is not applicable', { code: 'OBSERVATION_NO_AGENTS' });
+      const st = readState(statePath);
+      if (st.kind === 'ABSENT' || st.kind === 'LEGACY_STOPPED') return { result: RESULT.STOPPED, note: `no owned runtime (${st.kind})` };
+      if (st.kind !== 'OK') return refuse(`state file ${st.kind}: ${st.reason}; nothing signalled`, { code: 'STATE_' + st.kind });
+      const doc = st.state;
+      if (doc.pending_launches?.length) return { result: RESULT.STOP_INCOMPLETE, phase: 'pending-launch', note: 'pre-execution reservations unresolved; nothing signalled' };
+      const live = doc.children.filter((c) => c.status !== 'EXITED');
+      if (doc.children.some((c) => c.status === 'EXITED' && c.tree_closeout_verified !== true)) return { result: RESULT.STOP_INCOMPLETE, phase: 'historical-closeout', note: 'historical EXITED roots lack descendant closeout proof' };
+      if (!live.length) {
+        if (doc.children.some((c) => c.tree_closeout_verified !== true)) return { result: RESULT.STOP_INCOMPLETE, phase: 'historical-closeout', note: 'historical EXITED roots lack descendant closeout proof' };
+        if (doc.state !== 'STOPPED') { doc.state = 'STOPPED'; doc.stopped_at = new Date().toISOString(); appendEvent(doc, 'stop.settled'); save(doc); }
+        return { result: RESULT.STOPPED, note: 'nothing running' };
+      }
+      const verdicts = await classify(cfg, live);
+      const unknown = live.filter((c) => verdicts.get(c.name).verdict === 'UNKNOWN' || verdicts.get(c.name).verdict === 'UNPROVEN');
+      if (unknown.length) {
+        return refuse(`ownership cannot be proven; nothing signalled: ${unknown.map((c) => `${c.name}(${verdicts.get(c.name).detail})`).join('; ')}`, { code: 'OWNERSHIP_UNPROVEN' });
+      }
+      const previousState = doc.state;
+      const brokerChild = live.find((c) => c.name === 'herdrBroker' && verdicts.get(c.name).verdict === 'OWNED');
+      if (brokerChild) {
+        const view = await broker(cfg, 'GET', '/api/lifecycle');
+        if (view.status !== 200) return refuse(`broker lifecycle channel unavailable (${view.status} ${view.error ?? view.body?.code ?? ''}); agents cannot be drained; nothing signalled`, { code: 'BROKER_UNAVAILABLE' });
+        if (view.body.running.length && !stopAgents) {
+          return refuse(`live agents: ${view.body.running.map((r) => `${r.agent_id}(pid ${r.pid})`).join(', ')}. Ensure closeout is posted, then stop with --stop-agents`, { code: 'LIVE_AGENTS', agents: view.body.running });
+        }
+        doc.state = 'STOPPING'; appendEvent(doc, 'stop.begin', { stop_agents: stopAgents }); save(doc);
+        const drain = await broker(cfg, 'POST', '/api/lifecycle/drain');
+        if (drain.status !== 200 || drain.body?.admission !== 'DRAINING') {
+          doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'stop.drain_failed', { status: drain.status }); save(doc);
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', detail: drain.error ?? drain.body };
+        }
+        if (drain.body.running.length) {
+          const r = await broker(cfg, 'POST', '/api/lifecycle/stop-agents', cfg.timeouts_ms.agent_stop);
+          if (r.status !== 200 || !r.body?.complete) {
+            doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'stop.agents_incomplete', { body: r.body }); save(doc);
+            journal('stop.agents_incomplete', { body: r.body });
+            return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', detail: r.body ?? r.error, note: 'broker left DRAINING and up so it keeps ownership; use recover --force only as explicit recovery' };
+          }
+        }
+        const after = await broker(cfg, 'GET', '/api/lifecycle');
+        if (after.status !== 200 || !after.body?.drained) {
+          doc.state = 'STOP_INCOMPLETE'; save(doc);
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'drain-verify', detail: after.body ?? after.error };
+        }
+        appendEvent(doc, 'stop.drained'); save(doc);
+      } else {
+        doc.state = 'STOPPING'; appendEvent(doc, 'stop.begin', { stop_agents: stopAgents, broker: 'not live' }); save(doc);
+      }
+
+      const order = topoOrder(cfg.components).map((c) => c.name).reverse();
+      const steps = [];
+      for (const name of order) {
+        const child = doc.children.find((c) => c.name === name && c.status !== 'EXITED');
+        if (!child) continue;
+        const r = await stopChild(cfg, doc, child);
+        steps.push({ name, ...r });
+        if (r.outcome !== 'GONE') {
+          doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'stop.incomplete', { name, ...r }); save(doc);
+          journal('stop.incomplete', { name, ...r });
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'control-plane', steps, previous_state: previousState };
+        }
+      }
+      doc.state = 'STOPPED'; doc.stopped_at = new Date().toISOString(); appendEvent(doc, 'stop.done'); save(doc);
+      journal('stop.done', { steps });
+      return { result: RESULT.STOPPED, steps, verification: await verifyStopped(cfg, doc) };
+    });
+  }
+
+  async function verifyStopped(cfg) {
+    try {
+      const ports = new Set(cfg.components.map((c) => c.port));
+      const left = (await d.listListeners()).filter((l) => ports.has(l.port));
+      return { complete: true, ports_free: left.length === 0, foreign_listeners: left };
+    } catch (err) {
+      return { complete: false, error: err.message };
+    }
+  }
+
+  // ── RECOVER --force (explicit, separate) ────────────────────────────────
+  async function recoverForce() {
+    return withLock('recover-force', async () => {
+      let cfg;
+      try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
+      if (cfg.profile?.name === OBSERVATION_PROFILE) return refuse('forced recovery is disabled for the observation-only profile', { code: 'OBSERVATION_NO_FORCE_RECOVERY' });
+      const st = readState(statePath);
+      if (st.kind !== 'OK') return refuse(`state file ${st.kind}${st.reason ? `: ${st.reason}` : ''}; recovery needs a provable record`, { code: 'STATE_' + st.kind });
+      const doc = st.state;
+      if (doc.pending_launches?.length) return { result: RESULT.STOP_INCOMPLETE, phase: 'pending-launch', note: 'pre-execution reservations unresolved; nothing signalled' };
+      appendEvent(doc, 'recover.force.begin'); save(doc);
+      if (doc.children.some((c) => c.status === 'EXITED' && c.tree_closeout_verified !== true)) return { result: RESULT.STOP_INCOMPLETE, phase: 'historical-closeout', note: 'historical EXITED roots lack descendant closeout proof; no forced signals' };
+      const steps = [];
+      const brokerChild = doc.children.find((c) => c.name === 'herdrBroker' && c.status !== 'EXITED');
+      if (brokerChild) {
+        const v = (await classify(cfg, [brokerChild], { prove: false })).get('herdrBroker');
+        if (v.verdict === 'MATCH') {
+          const view = await broker(cfg, 'GET', '/api/lifecycle');
+          if (view.status === 200 && view.body.running.length) {
+            await broker(cfg, 'POST', '/api/lifecycle/drain');
+            const r = await broker(cfg, 'POST', '/api/lifecycle/force-stop-agents', cfg.timeouts_ms.agent_stop);
+            steps.push({ name: 'agents', result: r.body ?? r.error });
+            if (r.status !== 200 || !r.body?.complete) {
+              save(doc);
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'the broker could not prove/terminate every agent; it is left up so ownership is not orphaned' };
+            }
+          } else if (view.status !== 200) {
+            return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker channel unavailable; refusing all force recovery without agent closeout proof' };
+          }
+          const drain = await broker(cfg, 'POST', '/api/lifecycle/drain');
+          if (drain.status !== 200 || drain.body?.admission !== 'DRAINING' || !drain.body?.drained) {
+            return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: 'pending, orphaned, terminal or agent ownership remains unresolved' };
+          }
+        } else {
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
+        }
+      } else if (!await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+        return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'missing broker record is not agent closeout proof' };
+      }
+      for (const name of topoOrder(cfg.components).map((c) => c.name).reverse()) {
+        const child = doc.children.find((c) => c.name === name && c.status !== 'EXITED');
+        if (!child) continue;
+        // Re-prove executable + creation time IMMEDIATELY before the forced signal.
+        if (child.containment && !deps.forceKill) {
+          const proof = await jobs().stop(child.containment, { force: true, graceMs: cfg.timeouts_ms.graceful_exit });
+          if (proof.outcome !== 'GONE' || proof.active !== 0 || !proof.closed) return { result: RESULT.STOP_INCOMPLETE, phase: 'job-recovery', steps, proof };
+          Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: 'explicit owned-job recovery' });
+          steps.push({ name, outcome: 'GONE', proof }); save(doc); continue;
+        }
+        const v = (await classify(cfg, [child], { prove: false })).get(name);
+        if (v.verdict === 'GONE' || v.verdict === 'FOREIGN') {
+          if (!await d.treeClosed(child)) return { result: RESULT.STOP_INCOMPLETE, phase: 'descendants', steps };
+          Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: `recover: ${v.detail}` });
+          steps.push({ name, outcome: 'GONE', signalled: false, detail: v.detail }); save(doc); continue;
+        }
+        if (v.verdict !== 'MATCH') {
+          doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'recover.unproven', { name, detail: v.detail }); save(doc);
+          steps.push({ name, outcome: v.verdict, signalled: false, detail: v.detail });
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'control-plane', steps };
+        }
+        if (!await d.treeSignalSafe(child)) return { result: RESULT.STOP_INCOMPLETE, phase: 'descendant-ownership', steps, note: 'tree termination refused: descendant ownership unproven' };
+        const fresh = (await classify(cfg, [child], { prove: false })).get(name);
+        if (fresh.verdict !== 'MATCH') return { result: RESULT.STOP_INCOMPLETE, phase: 'identity-recheck', steps, note: 'identity changed during tree verification; nothing signalled' };
+        appendEvent(doc, 'recover.force_kill', { name, pid: child.pid }); save(doc);
+        const k = await d.forceKill(child.pid);
+        const outcome = await waitGone(cfg, child);
+        steps.push({ name, outcome, signalled: true, detail: k.detail });
+        if (outcome !== 'GONE') {
+          doc.state = 'STOP_INCOMPLETE'; save(doc);
+          return { result: RESULT.STOP_INCOMPLETE, phase: 'control-plane', steps };
+        }
+        Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: 'forced (recover)' }); save(doc);
+      }
+      doc.state = 'STOPPED'; doc.stopped_at = new Date().toISOString(); appendEvent(doc, 'recover.force.done'); save(doc);
+      journal('recover.force.done', { steps });
+      return { result: RESULT.STOPPED, steps, verification: await verifyStopped(cfg, doc) };
+    });
+  }
+
+  // ── STATUS (read-only: no lock, no writes) ──────────────────────────────
+  async function status() {
+    const report = { scope: 'COMMAND_CONTROL_PLANE_ONLY', safe_to_shutdown_starq: false, generated_at: new Date().toISOString(), inspection: { complete: true, errors: [] }, problems: [] };
+    const fail = (msg) => { report.inspection.complete = false; report.inspection.errors.push(msg); };
+    let cfg = null;
+    try { cfg = cfgOf(); report.config = { valid: true, sha256: cfg.sha256, file: configFile }; } catch (err) {
+      report.config = { valid: false, error: err.message }; report.overall = 'UNKNOWN'; report.problems.push('config invalid'); return report;
+    }
+    const observationOnly = cfg.profile?.name === OBSERVATION_PROFILE;
+    // The observation profile never probes standalone Herdr. Full-floor status
+    // keeps the pre-existing read-only standalone probe behavior.
+    let shGate = { resolved: false, detail: 'not evaluated' };
+    let shObserved = { state: 'NOT_PROBED', detail: 'not evaluated' };
+    let shEntry = null;
+    const infraPins = {
+      herdrExecutable: null,
+      scriptsRoot: cfg.workspace_root ? path.join(cfg.workspace_root, 'agent-comms', 'scripts') : null,
+    };
+    if (!observationOnly) {
+      shEntry = standaloneHerdr(cfg);
+      infraPins.herdrExecutable = shEntry?.executable ?? null;
+      try { shGate = await d.standaloneHerdrGate(cfg); } catch (err) { shGate = { resolved: false, detail: `G-PROFILE: ${err.message}` }; }
+      shObserved = { state: 'NOT_PROBED', detail: 'owner protocol not commissioned; the standalone binary was not executed' };
+      if (shGate.resolved && shEntry) {
+        try { shObserved = await d.probeStandaloneHerdr(shEntry); } catch (err) { shObserved = { state: 'ERROR', detail: err.message }; }
+      }
+      report.normal_profile = {
+        name: cfg.profile?.name, ready: false, external_required: cfg.profile?.external_required ?? [],
+        standalone_herdr: { owner_gate: shGate, observed: { state: shObserved.state, detail: shObserved.detail } },
+        detail: 'ready requires control plane RUNNING, a commissioned standalone Herdr owner protocol and standalone Herdr observed AVAILABLE; control-plane status alone is not full-profile readiness',
+      };
+      const herdrClass = classifyInfrastructureProcess(
+        { exe: shEntry?.executable, cmd: shEntry?.executable },
+        infraPins,
+      );
+      report.infrastructure_policy = {
+        command_ports_remain_blocking: true,
+        standalone_herdr: herdrClass,
+        declared_external: ['standalone-herdr', 'starqbot-gateway', 'room-watcher'],
+        note: 'Declared Starq infrastructure is not a Command child and is not an unowned Command blocker unless it holds a Command control-plane port.',
+      };
+    } else {
+      report.observation_profile = {
+        name: cfg.profile.name, ready: false, services: cfg.components.map((c) => c.name),
+        worker_admission: false, herdr_probe: 'NOT_PERFORMED',
+      };
+    }
+    report.env_overrides = findEnvOverrides(env, cfg);
+    if (report.env_overrides.length) report.problems.push(`runtime overrides present (start would refuse): ${report.env_overrides.join(', ')}`);
+    report.environment_hazards = observationOnly ? findObservationEnvHazards(env) : [];
+    if (report.environment_hazards.length) report.problems.push(`observer environment is contaminated (start would refuse): ${report.environment_hazards.join(', ')}`);
+    report.lock = readLock(lockPath);
+    const st = readState(statePath);
+    report.state = { kind: st.kind, reason: st.reason ?? null, declared: st.state?.state ?? null };
+    const doc = st.kind === 'OK' ? st.state : null;
+    if (doc && doc.config_sha256 !== cfg.sha256) report.problems.push('config changed since this runtime was started');
+    if (st.kind === 'CORRUPT' || st.kind === 'UNREADABLE') fail(`state ${st.kind}: ${st.reason}`);
+
+    let listeners = null;
+    try { listeners = await d.listListeners(); } catch (err) { fail(`listeners: ${err.message}`); }
+    const listenerPids = [...new Set((listeners ?? []).map((l) => l.pid).filter((pid) => Number.isInteger(pid) && pid > 0))];
+    let listenerInfos = new Map();
+    if (listenerPids.length) {
+      try { listenerInfos = await d.inspect(listenerPids); }
+      catch (err) { fail(`listener processes: ${err.message}`); }
+    }
+    if (!observationOnly) {
+      try {
+        const rows = await d.inspectInfrastructure(infraPins);
+        report.live_infrastructure = (rows ?? []).map((info) => ({
+          pid: info.pid, name: info.name ?? null, exe: info.exe ?? null,
+          ...classifyInfrastructureProcess(info, infraPins),
+        })).filter((row) => row.kind === 'DECLARED_EXTERNAL_INFRASTRUCTURE');
+      } catch (err) {
+        fail(`infrastructure: ${err.message}`);
+        report.live_infrastructure = [];
+      }
+    }
+    const children = doc ? doc.children : [];
+    const verdicts = await classify(cfg, children);
+    for (const [name, v] of verdicts) if (v.verdict === 'UNKNOWN') fail(`${name}: ${v.detail}`);
+
+    report.components = [];
+    const componentNames = observationOnly ? cfg.components.map((c) => c.name) : REQUIRED_COMPONENTS;
+    for (const name of componentNames) {
+      const c = comp(cfg, name);
+      const rec = children.find((x) => x.name === name);
+      const entry = { name, port: c.port, recorded: Boolean(rec), pid: rec?.pid ?? null, declared_status: rec?.status ?? null };
+      entry.ownership = !rec ? 'NOT_RECORDED' : rec.status === 'EXITED' ? (rec.tree_closeout_verified === true ? 'EXITED' : 'EXITED_UNVERIFIED') : verdicts.get(name)?.verdict ?? 'UNKNOWN';
+      entry.ownership_detail = rec && rec.status !== 'EXITED' ? verdicts.get(name)?.detail ?? null : null;
+      if (entry.ownership === 'OWNED') {
+        entry.health = await d.checkHealth(cfg.host, c);
+      }
+      if (listeners) {
+        const rows = listeners.filter((l) => l.port === c.port);
+        entry.listener = {
+          present: rows.length > 0,
+          owned: rows.length > 0 && entry.ownership === 'OWNED' && rows.every((l) => l.pid === rec.pid),
+          pids: rows.map((l) => l.pid),
+          classifications: rows.map((l) => {
+            const info = listenerInfos.get(l.pid);
+            return {
+              pid: l.pid,
+              ...classifyInfrastructureProcess(
+                { name: info?.name, exe: info?.exe, cmd: info?.cmd },
+                infraPins,
+              ),
+            };
+          }),
+        };
+      }
+      report.components.push(entry);
+    }
+    if (doc) {
+      const missing = componentNames.filter((n) => !children.some((x) => x.name === n));
+      if (doc.state === 'READY' && missing.length) report.problems.push(`READY state is missing components: ${missing.join(', ')}`);
+    }
+    const brokerEntry = report.components.find((x) => x.name === 'herdrBroker');
+    if (!brokerEntry) {
+      report.broker = { present: false, reason: 'broker is not part of the observation-only profile' };
+    } else if (brokerEntry.ownership === 'OWNED') {
+      const view = await broker(cfg, 'GET', '/api/lifecycle');
+      report.broker = view.status === 200
+        ? { reachable: true, admission: view.body.admission, running: view.body.running, open_terminals: view.body.open_terminals, drained: view.body.drained }
+        : { reachable: false, error: view.error ?? view.body?.code ?? view.status };
+      if (!report.broker.reachable) report.problems.push('broker owned but lifecycle channel unreachable');
+    } else {
+      report.broker = { reachable: false, reason: 'broker not running under verified ownership' };
+    }
+
+    const all = report.components;
+    const componentsReady = all.every((x) => x.ownership === 'OWNED' && x.health?.ok && x.listener?.owned);
+    const running = doc?.state === 'READY' && componentsReady && (observationOnly || (report.broker.reachable && report.broker.admission === 'OPEN'));
+    const nothingAlive = all.every((x) => ['NOT_RECORDED', 'EXITED', 'GONE', 'FOREIGN'].includes(x.ownership));
+    const anyListener = all.some((x) => x.listener?.present);
+    const stoppedDeclared = !doc || ['STOPPED', 'START_FAILED'].includes(doc.state);
+    if (!report.inspection.complete) report.overall = 'UNKNOWN';
+    else if (running) report.overall = 'RUNNING';
+    else if (stoppedDeclared && nothingAlive && !anyListener) report.overall = 'STOPPED';
+    else if (stoppedDeclared && nothingAlive && anyListener) { report.overall = 'CONFLICT'; report.problems.push('foreign listener on a control-plane port while stopped'); }
+    else report.overall = 'DEGRADED';
+    if (observationOnly) report.observation_profile.ready = report.overall === 'RUNNING';
+    else report.normal_profile.ready = report.overall === 'RUNNING' && shGate.resolved === true && shObserved.state === 'AVAILABLE';
+    for (const x of all) {
+      if (x.ownership === 'OWNED' && x.health && !x.health.ok) report.problems.push(`${x.name} unhealthy: ${x.health.detail}`);
+      if (x.listener?.present && !x.listener.owned) report.problems.push(`${x.name} port ${x.port} held by non-owned pid(s) ${x.listener.pids.join(',')}`);
+      if (x.ownership === 'UNPROVEN') report.problems.push(`${x.name} alive but instance unproven: ${x.ownership_detail}`);
+    }
+    report.health_preflight = buildHealthPreflight(report);
+    return report;
+  }
+
+  return { start, stop, recoverForce, status, paths: { statePath, lockPath, logsDir, journalPath } };
+}

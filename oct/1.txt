@@ -1,0 +1,338 @@
+PS D:\StarqTech\00_STARQ_HQ\operations> Get-ChildItem D:\!starq -Force |
+>> Select-Object Name,
+>>               @{N='Type';E={if($_.PSIsContainer){'DIR'}else{'FILE'}}},
+>>               LastWriteTime,
+>>               Attributes |
+>> Sort-Object Name
+
+Name                                                                                    Type LastWriteTime                    Attributes
+----                                                                                    ---- -------------                    ----------
+!                                                                                       DIR  26/08/2026 22:33:30               Directory
+.audit_reports_antigravity                                                              DIR  01/06/2026 21:13:12               Directory
+.avatar                                                                                 DIR  05/06/2026 00:18:17               Directory
+.cache                                                                                  DIR  28/08/2026 09:57:33               Directory
+.claude                                                                                 DIR  28/09/2026 12:28:38               Directory
+.codex                                                                                  DIR  11/09/2026 23:10:06               Directory
+.codex-remote-attachments                                                               DIR  08/09/2026 21:56:05               Directory
+.cursorrules                                                                            FILE 28/09/2026 19:32:26                 Archive
+.dashboard_gen.py                                                                       FILE 27/05/2026 06:13:10                 Archive
+.design_iterate.py                                                                      FILE 27/05/2026 06:45:49                 Archive
+.devin                                                                                  DIR  28/09/2026 16:16:11               Directory
+.GeminiCLI                                                                              DIR  14/06/2026 08:00:45               Directory
+.git                                                                                    DIR  03/10/2026 15:02:56       Hidden, Directory
+.gitignore                                                                              FILE 14/09/2026 16:52:58                 Archive
+.gitmodules                                                                             FILE 22/08/2026 00:22:11                 Archive
+.gradle                                                                                 DIR  20/08/2026 00:56:05               Directory
+.hermes-tmp.iC7jPs                                                                      FILE 03/06/2026 18:06:54                 Archive
+.hf_cache                                                                               DIR  14/09/2026 01:33:37               Directory
+.issues                                                                                 DIR  30/05/2026 19:21:35               Directory
+.issues hermes facing                                                                   DIR  30/05/2026 17:02:22               Directory
+.opencode                                                                               DIR  19/09/2026 19:46:36               Directory
+.pip_cache                                                                              DIR  14/09/2026 00:38:35               Directory
+.pub-cache                                                                              DIR  19/08/2026 19:29:22               Directory
+.starq                                                                                  DIR  08/06/2026 01:28:21               Directory
+.tmp                                                                                    DIR  03/10/2026 14:51:46               Directory
+.vscode                                                                                 DIR  22/08/2026 01:12:17               Directory
+.watchdog.log                                                                           FILE 28/05/2026 21:00:08                 Archive
+.watchdog.py                                                                            FILE 27/05/2026 17:28:54                 Archive
+.watchdog_state.json                                                                    FILE 28/05/2026 21:00:08                 Archive
+.windsurf                                                                               DIR  14/09/2026 00:54:37               Directory
+__HighPriority__                                                                        DIR  27/05/2026 06:40:05               Directory
+__Inbox__                                                                               DIR  27/05/2026 06:38:52               Directory
+__pycache__                                                                             DIR  27/05/2026 04:56:44               Directory
+_archive                                                                                DIR  27/08/2026 19:53:02               Directory
+_audit                                                                                  DIR  25/08/2026 23:18:26               Directory
+_backups                                                                                DIR  29/08/2026 10:41:05               Directory
+_git-remotes                                                                            DIR  29/08/2026 10:22:57               Directory
+_INBOX                                                                                  DIR  29/08/2026 12:02:35               Directory
+_incubator                                                                              DIR  31/08/2026 02:24:07               Directory
+_post_pi_ack.tmp                                                                        FILE 18/09/2026 20:33:13                 Archive
+_recyclebin                                                                             DIR  29/09/2026 18:25:16               Directory
+_secrets                                                                                DIR  03/09/2026 14:32:31               Directory
+_staging                                                                                DIR  24/08/2026 13:59:22               Directory
+_system                                                                                 DIR  18/09/2026 22:49:46               Directory
+_tmp                                                                                    DIR  29/09/2026 12:56:03               Directory
+_tmp_docx_inspect                                                                       DIR  13/08/2026 19:49:44               Directory
+_tmp_finance                                                                            DIR  25/08/2026 13:30:06               Directory
+_vercel-sim                                                                             DIR  08/06/2026 06:20:40               Directory
+_vision453_rescue                                                                       DIR  26/09/2026 18:32:47               Directory
+00_MASTER_CFO_AUDIT_BINDER_2026-08-25.docx                                              FILE 25/08/2026 14:45:21                 Archive
+00_STARQ_HQ                                                                             DIR  30/09/2026 11:25:20               Directory
+01_PERSONAL_ACCOUNTANT                                                                  DIR  12/08/2026 19:39:21               Directory
+01_PROJECT_MAP                                                                          DIR  27/05/2026 04:29:58               Directory
+01_WIKI                                                                                 DIR  03/09/2026 09:52:43               Directory
+02_ANTAC_NEXUS                                                                          DIR  27/05/2026 04:26:28               Directory
+02_ANTRAC_NEXUS                                                                         DIR  27/05/2026 05:26:32               Directory
+02_ORG                                                                                  DIR  30/05/2026 18:38:01               Directory
+03_PROJECTS                                                                             DIR  02/09/2026 12:15:35               Directory
+03_VISION_PROTOTYPE                                                                     DIR  27/05/2026 04:29:58               Directory
+04_IDEAS_EXPLORATIONS                                                                   DIR  27/05/2026 04:29:58               Directory
+04_REPORTS                                                                              DIR  25/08/2026 13:57:14               Directory
+05_HR                                                                                   DIR  27/05/2026 05:56:02               Directory
+05_WHATSAPP_INTEGRATION                                                                 DIR  27/05/2026 04:58:31               Directory
+06_IDEAS                                                                                DIR  27/05/2026 05:48:43               Directory
+06_QA_AUDITS                                                                            DIR  12/06/2026 13:15:24               Directory
+07_ETHICS_SECURITY                                                                      DIR  27/05/2026 04:29:58               Directory
+08_DATA_FILES                                                                           DIR  25/08/2026 16:30:52               Directory
+09_CODE_SNIPPETS                                                                        DIR  27/05/2026 05:17:12               Directory
+12_MISC                                                                                 DIR  27/05/2026 05:32:13               Directory
+28-29-30th                                                                              DIR  30/09/2026 07:39:04               Directory
+3334                                                                                    FILE 11/09/2026 21:23:49                 Archive
+3352                                                                                    FILE 11/09/2026 21:31:16                 Archive
+academia                                                                                DIR  12/08/2026 18:50:44               Directory
+adam to codex 300920262030.txt                                                          FILE 30/09/2026 20:31:18                 Archive
+Adams report for next Herdr session.md                                                  FILE 29/09/2026 16:48:24                 Archive
+ADMIN-ACTING-AS-GOVERNANCE.md                                                           FILE 11/06/2026 21:20:53                 Archive
+aegis                                                                                   DIR  26/06/2026 11:40:11               Directory
+aegis_bridge_test                                                                       DIR  19/06/2026 18:11:28               Directory
+aegis_packets                                                                           DIR  25/06/2026 12:18:41               Directory
+AG_AUDIT_REMEDIATION_REPORT.md                                                          FILE 25/08/2026 13:57:34                 Archive
+AG_SONNET4.6_PHASE_5.2.md                                                               FILE 29/09/2026 16:43:27                 Archive
+AG_SONNET4.6_PHASE_6_ARCHITECTURE_CHALLENGE_COMPLETE.md                                 FILE 29/09/2026 16:01:20                 Archive
+agent-comms                                                                             DIR  03/10/2026 14:44:04               Directory
+agent-roster.json                                                                       FILE 17/07/2026 13:01:47                 Archive
+AGENTS.md                                                                               FILE 28/09/2026 19:31:43                 Archive
+Android                                                                                 DIR  19/08/2026 19:30:00               Directory
+ANTR-020-OPERATIONAL-REALITY-SYNCHRONIZATION.md                                         FILE 11/06/2026 20:12:05                 Archive
+Antrac Nexus                                                                            DIR  25/09/2026 23:52:00               Directory
+ANTRAC-ERP-DELIVERY-AUDIT.md                                                            FILE 11/06/2026 23:39:36                 Archive
+ANTRAC-PROJECT-RESTRUCTURE-REPORT.md                                                    FILE 11/06/2026 21:10:20                 Archive
+assistance to buddies                                                                   DIR  01/10/2026 23:12:14               Directory
+athena-quiz-bot                                                                         DIR  05/06/2026 15:24:17               Directory
+BACKUP                                                                                  DIR  14/09/2026 14:27:35               Directory
+backups                                                                                 DIR  25/08/2026 21:58:18               Directory
+BOARD-ARCHITECTURE-REFERENCE.md                                                         FILE 18/08/2026 23:47:18                 Archive
+board-recon.mjs                                                                         FILE 26/09/2026 06:30:36                 Archive
+CC_FIRST_PROMPT.md                                                                      FILE 29/05/2026 18:37:26                 Archive
+check_pg.bat                                                                            FILE 19/09/2026 09:18:52                 Archive
+CLAUDE.md                                                                               FILE 02/10/2026 20:23:40                 Archive
+CLAUDE.md.bak-pre-convergence-pointer                                                   FILE 14/09/2026 17:41:14                 Archive
+Codex instructions                                                                      DIR  27/05/2026 17:59:22               Directory
+CODEX_PHASE_6_EXECUTION_PLAN_READY.md                                                   FILE 29/09/2026 15:59:45                 Archive
+CODEX_PHASE_6_IMPLEMENTATION_CONTRACT_READY.md                                          FILE 29/09/2026 15:57:02                 Archive
+COLD_START_TAKEOVER_2026-08-26.md                                                       FILE 26/08/2026 13:10:29                 Archive
+company-seats.json                                                                      FILE 03/10/2026 12:08:26                 Archive
+connect_pg.bat                                                                          FILE 19/09/2026 09:18:41                 Archive
+dashboard.html                                                                          FILE 27/05/2026 06:13:56                 Archive
+DATA_SYNC_AND_HOSTING.md                                                                FILE 18/08/2026 23:47:18                 Archive
+deepseek-harness                                                                        DIR  29/09/2026 22:12:15               Directory
+deepseek-harness-master.tar.gz                                                          FILE 25/08/2026 00:46:47                 Archive
+DESIGN_SYSTEM_INTEGRATION_2026-06-11.md                                                 FILE 12/06/2026 09:46:24                 Archive
+Dhiraagu domain                                                                         DIR  21/08/2026 21:44:13               Directory
+docs                                                                                    DIR  04/09/2026 15:19:36               Directory
+dp perf.png                                                                             FILE 22/08/2026 15:03:52                 Archive
+DP_PHASE 5.2 — COLD INDEPENDENT ACCEPTANCE.md                                           FILE 29/09/2026 17:26:14                 Archive
+DP_PHASE 6 — BATCH 3 COLD INDEPENDENT ACCEPTANCE.md                                     FILE 29/09/2026 21:41:37                 Archive
+DP300920261628.txt                                                                      FILE 30/09/2026 16:28:34                 Archive
+DP300920261703.txt                                                                      FILE 30/09/2026 17:03:13                 Archive
+DStarqTechherdrtmpnode-live.txt                                                        FILE 13/09/2026 03:48:12                 Archive
+DStarqTechherdrtmppi-watch.pid                                                         FILE 13/09/2026 10:47:52                 Archive
+ELDER-HANDOVER-ANTRAC-ORGSYNC.md                                                        FILE 13/06/2026 21:55:13                 Archive
+evidence_send_result.txt                                                                FILE 14/09/2026 20:47:47                 Archive
+FILE-MANIFEST.md                                                                        FILE 18/08/2026 23:47:18                 Archive
+final correction.txt                                                                    FILE 01/10/2026 09:41:14                 Archive
+final vscode.txt                                                                        FILE 01/10/2026 11:06:26                 Archive
+FOLDER_MAP.md                                                                           FILE 18/08/2026 23:47:18                 Archive
+founder docs                                                                            DIR  31/08/2026 20:37:59               Directory
+Founder R&D                                                                             DIR  09/09/2026 15:10:46               Directory
+founder-docs-audit-aborted-2026-09-09.md                                                FILE 09/09/2026 14:27:03                 Archive
+FOUNDING_DOCTRINE.md                                                                    FILE 18/08/2026 23:47:18                 Archive
+free reviewer_VISION_PHASE_5.1_INDEPENDENT_ACCEPTANCE.md                                FILE 29/09/2026 16:09:09                 Archive
+GEMINI.md                                                                               FILE 28/09/2026 19:31:49                 Archive
+GUARDIAN-IDENTITY.md                                                                    FILE 12/06/2026 01:30:25                 Archive
+GUARDIAN-INBOX.md                                                                       FILE 12/06/2026 01:27:59                 Archive
+GUARDIAN-LOG.md                                                                         FILE 12/06/2026 00:17:19                 Archive
+GUARDIAN-MODE.md                                                                        FILE 12/06/2026 00:16:56                 Archive
+GUARDIAN-SCHEDULE.md                                                                    FILE 12/06/2026 01:29:00                 Archive
+GUARDIAN-STATUS.md                                                                      FILE 12/06/2026 01:28:35                 Archive
+herdr                                                                                   DIR  30/09/2026 21:13:58               Directory
+hermes-core                                                                             DIR  08/06/2026 01:29:01               Directory
+Hoadha Ecosystem.docx                                                                   FILE 02/09/2026 12:15:35                 Archive
+Hoadha Ecosystem.md                                                                     FILE 02/09/2026 12:15:35                 Archive
+Hoadha Merchant Node — Master Engineering & Agent-Swarm Execution Specification v1.0.md FILE 02/09/2026 12:15:35                 Archive
+Hoadhaa                                                                                 DIR  02/10/2026 22:28:53               Directory
+IDENTITY-SEPARATION-GOVERNANCE.md                                                       FILE 11/06/2026 21:20:13                 Archive
+index.html                                                                              FILE 27/05/2026 17:52:57                 Archive
+INDEX.md                                                                                FILE 18/08/2026 23:47:18                 Archive
+KomputerMechanic-Hermes-Dashboard-Template.html                                         FILE 29/05/2026 05:01:05                 Archive
+library                                                                                 DIR  19/06/2026 12:07:35               Directory
+MCSA 2025-26                                                                            DIR  07/06/2026 11:42:15               Directory
+MCSA 2026-27                                                                            DIR  07/06/2026 11:33:45               Directory
+MGCP                                                                                    DIR  19/06/2026 05:22:41               Directory
+mockups                                                                                 DIR  28/08/2026 03:25:36               Directory
+morale                                                                                  DIR  09/09/2026 10:32:54               Directory
+MORNING-BRIEFING-TEMPLATE.md                                                            FILE 12/06/2026 01:30:44                 Archive
+mustarq land plot 20685                                                                 DIR  17/06/2026 14:24:59               Directory
+new directive                                                                           DIR  29/05/2026 17:51:46               Directory
+New Text Document.txt                                                                   FILE 30/09/2026 05:27:27                 Archive
+NEXT_AGENT_BOOT_PROMPT.md                                                               FILE 29/09/2026 22:21:38                 Archive
+NEXT_AGENT_BOOT_PROMPT_2026-09-30_UX_COMPRESSION.md                                     FILE 30/09/2026 19:59:04                 Archive
+nexus_soul.txt                                                                          FILE 29/05/2026 07:08:57                 Archive
+NexusHQ                                                                                 DIR  03/10/2026 11:42:32               Directory
+node_modules                                                                            DIR  03/10/2026 11:40:47 Directory, ReparsePoint
+nul                                                                                     FILE 13/09/2026 17:12:39                 Archive
+orgsync-tasks-backup.json                                                               FILE 11/06/2026 21:30:32                 Archive
+-p                                                                                      DIR  26/09/2026 09:35:22               Directory
+PASS                                                                                    FILE 20/09/2026 09:42:09                 Archive
+PHASE 5.2 TAKEOVER — AGCLAUDE QUOTA EXHAUSTED MID-CORRECTIVE.md                         FILE 29/09/2026 17:07:44                 Archive
+PHASE 6 CONTRACT RECONCILED — READY FOR IMPLEMENTATION AUTHORIZATION.md                 FILE 29/09/2026 16:08:13                 Archive
+PHASE_6_BATCH_6_AUTHENTICATED_UI_EXECUTION_PACKET.md                                    FILE 29/09/2026 22:21:38                 Archive
+PHASE_6_BATCH_7_FINAL_ACCEPTANCE_STAGED_ACTIVATION_PACKET.md                            FILE 29/09/2026 22:21:38                 Archive
+PHASE_7_DEV_STUDIO_DUAL_ROOM_BUILD_PACKET.md                                            FILE 29/09/2026 22:21:38                 Archive
+PHASE_7_INDEPENDENT_ACCEPTANCE_PACKET.md                                                FILE 29/09/2026 22:21:38                 Archive
+PHASE_7_UX_COMPRESSION_BUILDER_PACKET_2026-09-30.md                                     FILE 30/09/2026 20:26:36                 Archive
+PHASE_7_UX_COMPRESSION_EXECUTION_PACKET_2026-09-30.md                                   FILE 30/09/2026 19:58:58                 Archive
+PHASE_7_UX_COMPRESSION_IMPLEMENTATION_OUTLINE_2026-09-30.md                             FILE 30/09/2026 20:11:29                 Archive
+PHASE_7_UX_COMPRESSION_RESEARCH_DECISION_2026-09-30.md                                  FILE 30/09/2026 19:58:50                 Archive
+PHASE_7_VISUAL_RECOVERY_EXECUTION_AND_ACCEPTANCE_2026-10-01.md                          FILE 01/10/2026 08:56:58                 Archive
+Play ground                                                                             DIR  27/05/2026 03:44:06               Directory
+PORTAL_FINAL_PUSH.md                                                                    FILE 29/05/2026 21:17:06                 Archive
+PORTAL_HANDOVER.md                                                                      FILE 29/05/2026 21:17:06                 Archive
+PORTAL_STATE.md                                                                         FILE 29/05/2026 21:17:06                 Archive
+postgresql-16_16.15-0ubuntu0.24.04.1_amd64.deb                                          FILE 20/08/2026 16:35:51                 Archive
+postmerge-serp453                                                                       DIR  26/09/2026 18:58:16               Directory
+projects                                                                                DIR  24/08/2026 22:38:31               Directory
+publication-candidate-starqERP-public-20260831                                          DIR  31/08/2026 01:17:19               Directory
+README.md                                                                               FILE 29/09/2026 21:56:09                 Archive
+README.txt                                                                              FILE 01/10/2026 15:09:40                 Archive
+README_FORWARD_REFERENCE_SET_2026-09-30.md                                              FILE 29/09/2026 22:21:38                 Archive
+README_FORWARD_REFERENCE_SET_2026-09-30_REFRESH.md                                      FILE 30/09/2026 19:59:11                 Archive
+RELEASE-PACKAGE.md                                                                      FILE 12/06/2026 01:30:00                 Archive
+research                                                                                DIR  22/08/2026 19:18:02               Directory
+return_to_duty_opencode.md                                                              FILE 07/09/2026 16:21:25                 Archive
+return_to_duty_opencode.txt                                                             FILE 07/09/2026 16:31:31                 Archive
+RISK-REGISTER.md                                                                        FILE 11/06/2026 21:24:44                 Archive
+ROOM-7055-REPLY.md                                                                      FILE 26/09/2026 15:22:40                 Archive
+ROOM-7114-REPLY.md                                                                      FILE 26/09/2026 17:03:53                 Archive
+ROOM-7168-ACK.md                                                                        FILE 26/09/2026 17:41:09                 Archive
+ROOM-7168-STANDBY.md                                                                    FILE 26/09/2026 17:41:43                 Archive
+ROOM-7342.md                                                                            FILE 26/09/2026 21:33:34                 Archive
+ROOM-7346-BLOCKER.md                                                                    FILE 26/09/2026 21:34:18                 Archive
+ROOM-7346-FIX.md                                                                        FILE 26/09/2026 21:35:48                 Archive
+ROOM-7349-REPORT.md                                                                     FILE 26/09/2026 21:38:25                 Archive
+ROOM-7423-HOLD.md                                                                       FILE 26/09/2026 22:48:28                 Archive
+ROOM-810F.md                                                                            FILE 26/09/2026 22:47:49                 Archive
+ROOM-FINAL.md                                                                           FILE 26/09/2026 18:00:46                 Archive
+ROOM-READ.md                                                                            FILE 26/09/2026 19:09:31                 Archive
+ROOM-REPORT.md                                                                          FILE 26/09/2026 22:17:46                 Archive
+ROOM-SERP348-PASS-ACK.txt                                                               FILE 28/09/2026 05:01:46                 Archive
+ROOM-SERP348-REPORT.txt                                                                 FILE 28/09/2026 04:13:17                 Archive
+ROOM-SERP349-ACK.txt                                                                    FILE 28/09/2026 09:16:04                 Archive
+ROOM-SERP349-READY-REVIEW.txt                                                           FILE 28/09/2026 09:26:47                 Archive
+ROOM-SERP349-RESOLUTION.txt                                                             FILE 28/09/2026 09:32:15                 Archive
+ROOM-SERP349-REVERT-SHA.txt                                                             FILE 28/09/2026 09:33:52                 Archive
+ROOM-SERP352-ACK.txt                                                                    FILE 28/09/2026 09:37:03                 Archive
+scratch                                                                                 DIR  02/09/2026 12:15:35               Directory
+scripts                                                                                 DIR  28/08/2026 19:09:55               Directory
+serp339                                                                                 DIR  05/09/2026 11:02:05               Directory
+serp439-verify                                                                          DIR  27/09/2026 23:15:48               Directory
+serp446-two-lines.patch                                                                 FILE 26/09/2026 09:48:56                 Archive
+SERP-450-plan.md                                                                        FILE 26/09/2026 09:28:05                 Archive
+SERP-450-status.md                                                                      FILE 26/09/2026 10:09:46                 Archive
+snoop                                                                                   DIR  12/06/2026 01:35:19               Directory
+SOPs                                                                                    DIR  08/09/2026 15:35:11               Directory
+spos008-baseline                                                                        DIR  27/09/2026 17:18:03               Directory
+STARQ                                                                                   DIR  29/05/2026 01:56:41               Directory
+STARQ  COMMAND — UPDATED PHASE 5 → 8 PLAN.txt                                           FILE 29/09/2026 17:11:02                 Archive
+Starq Feasibility.agent.md                                                              FILE 31/08/2026 12:11:56                 Archive
+starq governance.txt                                                                    FILE 02/10/2026 14:42:33                 Archive
+Starq Technologies Pvt.docx                                                             FILE 03/07/2026 20:56:38                 Archive
+Starq Technologies Pvt.md                                                               FILE 05/08/2026 20:07:55                 Archive
+Starq Technologies Registration Docs                                                    DIR  20/08/2026 14:40:07               Directory
+STARQ.md                                                                                FILE 28/09/2026 20:54:02                 Archive
+STARQ_CI_AUDIT_READY_FINANCE_PACK.html                                                  FILE 25/08/2026 14:05:31                 Archive
+STARQ_CI_AUDIT_READY_FINANCE_PACK.md                                                    FILE 25/08/2026 13:57:14                 Archive
+STARQ_CI_Audit_Working_Papers_2026-08-25.xlsx                                           FILE 25/08/2026 14:33:36                 Archive
+STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md                                    FILE 01/10/2026 14:44:23                 Archive
+STARQ_COMMAND_COMPANY_OPERATING_SKYSCRAPER.md                                           FILE 03/10/2026 11:57:28                 Archive
+STARQ_COMMAND_FINAL_BUILDING_DEV_STUDIO_ERP_FIRST_PLAN.md                               FILE 29/09/2026 17:30:02                 Archive
+STARQ_COMMAND_FINAL_PRODUCT_CONTRACT_2026-10-01.md                                      FILE 01/10/2026 08:56:53                 Archive
+STARQ_Command_Founder_QA_and_Next_Pass_Intake.docx                                      FILE 01/10/2026 15:09:40                 Archive
+STARQ_COMMAND_FULL_EXPLAINER_OCT2026.docx                                               FILE 03/10/2026 12:24:05                 Archive
+STARQ_COMMAND_FULL_EXPLAINER_OCT2026.md                                                 FILE 03/10/2026 12:24:09                 Archive
+STARQ_COMMAND_INDEPENDENT_PRODUCT_AUDIT_2026-10-01.md                                   FILE 01/10/2026 09:12:43                 Archive
+STARQ_COMMAND_MASTER_OPERATING_BUILDING_PLAN.md                                         FILE 29/09/2026 21:55:56                 Archive
+STARQ_COMMAND_MASTER_OPERATING_BUILDING_PLAN_2026-09-30.md                              FILE 29/09/2026 22:21:38                 Archive
+STARQ_Command_OS_Terminal_Era_Closeout_and_Productization_Plan_2026-10-03.docx          FILE 03/10/2026 14:57:19                 Archive
+STARQ_Command_Phase7_Agent_Reference.docx                                               FILE 01/10/2026 15:09:40                 Archive
+STARQ_Command_Phase7_New_Chat_Handover.docx                                             FILE 01/10/2026 15:09:40                 Archive
+STARQ_COMMAND_PRODUCT_RECOVERY_IMPLEMENTATION_RECORD_2026-10-01.md                      FILE 01/10/2026 11:21:39                 Archive
+STARQ_COMMAND_STRUCTURAL_IMPLEMENTATION_RECORD_2026-10-01.md                            FILE 01/10/2026 14:46:35                 Archive
+STARQ_COMMAND_VISUAL_ACCEPTANCE_CHECKLIST_2026-10-01.md                                 FILE 01/10/2026 08:57:04                 Archive
+STARQ_COMMAND_WATCH_FACE_FINAL_GAP_MAP_2026-10-01.md                                    FILE 01/10/2026 11:21:39                 Archive
+STARQ_CURRENT_STATE_HANDOVER.md                                                         FILE 29/09/2026 21:56:01                 Archive
+STARQ_CURRENT_STATE_HANDOVER_2026-09-30.md                                              FILE 29/09/2026 22:21:38                 Archive
+STARQ_CURRENT_STATE_HANDOVER_2026-09-30_1955.md                                         FILE 30/09/2026 19:58:43                 Archive
+STARQ_FOUNDATION_FREEZE_2026-06-11.md                                                   FILE 11/06/2026 22:48:38                 Archive
+STARQ_HERDR_STAFF_OPERATING_BRIEF.md                                                    FILE 29/09/2026 21:56:05                 Archive
+STARQ_NEXUS_CLAUDE_HANDOVER.md                                                          FILE 14/06/2026 01:05:03                 Archive
+STARQ_NEXUS_FINAL_AUDIT.md                                                              FILE 10/06/2026 08:26:49                 Archive
+STARQ_NEXUS_V2_ARCHITECTURE.md                                                          FILE 18/08/2026 23:47:18                 Archive
+STARQ_NOTEBOOK_UPDATE_CURRENT_STATE_AND_NEXT_PHASE.md                                   FILE 03/10/2026 12:37:34                 Archive
+STARQ_PHASE6_CURRENT_CONTRACT_EXECUTION_STATE.md                                        FILE 29/09/2026 21:55:51                 Archive
+STARQ_PHASE6_REMAINING_EXECUTION_PLAN_2026-09-30.md                                     FILE 29/09/2026 22:21:38                 Archive
+STARQ_PORTAL_SPEC.md                                                                    FILE 29/05/2026 18:23:59                 Archive
+starqERP                                                                                DIR  28/09/2026 16:28:17               Directory
+starqERP what means done.md                                                             FILE 20/08/2026 12:24:05                 Archive
+STARQERP_Founder_to_Elder_State_of_the_Art_Audit_Requirements_2026-08-25.md             FILE 25/08/2026 22:52:20                 Archive
+STARQERP_National_Scale_State_of_the_Art_Assessment_2026-08-25.html                     FILE 25/08/2026 23:33:56                 Archive
+starqERP-clone                                                                          DIR  26/09/2026 09:34:28               Directory
+starqERP-db5d00a                                                                        DIR  21/09/2026 11:58:10               Directory
+starqERP-pr72-fix                                                                       DIR  04/09/2026 16:20:39               Directory
+starqERP-public                                                                         DIR  28/09/2026 18:35:50               Directory
+starqERP-serp339-canonical                                                              DIR  09/09/2026 19:53:56               Directory
+starqERP-serp339-review                                                                 DIR  04/09/2026 20:23:38               Directory
+starqERP-serp405-fix                                                                    DIR  04/09/2026 19:00:00               Directory
+starqERP-serp405-update                                                                 DIR  04/09/2026 19:03:47               Directory
+starqNexus                                                                              DIR  03/10/2026 11:46:08               Directory
+starqNexus.zip                                                                          FILE 08/06/2026 10:30:30                 Archive
+starqNexusMobileBeta                                                                    DIR  22/08/2026 00:31:37               Directory
+starq-ops-room                                                                          DIR  08/09/2026 21:35:43               Directory
+starqos                                                                                 DIR  01/10/2026 03:00:03               Directory
+starqOS Design System                                                                   DIR  13/06/2026 01:23:44               Directory
+starqos-mission-control                                                                 DIR  12/06/2026 16:25:37               Directory
+starqos-mission-control_safety_snapshot_20260605                                        DIR  05/06/2026 17:11:41               Directory
+starq-shell                                                                             DIR  08/06/2026 05:13:27               Directory
+StarqTech                                                                               DIR  26/08/2026 21:56:35               Directory
+STARQ-TECHNOLOGIES-PRODUCT-HIERARCHY.md                                                 FILE 11/06/2026 22:20:47                 Archive
+starqWeb                                                                                DIR  29/08/2026 10:19:34               Directory
+starq-wire                                                                              DIR  07/06/2026 11:12:15               Directory
+supabase                                                                                DIR  20/09/2026 13:11:34               Directory
+THREE-PROJECT-RESTRUCTURE-HANDOVER.md                                                   FILE 11/06/2026 21:19:15                 Archive
+tmp                                                                                     DIR  20/09/2026 09:22:29               Directory
+tmp_ibp                                                                                 DIR  05/08/2026 21:42:01               Directory
+tmp_index.ts                                                                            FILE 07/09/2026 11:50:43                 Archive
+to codex by adam 300920262013.txt                                                       FILE 30/09/2026 20:14:01                 Archive
+tool-data                                                                               DIR  27/09/2026 12:06:55               Directory
+Tulip-Hoadha-Import-Packet                                                              DIR  01/10/2026 23:36:26               Directory
+UI-MIGRATION-REPORT.md                                                                  FILE 11/06/2026 22:12:05                 Archive
+ui-ux-kit                                                                               DIR  21/09/2026 10:36:04               Directory
+Vision300920261935.txt                                                                  FILE 30/09/2026 19:35:32                 Archive
+vision-pr146-9b41cfe                                                                    DIR  26/09/2026 23:39:14               Directory
+vision-pr146-baseline                                                                   DIR  26/09/2026 21:45:32               Directory
+vision-pr146-d6df129                                                                    DIR  26/09/2026 23:19:05               Directory
+vision-pr146-de64a12                                                                    DIR  26/09/2026 21:33:45               Directory
+vision-pr146-mergedtest                                                                 DIR  26/09/2026 21:37:33               Directory
+vision-pr146-parent                                                                     DIR  26/09/2026 23:26:25               Directory
+vision-review-106bb6e                                                                   DIR  26/09/2026 07:26:59               Directory
+vision-review-b95dc34                                                                   DIR  26/09/2026 06:28:15               Directory
+vision-review-b9aaa40                                                                   DIR  26/09/2026 09:50:00               Directory
+vision-review-c5a3153                                                                   DIR  26/09/2026 06:49:15               Directory
+vision-review-d197334                                                                   DIR  26/09/2026 07:40:26               Directory
+vision-review-de64a12                                                                   DIR  26/09/2026 06:33:45               Directory
+vision-serp450-verify                                                                   DIR  26/09/2026 22:25:00               Directory
+vision-serp453                                                                          DIR  26/09/2026 18:14:45               Directory
+vision-serp453b                                                                         DIR  26/09/2026 18:40:24               Directory
+vision-serp453-failbefore                                                               DIR  26/09/2026 18:17:44               Directory
+voices                                                                                  DIR  13/09/2026 20:35:21               Directory
+VS_CODE_INDEPENDENT_AUDIT_REPORT.md                                                     FILE 25/08/2026 13:57:34                 Archive
+vscode-correction.txt                                                                   FILE 01/10/2026 09:15:58                 Archive
+wc2026-nexus                                                                            DIR  22/08/2026 00:31:38               Directory
+Webhosting-Domain-Email-Application-Form-Filled-starq-mv-2026-08-20-FIELDS.txt          FILE 20/08/2026 10:28:23                 Archive
+worker profile pictures                                                                 DIR  07/09/2026 14:43:43               Directory
+workspaces                                                                              DIR  27/09/2026 21:14:23               Directory
+worktrees                                                                               DIR  02/10/2026 01:17:56               Directory
+worldcup2026                                                                            DIR  02/07/2026 17:02:32               Directory
+
+
+PS D:\StarqTech\00_STARQ_HQ\operations>

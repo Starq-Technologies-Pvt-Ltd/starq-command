@@ -1,0 +1,456 @@
+{
+  "schema": "starq-command-continuity/evidence-index/v1",
+  "generatedAtUtc": "2026-10-12T10:25:00Z",
+  "generatedBy": "claude (@elder) under Founder Room #9361",
+  "pathBase": "Paths are relative to D:\\StarqTech (WSL: /mnt/d/StarqTech) unless they start with 'starq-command/', which is relative to D:\\StarqTech\\00_STARQ_HQ\\operations\\.",
+  "room": {
+    "canonicalPath": "agent-comms/room.jsonl",
+    "latestSeqObserved": 9364,
+    "latestRecordHash": "6c1a4feef8375cf40af747fb5177882e921ba23e5ed738c8f348bcccb8a1a63c",
+    "latestSeqObservedAtUtc": "2026-10-12T10:18:57.390Z",
+    "chainCheck": "VERIFIED by this author: recordHash(n) == previousRecordHash(n+1) and seq contiguous for every record #9200-#9364.",
+    "ledgerAnomalies": [
+      "13 of 9,568 physical lines do not parse as JSON (partial/blank lines); not investigated.",
+      "Duplicate brokerSequence values exist at #1404-#1413 (historical); not investigated.",
+      "#9261 and #9357 bodies are truncated (sender-side argument issues); corrections at #9262 and in Vision #9360 respectively.",
+      "Room events carry signatureAlgorithm none: authority is broker metadata (authorityDecision, ROOT_GENESIS), not a detached signature (#9290, #9295)."
+    ],
+    "authority": "Founder handle mustarq (ident_01J6MST0000000000000000009), level ROOT_GENESIS, per agent-comms/protocol/v1/identities.json"
+  },
+  "artifacts": [
+    {
+      "id": "EV-RECOVERY-BASELINE-126",
+      "path": "starq-command/evidence/CMD-DI-PROSPECTIVE-RECOVERY-BASELINE-2026-10-11.json",
+      "bytes": 43745,
+      "sha256": "9a10d43982eeabd689798100a736220da7dbaf928b7687bcd24a4e7bc17cb9eb",
+      "canonicalInventoryDigest": "a48fd7271c272fd1f3e66d80c09a9d57b2643060a73e3521113eea983e155495",
+      "status": "ACCEPTED (OpenCode #9261/#9262; Vision custody + prospective #9269). PROSPECTIVE_BASELINE_ONLY. Contains historical_unknown_register (9 entries).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9260",
+        "Room #9261",
+        "Room #9262",
+        "Room #9269"
+      ]
+    },
+    {
+      "id": "EV-RECOVERY-BASELINE-126-SIDECAR",
+      "path": "starq-command/evidence/CMD-DI-PROSPECTIVE-RECOVERY-BASELINE-2026-10-11.sha256",
+      "bytes": 237,
+      "sha256": "230c544faf84618462074f7f7344691e9fe2545b9b51711d8dd9ab8aac81dc87",
+      "status": "ACCEPTED with baseline",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9268",
+        "Room #9269"
+      ]
+    },
+    {
+      "id": "EV-RECOVERY-BASELINE-CUSTODY",
+      "path": "00_STARQ_HQ/governance/evidence/CMD-DI-PROSPECTIVE-RECOVERY-BASELINE-2026-10-11.json (+ .sha256)",
+      "bytes": 43745,
+      "sha256": "9a10d43982eeabd689798100a736220da7dbaf928b7687bcd24a4e7bc17cb9eb",
+      "status": "VERIFIED byte-identical to source (sidecar also identical, 230c544f...). Custody class: locally separated, hash-anchored; NOT WORM, NOT immutable, NOT independent of the Founder host (#9267).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9265",
+        "Room #9266",
+        "Room #9267",
+        "Room #9268",
+        "Room #9269"
+      ]
+    },
+    {
+      "id": "EV-OBS-CANDIDATE-HISTORICAL",
+      "path": "starq-command/evidence/observation-rule0-correction-20261009/candidate-hash-manifest.json",
+      "bytes": 6783,
+      "sha256": "06616f50d151eebeff0d42c7e46cf69fef0b44084aa7756097b4a9959d7f2a30",
+      "status": "Historical 26-entry candidate; selected for examination only (#9280); 3 stale pins; omits server/floor.mjs. Preserved.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9278",
+        "Room #9280",
+        "Room #9281",
+        "Room #9282"
+      ]
+    },
+    {
+      "id": "EV-OBS-CANDIDATE-PREDECESSOR",
+      "path": "starq-command/evidence/observation-only-hardening-20261009/candidate-hash-manifest.json",
+      "bytes": 4218,
+      "sha256": "a41713cccb7a13e216cc6ec2bbae1f5f282a6abaee90b531a3572648203deb10",
+      "status": "Historical predecessor; preserved.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9282"
+      ]
+    },
+    {
+      "id": "EV-OBS-MANIFEST-PROSPECTIVE-27",
+      "path": "starq-command/evidence/observation-rule0-reconciliation-20261011/candidate-hash-manifest-prospective-20261011.json",
+      "bytes": 12358,
+      "sha256": "619766af8d07bcfa7520eef33bf3acb7cba70eeaa270974b7e2ee7d429cfe001",
+      "sidecarSha256": "6bda1594cf3d04ec7d7a1fd895ac2b68d18cf7f3f67b75c524ff627c4c9e741a",
+      "status": "ACCEPTED as an internally consistent prospective manifest (7 in-baseline + 20 outside = 27), OpenCode #9288. NOT acceptance of the Observation candidate.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9283",
+        "Room #9284",
+        "Room #9285",
+        "Room #9286",
+        "Room #9287",
+        "Room #9288"
+      ]
+    },
+    {
+      "id": "EV-CONTRACT-3-2A",
+      "path": "starq-command/src/lib/contracts.ts",
+      "bytes": 40629,
+      "sha256": "81f6e9f61ea2f9b9b045e7c4f03b3bfa2459405f1af1b12f0f3fcde33d29d99d",
+      "status": "Frozen CMD-DI-3-2a contract pin; matches disk at checkpoint.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9261",
+        "Room #9326",
+        "starq-command/CMD_DI_3_2A_PROSPECTIVE_REFREEZE_VERIFICATION_2026-10-11.md"
+      ]
+    },
+    {
+      "id": "EV-FLOOR-MJS",
+      "path": "starq-command/server/floor.mjs",
+      "bytes": 49829,
+      "sha256": "c9288c12321893fefed5b9471c6d49d4263789930fade8892a641eff9b9574fa",
+      "status": "Accepted post-3-1 pin; matches disk. Historical core-52 pin was 47,752 B / 8eb1d3f3... (#9317). Historical writer of the divergence UNKNOWN.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9272",
+        "Room #9317"
+      ]
+    },
+    {
+      "id": "EV-DATA-SERVICE-MJS",
+      "path": "starq-command/server/data-service.mjs",
+      "bytes": 42065,
+      "sha256": "8c019a490a206d06572b6e6c4b13e28c533cf9c3ef527ec145c507989923aa27",
+      "status": "Accepted post-3-1 pin; matches disk.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9272",
+        "Room #9282"
+      ]
+    },
+    {
+      "id": "EV-TEST-3-2C",
+      "path": "starq-command/tests/work-package-contract-fulfilment.test.tsx",
+      "bytes": 25492,
+      "sha256": "a5e72855c0bc1baa50e8e99bdfbd9ddf23d182ea3b9e7f8110b216e68d8b4059",
+      "status": "Accepted 3-2c POST pin (#9276); matches disk.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9276"
+      ]
+    },
+    {
+      "id": "EV-BUILDING-ROUTE",
+      "path": "starq-command/src/lib/building-route.ts",
+      "bytes": 5051,
+      "sha256": "15136434abcccae427e543cee4cf4d794aeb1b6a2bde4d70e23f10dd7724f615",
+      "status": "Current pin; differs from the historical pre-change pin 332ab87a... The CMD-DI-1-4 byte-unchanged criterion is UNPROVEN and not waived (#9330, #9335).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9330",
+        "Room #9334",
+        "Room #9335"
+      ]
+    },
+    {
+      "id": "EV-VISUAL-210",
+      "path": "starq-command/evidence/vision-visual-2026-10-12/",
+      "fileCount": 210,
+      "status": "REJECTED/invalid corpus: renders show the Building-projection-unavailable placeholder (#9353, #9357). Preserved.",
+      "rehashedThisPackage": false,
+      "sources": [
+        "Room #9352",
+        "Room #9353",
+        "Room #9357"
+      ]
+    },
+    {
+      "id": "EV-VISUAL-328",
+      "path": "starq-command/evidence/vision-visual-2026-10-12-recovery/",
+      "fileCount": 328,
+      "manifestSha256": "e027d17a4150ed95bb7516dd734567b44b613f8c9f982e0a4ad5e8777ea6ee7f",
+      "sha256sumsSha256": "3bd1675028f1aadcce20d125bad2722563a21777a256a3f1f82356d271a77fb0",
+      "coverageSha256": "15d44f0f329b2c15e61d9ef755a6f31ce48be777a7e570c2a72d5f96f6712a31",
+      "status": "Intact per Vision #9360 (328/328 hashes agree; 41 routes x 8 viewports, single-theme). Manifest has 21 HTTP errors across 14 rows (15 x 500 /api/herdr/state, 6 x 403; re-counted by Elder) and no overflow/typography metrics. Basis of the 1-3/1-4 REJECT and the bounded 1-5 ACCEPT.",
+      "rehashedThisPackage": "manifest files only",
+      "sources": [
+        "Room #9357",
+        "Room #9360"
+      ]
+    },
+    {
+      "id": "EV-EXEC-PACKAGE-CORRECTED",
+      "path": "starq-command/DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md",
+      "bytes": 55852,
+      "sha256": "40acb877be9ca55566fdc00e7f7755281dbc2007b8c2b926fbc40e8f1e6399d2",
+      "status": "Authoritative CMD-DI task specification (21 dispatched tasks, 5 waves). Contains stale status text (0-2 pending, Wave 1 not dispatched, B7 OPEN); Room dispositions supersede it (#9311, #9317).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9295",
+        "Room #9314",
+        "Room #9317"
+      ]
+    },
+    {
+      "id": "EV-TEST-AUDIT",
+      "path": "starq-command/DESIGN_INTEGRATION_TEST_AUDIT_2026-10-10.md",
+      "bytes": 50048,
+      "sha256": "0c2ccc69494c98c05bdbc73cba40a4a8f05930d50181e9aa109e24f1ac18a6e4",
+      "status": "CMD-DI-0-2 deliverable; ACCEPTED #9310 / APPROVED #9311.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9310",
+        "Room #9311"
+      ]
+    },
+    {
+      "id": "EV-AG-COORDINATION",
+      "path": "starq-command/DESIGN_INTEGRATION_AG_COORDINATION_2026-10-10.md",
+      "bytes": 8238,
+      "sha256": "e0676614b4d46ce6f5f812c2db55f937b551a7d95549a8c7c0a88c3e0675f6c8",
+      "status": "CMD-DI-0-3 memo; ACCEPTED #9320; Founder approved #9327.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9318",
+        "Room #9320",
+        "Room #9327"
+      ]
+    },
+    {
+      "id": "EV-WAVE1-COORD-STATE",
+      "path": "starq-command/WAVE_1_COORDINATION_STATE_2026-10-10.md",
+      "bytes": 13847,
+      "sha256": "be690cf82f9679d627700376225f69593be4fead114c778b3de767a3e8b0d1d4",
+      "status": "Historical; its Wave 1 status is stale/contradicted (#9295).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9290",
+        "Room #9295"
+      ]
+    },
+    {
+      "id": "EV-WAVE0-DISPATCH",
+      "path": "starq-command/WAVE_0_DISPATCH_SUMMARY_2026-10-10.md",
+      "bytes": 18380,
+      "sha256": "604e6298bf46c49a7b6fb4b890a11beea5c40c5560b709d06dd4cdd83440b422",
+      "status": "Historical; stale 0-2 pending lines 115/215 (#9317).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9295",
+        "Room #9317"
+      ]
+    },
+    {
+      "id": "EV-2-3-REPORT",
+      "path": "starq-command/DESIGN_INTEGRATION_CMD_DI_2_3_EVIDENCE_2026-10-10.md",
+      "bytes": 5625,
+      "sha256": "04ed7b38044049050a09fea2476bce4f0c9e07d744dda5e03d4ad67d506bf6ee",
+      "status": "Worker report only; not independent acceptance.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9293",
+        "Room #9295"
+      ]
+    },
+    {
+      "id": "EV-3-2A-REFREEZE",
+      "path": "starq-command/CMD_DI_3_2A_PROSPECTIVE_REFREEZE_VERIFICATION_2026-10-11.md",
+      "sha256": "bc5a1fa6d22173d01252135e199620371636a06a180d06f1f457a92e9af475ee",
+      "status": "Prospective 3-2a refreeze verification record.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9261",
+        "Room #9290"
+      ]
+    },
+    {
+      "id": "EV-COMMAND-README",
+      "path": "starq-command/README.md",
+      "sha256": "05b6c5dc97be70b0650d358f5c4af2e482e902327e7ceac23b48fb54b24fccd4",
+      "status": "Product definition and phase 1-5 record (29 Sep); launch section historical; phase 6-7 statement stale (see TASK_LEDGER CMD-PHASE-6-7).",
+      "rehashedThisPackage": true,
+      "sources": []
+    },
+    {
+      "id": "EV-COMMAND-OS-DEFINITION",
+      "path": "00_STARQ_HQ/corporate-library/STARQ_CANONICAL_CORPORATE_LIBRARY_2026-10-03/05_COMMAND_OS_CANONICAL_DEFINITION.md",
+      "bytes": 2278,
+      "sha256": "1c7d08823728bf8deb00610c738ffe2192f7c5b85b4d0bc594a74ba842eced06",
+      "status": "Canonical definition of Command OS (corporate library).",
+      "rehashedThisPackage": true,
+      "sources": []
+    },
+    {
+      "id": "EV-FLOOR-LEADER-START",
+      "path": "00_STARQ_HQ/operations/FLOOR-LEADER-START-HERE.md",
+      "bytes": 23589,
+      "sha256": "c5a76ad49627972aeefd7345640383e15d547fac1bc3b936e5b9f8c87aee4de8",
+      "status": "Floor closure front door (checkpoint #9246 era). Its hash differs from the SHA-256 values posted at #9209/#9218, consistent with later amendments (#9223-#9225, #9247).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9209",
+        "Room #9218",
+        "Room #9247"
+      ]
+    },
+    {
+      "id": "EV-IDENTITIES",
+      "path": "agent-comms/protocol/v1/identities.json",
+      "bytes": 17980,
+      "sha256": "4b23e2dc6ee9bf8b6519584d135b12017ffdec3c0b3f8b5673c5ba2abbbf0da5",
+      "status": "Room identity registry (handles, aliases, authority levels).",
+      "rehashedThisPackage": true,
+      "sources": []
+    },
+    {
+      "id": "EV-HR-ROSTER",
+      "path": "00_STARQ_HQ/operations/workforce/digital-workforce-hr-roster.json",
+      "bytes": 57863,
+      "sha256": "c527d5c3ab245e4b1d9449f9465ed3eb2d60e7960fb8ebfc4e94bdb0e6b5919d",
+      "status": "Roster snapshot 2026-10-05 at Room #8779. Stale relative to the checkpoint.",
+      "rehashedThisPackage": true,
+      "sources": []
+    },
+    {
+      "id": "EV-SERP-WORK-MODEL",
+      "path": "00_STARQ_HQ/operations/starqerp-control-board/command_work_model.json",
+      "bytes": 638677,
+      "sha256": "e4c199192b4021dcd7469204800665c2bb1c2303b0ba0e6dc36f91c3f87d29ff",
+      "status": "StarqERP derived work model; SERP-354 work_state PRESERVED.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #8328",
+        "Room #8334"
+      ]
+    },
+    {
+      "id": "EV-PRIOR-DRAFT",
+      "path": "starq-command/continuity/_prior/deadpool-draft-20261012/",
+      "status": "Preserved copy of the Deadpool #9358 draft (12 files + SHA256SUMS) taken before any edit under #9361.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9361"
+      ]
+    },
+    {
+      "id": "EV-CURSOR-SUPPORT-REPORT",
+      "path": "starq-command/continuity-support/cursor-20261012/CURRENT_STATE_RECONCILIATION.md",
+      "bytes": 7960,
+      "sha256": "dcf18384bd9587288068ab363e76f08bc2c68e4dc427fd09345afa52ffd78800",
+      "status": "Noncanonical support report (#9362). Hash VERIFIED; selected facts re-checked and integrated.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9363"
+      ]
+    },
+    {
+      "id": "EV-INDEX-CSS",
+      "path": "starq-command/src/index.css",
+      "bytes": 104127,
+      "sha256": "347002c87e7a4457f685eb1b3ba53e53f7cf057edafc95831fd8ccc51847a951",
+      "status": "Current 1-3 typography state; matches #9351 per Cursor #9363; re-hashed. Not accepted (1-3 REJECTED).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9351",
+        "Room #9363"
+      ]
+    },
+    {
+      "id": "EV-DI-TEST",
+      "path": "starq-command/tests/design-integration.test.tsx",
+      "bytes": 11715,
+      "sha256": "605ec38b359726aea867fdb1a17fdbe1be4c85f012ccff748fcb5c36afe9cb95",
+      "status": "Carries the 1-1/1-2 render tests (78/78 focused pass, #9353).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9351",
+        "Room #9353",
+        "Room #9363"
+      ]
+    },
+    {
+      "id": "EV-AG-SUPPORT-REPORT",
+      "path": "starq-command/continuity-support/antigravity-20261012/HISTORICAL_RECONSTRUCTION.md",
+      "bytes": 24617,
+      "sha256": "209b5a36cb2a0a9105268c2122f8df5a607c863245123fbb4d3be5bb7b2e4abf",
+      "status": "Noncanonical support report (#9362). Hash VERIFIED; claims re-checked; some rejected (HISTORY.md section 8).",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9364"
+      ]
+    },
+    {
+      "id": "EV-DECISIONS-REGISTRY",
+      "path": "00_STARQ_HQ/decisions.json",
+      "sha256": "b440ebc634542749bc8f823af7860dbd5d34fbce84e99a2807a42ee0fe61803f",
+      "status": "Company decision registry; DEC-072, DEC-100-104, DEC-106 titles VERIFIED.",
+      "rehashedThisPackage": true,
+      "sources": [
+        "Room #9364"
+      ]
+    }
+  ],
+  "testEvidence": [
+    {
+      "seq": 9261,
+      "by": "@opencode",
+      "result": "891 collected / 885 passed / 6 failed (F3-F8) - full suite, 126-file baseline scope"
+    },
+    {
+      "seq": 9269,
+      "by": "@vision",
+      "result": "891/885/6; focused 17/17; typecheck pass"
+    },
+    {
+      "seq": 9272,
+      "by": "@vision",
+      "result": "current tree 920/914/6 (891/885/6 excluding new 3-2c file); focused floor 6/6"
+    },
+    {
+      "seq": 9276,
+      "by": "@vision",
+      "result": "924/918/6; focused 3-2c 33/33; 5/5 mutations caught"
+    },
+    {
+      "seq": 9353,
+      "by": "@vision",
+      "result": "four focused Vitest files 78/78 (StaffGlance 6, SessionsBoard 3, typography 2)"
+    },
+    {
+      "seq": 9360,
+      "by": "@vision",
+      "result": "independent 320x720 Chrome sweep: 41/41 headings loaded, page roots 310/310; strict descendant overflow fails on 12 routes; /api/herdr/state 500 reproduced"
+    }
+  ],
+  "knownRed": {
+    "ids": [
+      "F3",
+      "F4",
+      "F5",
+      "F6",
+      "F7",
+      "F8"
+    ],
+    "detail": {
+      "F3": "tests/phase2.test.ts - read-only gates are explicit and allowlisted",
+      "F4": "tests/phase2.test.ts - redacts a whole-value absolute path",
+      "F5": "tests/phase2.test.ts - redacts every one of several embedded paths in a single value",
+      "F6": "tests/phase7-dual-room.test.tsx - the Building origin actually projects the real Hoadha sources",
+      "F7": "tests/phase7-dual-room.test.tsx - the Hoadha board renders the real reconciled corpus",
+      "F8": "tests/staff-board.test.tsx - never calls the Founder a ghost, a retired seat or a machine"
+    },
+    "rule": "Accepted known-red baseline (B5). Must not be fixed, weakened or reclassified as new regressions without authorization.",
+    "source": "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md section Phase 2b; Room #9261, #9276"
+  }
+}

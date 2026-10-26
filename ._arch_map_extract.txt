@@ -1,0 +1,150 @@
+﻿
+STARQ COMMAND
+End-State Architecture & Implementation Map
+Founder baseline • 10 October 2026 • Zero additional recurring spend target
+1. End Goal
+Starq Command is the internal operating system for Starq's engineering studio: a durable, evidence-backed, resource-aware management and control plane for a heterogeneous AI workforce. The goal is not to build an 'agent framework'. The goal is to make expensive reasoning capacity behave like a governed engineering organization: every task survives, every decision is traceable, every worker receives the smallest useful context, every subscription is squeezed intelligently, and no premium model is paid to rediscover facts that Starq already documented.
+DOCUMENT ONCE → RETRIEVE FIRST → REASON ONLY WHEN NEEDED → VERIFY INDEPENDENTLY → RECORD THE RESULT → REUSE FOREVER
+2. Non-Negotiable Design Doctrine
+Documentation is operational memory, not archive material. Completed work must feed future work automatically.
+Jev/Jevgrep is a primary Studio retrieval surface, not an optional convenience. Workers must retrieve before they reason.
+Canonical truth remains in authoritative stores; retrieval indexes are derived and rebuildable, never the only copy.
+Deterministic software handles bookkeeping, exact lookup, policy, quotas, conflicts, transitions, aggregation and context packing.
+Premium models are reserved for design, implementation, debugging, difficult synthesis and independent verification.
+UNKNOWN is a real resource state. Unknown capacity never means free, zero, or permission to spend.
+No silent paid API/overage fallback. Founder authorization is required when included capacity cannot satisfy a task.
+Builder and verifier remain separate. Resource pressure must never collapse independent verification.
+Heterogeneous harnesses stay heterogeneous. Command governs them; it does not force them into a single agent-framework abstraction.
+Every new infrastructure component must earn its place through a measured gap, not novelty.
+3. The Full System Map
+FOUNDER / STARQ COMMAND UI        │        ▼┌─────────────────────────────────────────────────────────────┐│                    FLOOR MANAGER                            ││  deterministic policy • scheduling • authorization         ││  ownership/conflicts • capacity • protected verification   │└───────────────┬─────────────────────┬───────────────────────┘                │                     │        ┌───────▼────────┐    ┌──────▼────────────────────┐        │ WORK PACKAGES  │    │ RESOURCE INTELLIGENCE     │        │ state machine  │    │ provider/subscription/    │        │ deps/heartbeat │    │ harness/model/quota/reset │        │ resume/reaper  │    │ observed/declared/stale   │        └───────┬────────┘    └──────────┬────────────────┘                │                        │                └────────────┬───────────┘                             ▼                 ┌───────────────────────┐                 │ CONTEXT ASSEMBLY      │                 │ deterministic bundle  │                 │ provenance + validity │                 │ token budget + scope  │                 └───────────┬───────────┘                             │          ┌──────────────────┼───────────────────┐          ▼                  ▼                   ▼   EXACT / STRUCTURED      JEV / SEMANTIC      LIVE CODE   SQLite FTS5 / IDs       PRIMARY RETRIEVAL   ripgrep   paths/errors/tickets    advisory ranking    symbols/files          └──────────────────┬───────────────────┘                             ▼                 AUTHORITATIVE KNOWLEDGE           Room ledger • Git/docs • SQLite state           evidence • decisions • tests • history                             │                             ▼                    WORKER HARNESSES       Claude Code • Codex • Cursor • Hermes • AG • etc.                             │                             ▼               BUILD → TEST → VERIFY → ACCEPT                             │                             ▼              APPEND EVIDENCE + UPDATE STATE                             │                             └──────────► retrieval flywheelCross-cutting: OpenTelemetry-compatible observability, usage/cost accounting,governance policy, completeness manifests, provenance, immutable evidence.
+4. Truth Ownership
+Truth
+Owner
+Rule
+Work-package state / ownership
+SQLite durable task store
+Single governed current state; transitions recorded.
+Evidence / history / communications
+Room append-only evidence ledger
+Preserve existing Room history; project/index it rather than casually replacing it.
+Specs / decisions / documents
+Git/files
+Versioned authoritative content.
+Worker / harness / provider identity
+SQLite registry
+Staff identity is not provider, model, harness, session or terminal instance.
+Quota / capacity / reset windows
+Resource ledger
+Observed/declared/stale/UNKNOWN are explicit data.
+Authorization / policy
+Policy tables
+Scheduler checks before dispatch.
+Retrieval index
+Derived layer
+Rebuildable; never canonical.
+Telemetry
+OTel-compatible event stream
+Evidence about execution/cost, not business truth.
+5. Retrieval Is a First-Class Studio Service
+The retrieval system is the central cost-control mechanism. Starq already documents heavily; Command must turn that documentation into reusable operational context. A worker should almost never begin by asking a premium model to reconstruct history. The default execution gate is retrieve-before-reason.
+Stage A — deterministic identity/exact retrieval: work-package IDs, filenames, paths, worker names, error strings, policy keys and known records.
+Stage B — live-code lookup: ripgrep or equivalent exact source search.
+Stage C — Jev/Jevgrep semantic retrieval: primary semantic interface for prior decisions, investigations, summaries and conceptually similar work.
+Stage D — optional local semantic challenger: FTS5/local embeddings/reranking may be benchmarked against Jev, not installed merely because it is free.
+Stage E — deterministic context assembly: deduplicate, mark source/time/current-vs-superseded, declare corpus coverage, enforce a token budget, then hand the compact bundle to the worker.
+Stage F — premium reasoning only after retrieval, unless the task is genuinely novel and has no relevant corpus.
+Jev commissioning must include worker adoption, Room projection/sharding for content above Jev's indexing limit, a completeness manifest that distinguishes NO MATCH from NOT SEARCHED, and usage accounting. Jev's value must be measured by retrieval quality, latency, model/token cost and avoided rediscovery.
+6. Resource Intelligence & Scheduling
+Command models the chain explicitly:
+Staff → Harness → Session → Provider → Subscription Pool → Model → Usage Evidence
+Filter 1: capability — can this qualified worker/harness/model perform the task?
+Filter 2: authorization — is this execution path permitted?
+Filter 3: ownership/conflict — will it collide with active work or governed files?
+Filter 4: capacity — is included capacity observed and sufficiently fresh? UNKNOWN triggers probe-first.
+Filter 5: verification reserve — preserve independent verifier capacity.
+Filter 6: locality/cost — prefer warm context, included capacity and measured efficient workers.
+If nothing qualifies, STOP and surface Founder choices: wait for reset, reprioritize, change worker, or explicitly authorize paid spend.
+7. Durable Work, Not Durable Conversations
+A task must survive a crashed terminal, exhausted quota, Windows restart or worker replacement. Persistence belongs to the work package and evidence, not to one model conversation. Each package carries status, owner, dependencies, authorization, heartbeat, evidence references, verifier state and a pointer to a resumable context bundle. A stale worker can be marked orphaned and the task reassigned without asking another model to reconstruct the old chat.
+8. Observability: Measure the Money
+Adopt OpenTelemetry-compatible conventions and use native harness telemetry where available. Do not assume every harness has the same integration; adapters are verified individually. Command should expose cost and efficiency as operational telemetry.
+task.created / task.assigned / worker.started / worker.heartbeat
+retrieval.exact / retrieval.jev / retrieval.miss / context.assembled
+model.requested / model.completed / tool.invoked
+quota.observed / quota.stale / capacity.reserved
+verification.started / verification.completed / task.accepted / task.blocked
+Core measurements: tokens/cost by worker and work package; exact-vs-semantic retrieval hit rate; context tokens supplied; rediscovery avoided; verification pass rate; task rework; capacity utilization; cold-start vs warm-context cost; and paid-fallback requests.
+9. What We Deliberately Do Not Add Yet
+Deferred technology
+Why
+LangGraph / multi-agent framework
+No demonstrated need to collapse heterogeneous real harnesses into another abstraction.
+Temporal/Cadence-class workflow engine
+Audit existing durability first; adopt only if real distributed compensation/retry complexity appears.
+Graphiti / temporal graph database
+Potentially valuable later for fact-supersession/relationship reasoning, but ingestion and another truth store must earn their cost.
+Dedicated vector database
+No evidence current corpus/query scale requires another service.
+Letta-style persistent-agent platform
+Borrow memory ideas; do not replace Starq's identity/evidence model.
+Any new paid inference service
+Outside the current requirement: use existing subscriptions and local/free infrastructure.
+10. Implementation Programme
+G0 — Governance before construction
+Resolve the missing governing census / dark structural tests; do not hide it behind a fixture.
+Reconcile Design Integration task inventory and Work-scope decision.
+Extend the pre-change baseline to any config files that the integration will modify, including Tailwind configuration.
+Preserve production-build verification as a release gate unless Founder explicitly retires it.
+G1 — Instrument the existing Studio
+Inventory existing durable task state, Room storage/projection, resource data, worker identities, retrieval hooks and telemetry.
+Define the canonical event vocabulary and OTel-compatible envelope.
+Wire native telemetry only where verified; build small adapters for the rest.
+Establish a usage/cost baseline before optimizing.
+G2 — Make Jev operationally mandatory
+Complete Room projection/sharding and completeness manifest.
+Install/adopt the Jev worker skill or equivalent enforced retrieval entrypoint for each relevant harness.
+Add retrieval-before-reason gate to work dispatch.
+Record every retrieval call and outcome; benchmark Jev against exact search and, later, local alternatives.
+G3 — Build deterministic Context Assembly
+Create a service that accepts work-package + query + scope.
+Collect exact/live-code/Jev results, deduplicate and rank.
+Attach provenance, timestamps, validity/supersession and corpus coverage.
+Emit a bounded, reusable context artifact referenced by the work package.
+G4 — Resource Intelligence & Floor Manager
+Formalize provider/subscription/harness/model/staff/session relationships.
+Add observed/declared/stale/UNKNOWN quota state and reset windows.
+Implement deterministic eligibility, conflicts, protected verification capacity and no-silent-spend policy.
+Add Founder decision surface for exceptional paid execution.
+G5 — Durable Work Packages & Recovery
+Formal state transitions, dependencies, heartbeats and orphan detection.
+Resume from evidence/context bundle rather than conversation history.
+Independent verifier assignment and acceptance gate.
+Prove recovery across worker death/restart/quota exhaustion.
+G6 — Command UI integration
+Expose Studio, Resources, Work, Evidence, retrieval provenance, capacity and telemetry without inventing a second truth model.
+Keep UI projections honest: UNKNOWN/STALE/DRIFT/UNAVAILABLE remain distinct.
+Do not compute maturity or operational truth from presentation-layer heuristics.
+G7 — Efficiency trials & hardening
+Run repeatable work-package trials across workers and providers.
+Measure retrieval savings, context size, completion quality, verification pass rate and subscription utilization.
+Tune local/cheap/frontier routing using evidence, not assumptions.
+Only then evaluate whether deferred infrastructure solves a measured remaining bottleneck.
+11. Studio-Open Acceptance Gate
+The managed Studio should not be considered complete merely because panes launch. The target gate is:
+Governance tests are actually executing; no dark guard suite.
+Canonical truth owners are defined and tested.
+A work package can be created, authorized, assigned, interrupted, resumed, verified and closed.
+Every worker receives evidence-backed context before expensive reasoning when relevant evidence exists.
+Jev is a real primary retrieval path with completeness and usage evidence, not an installed binary nobody uses.
+Resource state is visible and honest; unknown capacity cannot silently spend.
+Independent verification capacity is protected.
+Telemetry can explain where model capacity went and what useful work it produced.
+Restart/recovery does not require reconstructing a conversation.
+All accepted work writes durable evidence back into the retrieval flywheel.
+12. Final Architectural Principle
+COMMAND SHOULD MAKE INTELLIGENCE EXPENSIVE ONLY WHEN THE PROBLEM IS INTELLIGENT.
+Everything else — remembering, locating, counting, checking, routing, recovering, accounting, proving and packaging context — should become durable software. That is how Starq gets maximum useful engineering work from the subscriptions it already pays for.
+Source Convergence Note
+This map consolidates the Founder requirements developed during the Command architecture discussions and the supplied independent architecture reviews. The external reviews strongly converge on durable authoritative state, append-only evidence, deterministic-first retrieval, compact provenance-bearing context, resource-aware scheduling, verifier separation and observability. Their technology-specific suggestions are treated as proposals to benchmark rather than automatic installation decisions.
+

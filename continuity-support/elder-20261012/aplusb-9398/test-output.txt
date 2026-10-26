@@ -1,0 +1,47 @@
+✔ there is exactly one oracle per required case (2.762262ms)
+✔ no case passes on missing evidence, and no oracle can emit PARTIAL / OBSERVED / NOT_DEMONSTRATED (4.811701ms)
+✔ ORACLES.md names every case and every predicate the code enforces (4.44854ms)
+✔ every case has a satisfiable PASS route on paper (0.507109ms)
+✔ every single predicate is load-bearing (removing its evidence fails the case) (5.43026ms)
+✔ terminal_close: never GONE without an authenticated receipt; truthful UNKNOWN end is allowed (0.803389ms)
+✔ broker_crash_recovery: only the three truthful recovery states, descriptor-only recovery (0.427023ms)
+✔ assignment_denied_no_resume: a successful assignment, another refusal or a nested wrapper fails (0.281332ms)
+✔ nested_job: a refusal with no receipt is not a PASS (0.2941ms)
+✔ breakaway_refused: a created child passes only if contained, cancelled and proven gone (0.342463ms)
+✔ query_denied_unknown: denial must come from OpenJobObject error 5 with a readable descriptor (0.271772ms)
+✔ detached and interrupt: identity proof replaces attestation; break must reach the guardian console (0.266925ms)
+✔ no PID-addressed termination, taskkill, archive path or live-test opt-in in any fixture source (135.109088ms)
+✔ the harness never writes the compatibility record and never imports outside the pinned set (4.577512ms)
+✔ fixture-tools terminates only a never-resumed suspended guardian, by handle (4.198747ms)
+✔ real workspace: the full static and dynamic import closure is inside the pinned set (60.474283ms)
+✔ real workspace: pins refuse until the native helpers are built and recorded (46.683873ms)
+✔ every pinned path is workspace-relative and unique (0.25728ms)
+✔ synthetic: an unpinned relative import, an unpinned package or a computed import refuses (115.777537ms)
+✔ import scanner sees static, re-export, dynamic and require forms (0.224894ms)
+✔ synthetic: a missing pinned file refuses (never skipped); package roots are pinned as whole sets (325.860748ms)
+✔ canonical pins are key-order independent (0.486524ms)
+✔ seal refuses an incomplete run, seals a complete one once, and judges nothing (787.171231ms)
+✔ authority basis states the unsigned-chain limitation (0.102985ms)
+✔ valid review → N-1 → N-2 resolves (2.191914ms)
+✔ pointer hash mismatch refuses (0.565146ms)
+✔ a record edited after hashing does not recompute (0.67929ms)
+✔ a chain break refuses even when each record self-hashes (0.479849ms)
+✔ ledger gaps refuse; a fork refuses only inside the verified range (0.757538ms)
+✔ reviewer must be independent of the builder (0.64984ms)
+✔ review must accept exactly these pin bytes, with outcome ACCEPTED (1.067126ms)
+✔ a later review by the same reviewer supersedes the earlier one (0.621844ms)
+✔ N-1 must be a broker-allowed Founder ROOT_GENESIS record (0.828156ms)
+✔ N-1 must name this review and only known, unique cases (1.554471ms)
+✔ stale, future, revoked and superseded N-1 grants refuse (1.071839ms)
+✔ a revocation by a non-Founder has no effect (0.392196ms)
+✔ N-2 refuses: wrong action, wrong instance, unprinted instance, grant before descriptor, stale, same record as N-1 (0.852935ms)
+✔ machine lines: version and field discipline (0.225185ms)
+✔ canonical Room (read-only): recent chain recomputes; no record is a grant (1004.611764ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2812.069286

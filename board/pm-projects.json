@@ -1,0 +1,32 @@
+{
+  "registry_id": "STARQ-COMMAND-PM-PROJECTS",
+  "schema_version": "1.0.0",
+  "authority": "Founder #9497 (CMD-PM-MIN FINAL EXECUTION AUTHORIZATION), scope #9493 / #9494",
+  "note": "Static project metadata only. Tasks live in data/pm-board.db and are created by humans through the PM interface. Nothing here is a task source. Seed is insert-only: an existing project row is never overwritten; drift is reported by GET /api/pm/health.",
+  "projects": [
+    {
+      "id": "command",
+      "name": "Starq Command",
+      "prefix": "CMD",
+      "description": "Starq Command / MODS programme. Human-operated PM board.",
+      "hold_state": null,
+      "source_gap": "33 historical CMD-DI rows exist in board/command-board.json (pinned, CANDIDATE_NOT_ACCEPTED, STALE at Room #9455). They are NOT imported. Transfer of any row requires per-task Founder authorization carrying a Room reference."
+    },
+    {
+      "id": "erp",
+      "name": "starqERP",
+      "prefix": "ERP",
+      "description": "starqERP convergence programme. Implementation hold is read live from the control-board contract (DEC-100), not copied here.",
+      "hold_state": null,
+      "source_gap": "Canonical task source starqNexus/data/starq-erp-tasks.json is absent from this workspace and the 437-vs-407 task discrepancy (D2) is unresolved. No ERP tasks were imported or invented. Tasks may be added by a human with a Room authorization reference."
+    },
+    {
+      "id": "hoadha",
+      "name": "Hoadhaa",
+      "prefix": "HOA",
+      "description": "Hoadhaa Dev Studio programme. Human-operated PM board.",
+      "hold_state": null,
+      "source_gap": "Task sources starqNexus/data/hoadha-*.json and 03_PROJECTS/hoadha/HOADHA_DEV_STUDIO/ are absent from this workspace. No Hoadhaa tasks were imported or invented. Tasks may be added by a human with a Room authorization reference."
+    }
+  ]
+}

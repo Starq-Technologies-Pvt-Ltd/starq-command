@@ -1,0 +1,99 @@
+{
+  "schema": "starq.command.lifecycle.config/v1",
+  "note": "Dedicated isolated read-only Command observation profile. This file is selected only by the explicitly named observation-only lifecycle commands; the full-floor lifecycle.config.json remains the full profile source.",
+  "workspace_root": "D:\\StarqTech",
+  "node": "D:\\StarqTech\\00_STARQ_HQ\\operations\\herdr-floor\\runtime\\nodejs\\node.exe",
+  "system_root": "C:\\Windows",
+  "inspection_tools": {
+    "powershell": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "netstat": "C:\\Windows\\System32\\netstat.exe"
+  },
+  "host": "127.0.0.1",
+  "timeouts_ms": {
+    "identity": 10000,
+    "health": 30000,
+    "graceful_exit": 10000,
+    "broker_request": 15000,
+    "agent_stop": 120000
+  },
+  "components": [
+    {
+      "name": "data",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\data-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5177,
+      "depends_on": [],
+      "health": {
+        "path": "/api/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": { "health.overall": "OK" },
+        "json_has": ["assembled_at", "workspace", "health"]
+      }
+    },
+    {
+      "name": "building",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\building-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5178,
+      "depends_on": [],
+      "health": {
+        "path": "/api/building/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": { "integrity": "SOURCE_READ" },
+        "json_has": ["generated_at", "origin", "integrity"]
+      }
+    },
+    {
+      "name": "ui",
+      "kind": "vite",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\node_modules\\vite\\dist\\node\\index.js",
+      "vite_config": "00_STARQ_HQ\\operations\\starq-command\\observation\\vite.config.ts",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command\\observation",
+      "port": 5173,
+      "depends_on": ["data", "building"],
+      "health": {
+        "path": "/",
+        "status": 200,
+        "content_type": "text/html",
+        "body_includes": ["STARQ // COMMAND · OBSERVATION ONLY", "<div id=\"root\"></div>"]
+      }
+    }
+  ],
+  "profile": {
+    "name": "command-observation-only/v1",
+    "definition": "UI and passive projections only. All API methods are GET/HEAD; no Herdr, worker admission, Room event adapter, terminal/process-control UI or Room writes are composed.",
+    "observation_only": true,
+    "worker_admission": false,
+    "room_event_adapter": false,
+    "process_control": false,
+    "agent_launch": false,
+    "required_components": ["data", "building", "ui"],
+    "runtime_directory": "00_STARQ_HQ\\operations\\starq-command\\.command-runtime-observation",
+    "shared_lock_file": "00_STARQ_HQ\\operations\\starq-command\\.command-runtime\\lifecycle.lock",
+    "required_files": [
+      "00_STARQ_HQ\\operations\\starq-command\\Start-Command-Observation.bat",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\observation-start.ps1",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\command-lifecycle.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle\\owner.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle\\config.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle\\gates.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle\\inspect.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle\\lock.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\scripts\\lifecycle-child.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\server\\data-service.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\server\\building-service.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\observation\\ObservationApp.tsx",
+      "00_STARQ_HQ\\operations\\starq-command\\observation\\http-boundary.mjs",
+      "00_STARQ_HQ\\operations\\starq-command\\observation\\vite.config.ts",
+      "00_STARQ_HQ\\operations\\starq-lifecycle\\runtime-policy.mjs",
+      "00_STARQ_HQ\\operations\\herdr-floor\\src\\rule0.mjs",
+      "00_STARQ_HQ\\operations\\herdr-floor\\src\\launcher.mjs",
+      "00_STARQ_HQ\\operations\\herdr-floor\\src\\windows-containment.mjs",
+      "00_STARQ_HQ\\operations\\herdr-floor\\src\\containment-config.mjs"
+    ]
+  }
+}

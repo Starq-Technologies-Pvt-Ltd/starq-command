@@ -1,0 +1,179 @@
+PS D:\StarqTech\00_STARQ_HQ\operations> Get-ChildItem D:\!starq\00_STARQ_HQ -Force |
+>> Select-Object Name,
+>>               @{N='Type';E={if($_.PSIsContainer){'DIR'}else{'FILE'}}},
+>>               LastWriteTime |
+>> Sort-Object Name
+
+Name                                                  Type LastWriteTime
+----                                                  ---- -------------
+.last_generation                                      FILE 28/05/2026 21:07:17
+_answers_pages                                        DIR  13/08/2026 22:40:02
+2026-08-24_HANDOVER.md                                FILE 24/08/2026 02:58:29
+2026-08-24_HANDOVER-2.md                              FILE 24/08/2026 10:18:34
+2026-08-24_SESSION_RECORD.html                        FILE 24/08/2026 01:36:55
+2026-08-24_STARQERP_FINAL_BLUEPRINT.md                FILE 24/08/2026 02:38:36
+2026-08-24_STARQERP_LAUNCH_PROGRAM.md                 FILE 24/08/2026 02:57:08
+2026-08-25_BOARD-HYGIENE-AND-GOVERNANCE-STANDARD.md   FILE 25/08/2026 17:48:55
+2026-08-28_NEXUS-PROGRESS-REPORTING-STANDARD.md       FILE 28/08/2026 17:22:51
+2026-08-31-CLOSEOUT-HANDOFF.md                        FILE 02/09/2026 12:15:35
+2026-09-14_CONTINUITY_PLAN_DEGRADED_COMMAND.md        FILE 14/09/2026 10:38:02
+2026-09-14_MASTER_PLAN_TWO_LANE_HANDOFF.md            FILE 14/09/2026 03:56:15
+2026-09-14_NEXUSHQ_COMPLETION_PLAN.md                 FILE 15/09/2026 00:08:45
+2026-09-14_NEXUSHQ_FINAL_CLOSEOUT_REPORT.md           FILE 15/09/2026 00:16:05
+AgentOS                                               DIR  27/05/2026 17:49:51
+answers.pdf                                           FILE 13/08/2026 22:39:08
+BLUEPRINT_v1.md                                       FILE 18/08/2026 23:46:52
+BRAND_IDENTITY.md                                     FILE 05/08/2026 20:15:29
+build_data.py                                         FILE 27/05/2026 18:07:29
+corporate                                             DIR  29/08/2026 12:16:01
+data.json                                             FILE 27/05/2026 18:22:04
+decisions.json                                        FILE 02/10/2026 20:23:20
+decisions.json.bak-pre-dec100                         FILE 14/09/2026 13:44:44
+decisions.json.bak-pre-dec100-refine                  FILE 28/09/2026 18:14:23
+design-repo                                           DIR  27/05/2026 07:03:50
+ELDER_MASTER_EXECUTION_PLAN_AND_SBU_FRAMEWORK.md      FILE 21/08/2026 22:31:34
+hermes_agentOS_wsl_directive.html                     FILE 27/05/2026 17:53:49
+HERMES_STARQ_OS_INSTRUCTION.md                        FILE 27/05/2026 17:59:21
+index.html                                            FILE 27/05/2026 18:21:05
+infrastructure                                        DIR  28/09/2026 22:14:05
+MASTER_CORPORATE_BLUEPRINT_AND_SCOPE_SPECIFICATION.md FILE 21/08/2026 12:11:38
+MCQ_SYSTEM.md                                         FILE 27/05/2026 07:03:19
+Mushthaq Source of Funds                              DIR  12/08/2026 17:30:31
+nexus_soul.md                                         FILE 18/08/2026 23:50:10
+operations                                            DIR  03/10/2026 12:09:06
+PLANNING_STANDARD.md                                  FILE 24/08/2026 01:33:29
+PROJECT-REGISTER.md                                   FILE 29/08/2026 10:16:58
+README.md                                             FILE 11/08/2026 01:49:48
+reports                                               DIR  13/09/2026 13:18:27
+starq_os_hermes_directive.html                        FILE 27/05/2026 17:59:22
+telegram                                              DIR  30/09/2026 11:25:35
+THREE_DOMAINS_v1.md                                   FILE 27/05/2026 06:19:37
+verticals                                             DIR  10/08/2026 14:23:52
+vision                                                DIR  24/08/2026 17:12:36
+
+
+PS D:\StarqTech\00_STARQ_HQ\operations> Get-ChildItem D:\!starq\00_STARQ_HQ\operations -Force |
+>> Select-Object Name,
+>>               @{N='Type';E={if($_.PSIsContainer){'DIR'}else{'FILE'}}},
+>>               LastWriteTime |
+>> Sort-Object Name
+
+Name                                                                                   Type LastWriteTime
+----                                                                                   ---- -------------
+_build_admin_docset_lh.py                                                              FILE 16/08/2026 00:34:43
+2026-09-14_HERDR_FLOOR_COLD_START_SOP.md                                               FILE 02/10/2026 20:23:29
+archive                                                                                DIR  08/09/2026 16:11:20
+beta-execution-tower                                                                   DIR  11/09/2026 02:12:47
+calendar                                                                               DIR  26/08/2026 22:10:20
+commercial                                                                             DIR  09/09/2026 11:37:32
+COMMS_OPERATING_GUIDE.md                                                               FILE 08/09/2026 16:47:17
+DEVOPS_SOP.md                                                                          FILE 02/10/2026 20:23:29
+ELDER REQUEST DESIGN THE MASTER CURSOR PROMPT FOR THE STARQERP BETA EXECUTION TOWER.md FILE 11/09/2026 01:10:12
+finance                                                                                DIR  29/08/2026 10:11:25
+FOUNDER DIRECTIVE BETA FACTORY MODE.md                                                 FILE 11/09/2026 00:51:36
+governance                                                                             DIR  02/10/2026 20:23:29
+HERDR_TEAM_USER_MANUAL_2026-09-12.md                                                   FILE 12/09/2026 16:17:13
+herdr-floor                                                                            DIR  03/10/2026 02:46:03
+hermes-archive                                                                         DIR  30/09/2026 12:38:24
+hoadha-architecture-definition-2026-10-02                                              DIR  02/10/2026 18:56:01
+issued-lh                                                                              DIR  14/08/2026 23:01:28
+legal                                                                                  DIR  11/08/2026 01:57:41
+MASTER_CURSOR_PROMPT_BETA_EXECUTION_TOWER.md                                           FILE 28/09/2026 18:12:52
+MISSION_CONTROL_INDEX.md                                                               FILE 28/09/2026 18:13:24
+NEXUS_HOME_WIRING_TAKEOVER_20260909.md                                                 FILE 09/09/2026 01:00:16
+NEXUS_HQ_GOVERNANCE_RECONCILIATION_2026-09-12.md                                       FILE 12/09/2026 16:16:13
+NEXUS_PMO_001_PHASE0_RECONCILIATION_2026-09-12.md                                      FILE 12/09/2026 16:26:39
+NEXUS_PMO_HOADHA_BASELINE_2026-09-12.md                                                FILE 12/09/2026 16:28:25
+NEXUS_PMO_STARQERP_BASELINE_2026-09-12.md                                              FILE 28/09/2026 18:18:19
+ONBOARDING.md                                                                          FILE 28/09/2026 18:13:19
+OWNERS_MANUAL.md                                                                       FILE 08/09/2026 16:21:31
+people                                                                                 DIR  17/08/2026 01:55:23
+pi-company-os-seed                                                                     DIR  03/10/2026 12:09:54
+project_devops_l1_reset.md                                                             FILE 08/09/2026 12:00:09
+README.md                                                                              FILE 08/09/2026 16:21:10
+rnd                                                                                    DIR  10/08/2026 20:31:24
+scm                                                                                    DIR  29/08/2026 10:19:34
+Starq_DevOps_Owners_Manual.docx                                                        FILE 08/09/2026 16:21:43
+starq-command                                                                          DIR  03/10/2026 15:48:28
+starq-command-control                                                                  DIR  30/09/2026 05:54:34
+starq-doctrine-oct26-2026-10-02                                                        DIR  02/10/2026 20:53:57
+STARQERP_BETA_ARCHAEOLOGY_RECON_2026-09-11.md                                          FILE 11/09/2026 01:42:57
+starqerp-control-board                                                                 DIR  03/10/2026 11:45:36
+technology                                                                             DIR  10/09/2026 00:23:26
+
+
+PS D:\StarqTech\00_STARQ_HQ\operations> git -C D:\!starq grep -n -I -E "agent-comms|herdr-floor|pi-company-os-seed|starq-command-control|company-seats|D:\\\\!starq|D:/!starq" -- 00_STARQ_HQ/operations/starq-command
+00_STARQ_HQ/operations/starq-command/PHASE7_CORRECTIVE_IMPLEMENTATION_RECORD.md:6:Worktree: `D:/!starq/worktrees/vision-phase7-completion`
+00_STARQ_HQ/operations/starq-command/PHASE7_FREEZE_GATE_INVESTIGATION.md:16:Reproduce from `00_STARQ_HQ/operations/starq-command-control`:
+00_STARQ_HQ/operations/starq-command/PHASE7_FREEZE_GATE_INVESTIGATION.md:120:Two edits, both inside `starq-command-control/tests/capability-boundary.test.mjs`.
+00_STARQ_HQ/operations/starq-command/PHASE7_PREBUILD_HANDOVER.md:57:Run from this worktree's `00_STARQ_HQ/operations/starq-command`, with `STARQ_WORKSPACE=D:/!starq` for live reads. The isolated checkout does not contain the full canonical fingerprint/data and correctly reports UNAVAILABLE without this explicit source root. Never silently redirect production sources.
+00_STARQ_HQ/operations/starq-command/PHASE7_VISION_IMPLEMENTATION_RECORD.md:5:Worktree: `D:/!starq/worktrees/vision-phase7-completion`
+00_STARQ_HQ/operations/starq-command/README.md:83:| **Execution truth** | `.../activity.json` + `agent-comms/room.jsonl` | agents, events, conflicts, ledger freshness |
+00_STARQ_HQ/operations/starq-command/README.md:85:| **Ledger integrity** | `agent-comms/protocol/v1/ledger-epoch.json` + `ledger-epoch.mjs` | current-epoch verdict, frozen historical epochs |
+00_STARQ_HQ/operations/starq-command/README.md:86:| **Control-plane health** | `agent-comms/protocol/v1/health.mjs` | reachability of the canonical health model |
+00_STARQ_HQ/operations/starq-command/README.md:87:| **Identity** | `agent-comms/protocol/v1/identities.json` | canonical identity presentation |
+00_STARQ_HQ/operations/starq-command/README.md:88:| **Staff** | `agent-comms/protocol/v1/staff-state.json` | evidence-cited duty state |
+00_STARQ_HQ/operations/starq-command/evidence/phase7/control-regression.txt:2:> starq-command-control@0.1.0 test
+00_STARQ_HQ/operations/starq-command/evidence/phase7/control-regression.txt:471:      at TestContext.<anonymous> (file:///C:/Users/Ali%20Musthaq/.codex/worktrees/9de4/!starq/00_STARQ_HQ/operations/starq-command-control/tests/capability-boundary.test.mjs:1167:12)
+00_STARQ_HQ/operations/starq-command/evidence/phase7/control-regression.txt:489:      at TestContext.<anonymous> (file:///C:/Users/Ali%20Musthaq/.codex/worktrees/9de4/!starq/00_STARQ_HQ/operations/starq-command-control/tests/capability-boundary.test.mjs:1180:12)
+00_STARQ_HQ/operations/starq-command/integrations/herdr/herdr-client.mjs:74:/** Read recent audit events from herdr-floor logs (read-only inspection). */
+00_STARQ_HQ/operations/starq-command/integrations/herdr/herdr-client.mjs:78:      path.resolve(process.cwd(), "..", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
+00_STARQ_HQ/operations/starq-command/integrations/herdr/herdr-client.mjs:79:      path.resolve(process.cwd(), "00_STARQ_HQ", "operations", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
+00_STARQ_HQ/operations/starq-command/integrations/herdr/herdr-client.mjs:80:      path.resolve("D:", "!starq", "00_STARQ_HQ", "operations", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
+00_STARQ_HQ/operations/starq-command/integrations/room/event-adapter.ts:18:      path.resolve(process.cwd(), 'agent-comms', 'room-events.jsonl');
+00_STARQ_HQ/operations/starq-command/integrations/room/event-adapter.ts:21:      path.resolve(process.cwd(), 'agent-comms', 'scripts', 'send.mjs');
+00_STARQ_HQ/operations/starq-command/server/data-service.mjs:757:    reads: ['activity.json', 'staff-state.json', 'identities.json', 'identity-leases', 'herdr-floor/manifest.json'],
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:36: *     agent or seat (verified: zero hits across `agent-comms/protocol/v1/*.json`
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:765:      canonical_source: 'agent-comms/protocol/v1/identities.json',
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:775:      canonical_source: 'agent-comms/protocol/v1/identities.json',
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:787:      canonical_source: 'agent-comms/room.jsonl vs activity.json',
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:797:      canonical_source: 'activity.json vs agent-comms/protocol/v1/staff-state.json',
+00_STARQ_HQ/operations/starq-command/server/floor.mjs:814:      subject: herdrManifest.path ?? 'herdr-floor/manifest.json',
+00_STARQ_HQ/operations/starq-command/server/health-floor.mjs:401:        remediation_owner: 'agent-comms protocol owner — Command does not modify canonical protocol modules',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:60:  identities: 'agent-comms/protocol/v1/identities.json',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:61:  staffState: 'agent-comms/protocol/v1/staff-state.json',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:62:  roomLedger: 'agent-comms/room.jsonl',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:65:  protocol: 'agent-comms/protocol/v1',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:66:  identityLeases: 'agent-comms/cursors/identity-leases',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:72:  herdrManifest: '00_STARQ_HQ/operations/herdr-floor/manifest.json',
+00_STARQ_HQ/operations/starq-command/server/paths.mjs:78:  companySeats: 'company-seats.json',
+00_STARQ_HQ/operations/starq-command/src/schemas/seat-registry.ts:53:    'NOT CANONICAL. This module carries a stale parallel roster. Do not read CANONICAL_STARQ_FLEET as a source of provider, tier, model or launch policy — read server/staff-profile.mjs for declared seat metadata and 00_STARQ_HQ/operations/herdr-floor/manifest.json for declared launch facts.',
+00_STARQ_HQ/operations/starq-command/src/surfaces/attention.tsx:45: *      when the Founder last looked. `agent-comms/cursors/ali.json` records
+00_STARQ_HQ/operations/starq-command/src/surfaces/company-os.tsx:112:        detail={`Source: ${company.path ?? 'company-seats.json'}. This surface renders structure from a declared registry and never from prose. An absent registry is reported as an absence, not drawn as an empty company.`}
+00_STARQ_HQ/operations/starq-command/src/surfaces/herdr.tsx:340:              cd D:\!starq\00_STARQ_HQ\operations\herdr-floor<br />
+00_STARQ_HQ/operations/starq-command/tests/company-os.test.tsx:42:const registryText = readFileSync(path.join(root, 'company-seats.json'), 'utf8');
+00_STARQ_HQ/operations/starq-command/tests/company-os.test.tsx:362:    const loaded = loadCompanyOs(root, 'company-seats.json');
+00_STARQ_HQ/operations/starq-command/tests/company-os.test.tsx:525:    const absent = loadCompanyOs(path.join(root, 'no-such-dir'), 'company-seats.json');
+00_STARQ_HQ/operations/starq-command/tests/company-os.test.tsx:575:    expect(surface.read_only_sources).not.toContain('company-seats.json');
+00_STARQ_HQ/operations/starq-command/tests/floor-render.test.tsx:108:    expect(text).toMatch(/activity\.json vs agent-comms\/protocol\/v1\/staff-state\.json/);
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:24:  'agent-comms/room.jsonl',
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:25:  'agent-comms/protocol/v1/identities.json',
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:31:  fs.mkdirSync(path.join(ROOT, 'agent-comms', 'protocol', 'v1'), { recursive: true });
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:39:  fs.writeFileSync(path.join(ROOT, 'agent-comms', 'room.jsonl'), '{"eventId":"x"}');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:40:  fs.writeFileSync(path.join(ROOT, 'agent-comms', 'protocol', 'v1', 'identities.json'), '{}');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:95:      'agent-comms/room.jsonl/../../../_secrets/session.key',
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:96:      'agent-comms/protocol/v1/../../../../_secrets/session.key',
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:110:    ['traversal to workspace root', 'agent-comms/../../'],
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:118:    ['dot-dot hidden mid-path', 'agent-comms/room.jsonl/../../_secrets/session.key'],
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:129:    const result = guard('agent-comms/room.jsonl\u0000.txt');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:141:    const result = guard('agent-comms/room.jsonl');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:143:    expect(result.resolved).toBe(path.join(ROOT, 'agent-comms', 'room.jsonl'));
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:152:    const result = guard('agent-comms/./room.jsonl');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:157:    // 'agent-comms/room.jsonl.bak' must not pass a naive startsWith check.
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:158:    expect(guard('agent-comms/room.jsonl.bak').ok).toBe(false);
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:199:    const n = normalizeRequested('agent-comms\\room.jsonl');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:201:    expect(n.relative).toBe('agent-comms/room.jsonl');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:205:    const n = normalizeRequested('agent-comms/./protocol/./v1/identities.json');
+00_STARQ_HQ/operations/starq-command/tests/path-guard.test.ts:207:    expect(n.relative).toBe('agent-comms/protocol/v1/identities.json');
+00_STARQ_HQ/operations/starq-command/tests/phase3.test.ts:561:      'agent-comms/room.jsonl',
+00_STARQ_HQ/operations/starq-command/tests/phase3.test.ts:562:      'agent-comms/protocol/v1/identities.json',
+00_STARQ_HQ/operations/starq-command/tests/phase3.test.ts:563:      'agent-comms/protocol/v1/staff-state.json',
+00_STARQ_HQ/operations/starq-command/tests/phase3.test.ts:647:      'herdr-floor/manifest.json',
+00_STARQ_HQ/operations/starq-command/tests/phase3.test.ts:657:    expect(surface.read_only_sources).not.toContain('00_STARQ_HQ/operations/herdr-floor/manifest.json');
+00_STARQ_HQ/operations/starq-command/tests/phase5.test.ts:610:    // B2. `agent-comms/cursors/` is outside the declared read-only surface, so
+00_STARQ_HQ/operations/starq-command/tests/staff-board.test.tsx:256:    expect(staff.session_leases.source).toBe('agent-comms/cursors/identity-leases');
+00_STARQ_HQ/operations/starq-command/tests/staff-board.test.tsx:314:        path.join(surface.workspace.root!, 'agent-comms/protocol/v1/identities.json'),
+00_STARQ_HQ/operations/starq-command/tests/staff-board.test.tsx:402:        path.join(surface.workspace.root!, '00_STARQ_HQ/operations/herdr-floor/manifest.json'),
+00_STARQ_HQ/operations/starq-command/tests/staff-board.test.tsx:516:      '00_STARQ_HQ/operations/herdr-floor/manifest.json',
+00_STARQ_HQ/operations/starq-command/tests/staff-board.test.tsx:518:    expect(floor.phase3 ?? surface.phase3?.reads).toContain('herdr-floor/manifest.json');
+PS D:\StarqTech\00_STARQ_HQ\operations>

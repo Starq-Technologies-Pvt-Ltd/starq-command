@@ -1,0 +1,668 @@
+{
+  "schema": "starq-command-continuity/task-ledger/v1",
+  "generatedAtUtc": "2026-10-12T10:59:01Z",
+  "generatedBy": "claude (@elder) under Founder Room #9361; support/integration terms per #9362",
+  "checkpoint": {
+    "latestRoomSeqObserved": 9367,
+    "latestRoomRecordHash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+    "latestIndependentVerdictSeq": 9360,
+    "note": "Room head and independently verified evidence are tracked separately. A task's state is only as fresh as its cited seq."
+  },
+  "statusDefinitions": {
+    "ACCEPTED": "An independent verifier issued ACCEPT in canonical Room (and, where stated, the Founder recorded it). Scope is exactly what the verdict says; 'prospective' means current bytes/behaviour only, not historical provenance.",
+    "VERIFIED": "Facts re-checked by this package author against disk or Room at the checkpoint (hash, presence, chain). Not an acceptance.",
+    "REJECTED": "Latest independent verdict for the task is REJECT.",
+    "BLOCKED": "Cannot proceed or be accepted until a named prerequisite or decision is resolved.",
+    "PROPOSED": "Planned, recommended or mentioned, but no Founder execution authorization is recorded in Room.",
+    "UNKNOWN": "Evidence is absent, unlocated or contradictory; do not infer.",
+    "SUPERSEDED": "Replaced by a later task, decision or artifact (cited).",
+    "CLOSED": "Closed by a Founder scope decision, not by implementation acceptance."
+  },
+  "tasks": [
+    {
+      "id": "CMD-PHASE-1-5",
+      "title": "Command phases 1-5 (Building Shell, Truth & Health, Dev Studio, ERP Process, Founder Attention)",
+      "programme": "Command foundations",
+      "state": "ACCEPTED",
+      "stateQualifier": "Historical. The README records all five as Complete; phases 3-5 are additionally marked Founder-authorised 29 Sep 2026 (bases 3487fd7, 38037d5). Not re-verified in this package.",
+      "owner": "historical",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "starq-command/README.md (sha256 05b6c5dc97be70b0650d358f5c4af2e482e902327e7ceac23b48fb54b24fccd4)"
+      ]
+    },
+    {
+      "id": "CMD-PHASE-6-7",
+      "title": "Phases 6-7",
+      "programme": "Command foundations",
+      "state": "UNKNOWN",
+      "stateQualifier": "README says phases 6-7 are not authorised or implemented, but PHASE7_*.md records exist and Room #8402/#8407 record a Founder-accepted final visual/responsive wave (HEAD 1e993b2). The README phase list is dated 29 Sep and is stale relative to those records. Not reconciled here.",
+      "owner": "UNKNOWN",
+      "blockers": [
+        "Reconcile README phase list against PHASE7_* records and Room #8402-#8407"
+      ],
+      "dependsOn": [
+        "CMD-PHASE-1-5"
+      ],
+      "sources": [
+        "starq-command/README.md",
+        "starq-command/PHASE7_IMPLEMENTATION_PLAN.md",
+        "starq-command/PHASE7_VISION_IMPLEMENTATION_RECORD.md",
+        "Room #8402",
+        "Room #8407"
+      ]
+    },
+    {
+      "id": "CMD-DI-0-1",
+      "title": "Pre-change source hash baseline (52-file core) plus B7 extension",
+      "programme": "CMD-DI Wave 0",
+      "state": "ACCEPTED",
+      "stateQualifier": "Core baseline 52/52 accepted historically (corrected package line 745). B7 extension (53 entries) is evidence-closed for pinning/reproducibility only; it is not execution authority. Current tree: 41/52 core pins match, 11 drifted (Room #9290, #9314); the drifted files are pinned by the 126-file recovery baseline.",
+      "owner": "historical",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:745",
+        "Room #9290",
+        "Room #9308",
+        "Room #9311",
+        "Room #9314",
+        "Room #9317"
+      ]
+    },
+    {
+      "id": "CMD-DI-0-2",
+      "title": "Navigation test audit & presentation guard identification",
+      "programme": "CMD-DI Wave 0",
+      "state": "ACCEPTED",
+      "stateQualifier": "Vision independent ACCEPT (bounded) #9310; Founder prospective gate APPROVAL #9311. Qualifications: no standalone raw test log; audit section 8 has stale 'Verified by @vision' wording; not historical task acceptance.",
+      "owner": "@opencode (audit author); @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-0-1"
+      ],
+      "sources": [
+        "DESIGN_INTEGRATION_TEST_AUDIT_2026-10-10.md (sha256 0c2ccc69494c98c05bdbc73cba40a4a8f05930d50181e9aa109e24f1ac18a6e4)",
+        "Room #9309",
+        "Room #9310",
+        "Room #9311"
+      ]
+    },
+    {
+      "id": "CMD-DI-0-3",
+      "title": "Antigravity (AG) coordination reconciliation (P3A-1..6)",
+      "programme": "CMD-DI Wave 0",
+      "state": "ACCEPTED",
+      "stateQualifier": "Vision ACCEPT of the memo #9320; OpenCode ACCEPT of the corrected P3A matrix #9326 (after REJECT #9323); Founder prospective APPROVAL with P3A dispositions #9327. The AG transcript digest discrepancy is unresolved and the transcript cannot be anchored (it is an active append log).",
+      "owner": "@antigravity (author); @vision, @opencode (verifiers)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-0-2"
+      ],
+      "sources": [
+        "DESIGN_INTEGRATION_AG_COORDINATION_2026-10-10.md (sha256 e0676614b4d46ce6f5f812c2db55f937b551a7d95549a8c7c0a88c3e0675f6c8)",
+        "Room #9313-#9327"
+      ]
+    },
+    {
+      "id": "CMD-DI-1-1",
+      "title": "New component: staff-glance board (props-only, UNKNOWN-not-zero)",
+      "programme": "CMD-DI Wave 1",
+      "state": "ACCEPTED",
+      "stateQualifier": "Prospective. REJECT #9330 (render test absent) -> six tests implemented under #9348 -> Vision ACCEPT #9353 -> Founder recorded ACCEPTED #9354. Historical dispatch/acceptance remains UNKNOWN.",
+      "owner": "@cursor (engineering); @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-0-2",
+        "CMD-DI-0-3"
+      ],
+      "sources": [
+        "Room #9330",
+        "Room #9333",
+        "Room #9348",
+        "Room #9349",
+        "Room #9353",
+        "Room #9354"
+      ]
+    },
+    {
+      "id": "CMD-DI-1-2",
+      "title": "New component: sessions + Herdr panes board",
+      "programme": "CMD-DI Wave 1",
+      "state": "ACCEPTED",
+      "stateQualifier": "Prospective/static ACCEPT #9330, Founder recorded #9331; its three tests also passed in Vision's independent run #9353. No runtime PASS claimed.",
+      "owner": "historical implementation; @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-0-2"
+      ],
+      "sources": [
+        "Room #9330",
+        "Room #9331",
+        "Room #9353",
+        "Room #9354"
+      ]
+    },
+    {
+      "id": "CMD-DI-1-3",
+      "title": "CSS tier ladder (10/13/13-600/11/11-mono) and 320px mobile reflow",
+      "programme": "CMD-DI Wave 1",
+      "state": "REJECTED",
+      "stateQualifier": "Latest verdict Vision #9360: strict descendant-overflow criteria fail on 12 routes (company-founder, company-infrastructure, company-portfolio, company-seats, company-structure, erp-integrity, erp-process, hoadha-overview, hoadha-waves, studio-capacity, studio-staff, system-sources). Page roots are 310/310 with no horizontal movement. Dark-mode/appearance parity was revised to single-theme and DEFERRED by #9354, so it is not a blocker. The #9355 four-route 320px pass does not cancel the #9360 twelve-route rejection (Cursor #9363).",
+      "owner": "@cursor (engineering); @vision (verifier)",
+      "blockers": [
+        "12-route descendant overflow (#9360)",
+        "Founder decision on a targeted corrective/recapture round (#9360 Action Required)"
+      ],
+      "dependsOn": [
+        "CMD-DI-0-2"
+      ],
+      "sources": [
+        "Room #9330",
+        "Room #9334",
+        "Room #9337",
+        "Room #9341",
+        "Room #9343",
+        "Room #9348-#9355",
+        "Room #9360",
+        "Room #9363"
+      ]
+    },
+    {
+      "id": "CMD-DI-1-4",
+      "title": "Studio presentation grouping, presentation-only (grouped nav + legend)",
+      "programme": "CMD-DI Wave 1",
+      "state": "REJECTED",
+      "stateQualifier": "Latest verdict Vision #9360 (REJECT). The 328-capture single-theme corpus (41 routes x 8 viewports) is intact. The manifest records 21 HTTP errors across 14 rows: 15 x /api/herdr/state 500 and 6 x 403 (4 raw-path, 2 runtime-state per Cursor #9363; the 15/6 split was re-counted by Elder). Vision reproduced the 500 and has no overflow/typography metrics; OpenCode #9357 body is truncated. Historical byte-unchanged criterion for building-route.ts is UNPROVEN and not waived (#9335). Vision is appointed visual sign-off reviewer (#9344); no sign-off issued.",
+      "owner": "@opencode (integration evidence); @vision (verifier and appointed design/UX sign-off)",
+      "blockers": [
+        "/api/herdr/state HTTP 500 and 21 HTTP-error manifest entries",
+        "manifest lacks overflow/typography metrics",
+        "#9357 report body incomplete",
+        "Founder decision on corrective/recapture round"
+      ],
+      "dependsOn": [
+        "CMD-DI-0-2",
+        "CMD-DI-1-3"
+      ],
+      "sources": [
+        "Room #9330",
+        "Room #9335",
+        "Room #9340",
+        "Room #9344",
+        "Room #9345",
+        "Room #9347",
+        "Room #9352-#9357",
+        "Room #9360",
+        "Room #9363"
+      ]
+    },
+    {
+      "id": "CMD-DI-1-5",
+      "title": "Studio Overview: mount StaffGlance in company.tsx -> DevStudio",
+      "programme": "CMD-DI Wave 1",
+      "state": "ACCEPTED",
+      "stateQualifier": "Vision ACCEPT #9360, bounded to the Studio Overview mount and honest UNKNOWN presentation (all six buckets UNKNOWN). company.tsx and ERP overview.tsx match the preserved recovery pins. Historical residual-scope/authorship of company.tsx remains UNKNOWN (#9335). No Founder acknowledgement of #9360 is recorded at checkpoint #9362.",
+      "owner": "@opencode (evidence); @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-1-1"
+      ],
+      "sources": [
+        "Room #9330",
+        "Room #9335",
+        "Room #9341",
+        "Room #9343",
+        "Room #9353",
+        "Room #9360"
+      ]
+    },
+    {
+      "id": "CMD-DI-2-1",
+      "title": "Staff surface: card/grid view + status grouping",
+      "programme": "CMD-DI Wave 2",
+      "state": "BLOCKED",
+      "stateQualifier": "Historical closure not supported (#9295). Static readiness assessed (#9307, accepted #9308). Wave 2 is serialized after Wave 1 approval; no prospective verification is authorized.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Wave 1 not closed",
+        "no Founder authorization for Wave 2 verification/implementation"
+      ],
+      "dependsOn": [
+        "CMD-DI-0-2",
+        "CMD-DI-1-1",
+        "CMD-DI-1-2",
+        "CMD-DI-1-3",
+        "CMD-DI-1-4",
+        "CMD-DI-1-5"
+      ],
+      "sources": [
+        "Room #9295",
+        "Room #9307",
+        "Room #9308"
+      ]
+    },
+    {
+      "id": "CMD-DI-2-2",
+      "title": "Project board generalization",
+      "programme": "CMD-DI Wave 2",
+      "state": "BLOCKED",
+      "stateQualifier": "As 2-1. P3A-6 decoupled from 2-2 by Founder #9327; server/building.mjs, server/building-service.mjs and the BuildingProjection contract are read-only boundaries.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Wave 1 not closed",
+        "no Founder authorization"
+      ],
+      "dependsOn": [
+        "CMD-DI-1-1",
+        "CMD-DI-1-2",
+        "CMD-DI-1-3",
+        "CMD-DI-1-4",
+        "CMD-DI-1-5"
+      ],
+      "sources": [
+        "Room #9295",
+        "Room #9307",
+        "Room #9327"
+      ]
+    },
+    {
+      "id": "CMD-DI-2-3",
+      "title": "Company OS: advisory reporting disclaimer",
+      "programme": "CMD-DI Wave 2",
+      "state": "UNKNOWN",
+      "stateQualifier": "A one-file worker evidence report exists, but there is no task-specific Room dispatch or independent verdict (#9295).",
+      "owner": "UNKNOWN",
+      "blockers": [
+        "no independent verification",
+        "Wave 1 not closed"
+      ],
+      "dependsOn": [
+        "CMD-DI-1-1",
+        "CMD-DI-1-2",
+        "CMD-DI-1-3",
+        "CMD-DI-1-4",
+        "CMD-DI-1-5"
+      ],
+      "sources": [
+        "DESIGN_INTEGRATION_CMD_DI_2_3_EVIDENCE_2026-10-10.md (sha256 04ed7b38044049050a09fea2476bce4f0c9e07d744dda5e03d4ad67d506bf6ee)",
+        "Room #9292",
+        "Room #9293",
+        "Room #9295"
+      ]
+    },
+    {
+      "id": "CMD-DI-2-4",
+      "title": "Rooms: read-only chronological conversation view (EvidenceRoomsPeer)",
+      "programme": "CMD-DI Wave 2",
+      "state": "BLOCKED",
+      "stateQualifier": "Static readiness found it unmet against a missing message contract (#9307/#9308).",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "missing message contract",
+        "Wave 1 not closed"
+      ],
+      "dependsOn": [
+        "CMD-DI-1-1",
+        "CMD-DI-1-2",
+        "CMD-DI-1-3",
+        "CMD-DI-1-4",
+        "CMD-DI-1-5"
+      ],
+      "sources": [
+        "Room #9295",
+        "Room #9307",
+        "Room #9308"
+      ]
+    },
+    {
+      "id": "CMD-DI-2-5",
+      "title": "Work interface scope decision",
+      "programme": "CMD-DI Wave 2",
+      "state": "CLOSED",
+      "stateQualifier": "Closed by Founder decision B3: Work is IN SCOPE, realized by 3-2a/b/c. Not an implementation task.",
+      "owner": "Founder",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:736",
+        "Room #9295",
+        "Room #9306"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-1",
+      "title": "Staff glance counts (server side, /api/floor)",
+      "programme": "CMD-DI Wave 3",
+      "state": "ACCEPTED",
+      "stateQualifier": "Prospective ACCEPT #9269; corrective ACCEPT #9272 (unavailable roster publishes no counts; verified-empty publishes six zeroes). Historical REJECTED/provenance record retained; pre-image UNKNOWN.",
+      "owner": "@codex (accountable owner of any further server/floor.mjs work per #9327); @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "Room #9263",
+        "Room #9269",
+        "Room #9272",
+        "evidence/CMD-DI-PROSPECTIVE-RECOVERY-BASELINE-2026-10-11.json"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-2",
+      "title": "Work-package contract design (original)",
+      "programme": "CMD-DI Wave 3",
+      "state": "SUPERSEDED",
+      "stateQualifier": "Folded into CMD-DI-3-2a.",
+      "owner": "n/a",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:737"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-2a",
+      "title": "Work-package contract (src/lib/contracts.ts WorkPackageRow)",
+      "programme": "CMD-DI Wave 3",
+      "state": "ACCEPTED",
+      "stateQualifier": "Prospective acceptance of the current contract only: contracts.ts 40,629 B / 81f6e9f6...d29d99d. Historical acceptance pin and continuity UNKNOWN. Frozen.",
+      "owner": "historical; @opencode (prospective refreeze verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-2-5"
+      ],
+      "sources": [
+        "CMD_DI_3_2A_PROSPECTIVE_REFREEZE_VERIFICATION_2026-10-11.md (sha256 bc5a1fa6d22173d01252135e199620371636a06a180d06f1f457a92e9af475ee)",
+        "Room #9261",
+        "Room #9290"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-2b",
+      "title": "Work-package surface (read-only UI, filters, separate from Evidence->Rooms)",
+      "programme": "CMD-DI Wave 3",
+      "state": "ACCEPTED",
+      "stateQualifier": "Prospective ACCEPT #9269 (route supplies null until an authorized data source exists; UI shows UNKNOWN). Historical rejections and provenance UNKNOWNs retained.",
+      "owner": "historical; @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-3-2a"
+      ],
+      "sources": [
+        "Room #9269",
+        "Room #9323",
+        "Room #9326"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-2c",
+      "title": "Contract-fulfilment test (tests/work-package-contract-fulfilment.test.tsx)",
+      "programme": "CMD-DI Wave 3",
+      "state": "ACCEPTED",
+      "stateQualifier": "The work was done outside a task-specific directive; the Founder recorded a provenance exception (#9270). Vision REJECT #9273 -> test-only corrective #9274/#9275 -> Vision ACCEPT #9276 (POST 25,492 B / a5e72855...d8b4059; suite 924/918/6).",
+      "owner": "@opencode (builder); @vision (verifier)",
+      "blockers": [],
+      "dependsOn": [
+        "CMD-DI-3-2a",
+        "CMD-DI-3-2b"
+      ],
+      "sources": [
+        "Room #9270",
+        "Room #9271",
+        "Room #9273",
+        "Room #9274",
+        "Room #9275",
+        "Room #9276"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-3",
+      "title": "Observation candidate pin verification",
+      "programme": "CMD-DI Wave 3",
+      "state": "ACCEPTED",
+      "stateQualifier": "ACCEPTED as verification work (#9282) and as a corrected, internally consistent 27-entry prospective manifest (#9288, after REJECT #9285). The Observation CANDIDATE itself is NOT accepted; candidate acceptance is BLOCKED (provenance UNKNOWNs, G-CONTAINMENT unresolved).",
+      "owner": "@codex (builder); @opencode (verifier)",
+      "blockers": [
+        "Observation candidate acceptance not authorized",
+        "G-CONTAINMENT unresolved"
+      ],
+      "dependsOn": [
+        "CMD-DI-3-2c"
+      ],
+      "sources": [
+        "Room #9277-#9288"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-4",
+      "title": "Post-change SHA-256 source manifest (55 files: src/** + server/data-service.mjs + server/floor.mjs)",
+      "programme": "CMD-DI Wave 3",
+      "state": "BLOCKED",
+      "stateQualifier": "Preflight BLOCKED #9290. Not authorized; locked in every later Founder directive. The planned output .source-baseline-2026-10-10-post.json does not exist (#9290).",
+      "owner": "@codex (preflight author)",
+      "blockers": [
+        "Wave 1-2 task closure not established",
+        "no explicit CMD-DI-3-4 execution authorization"
+      ],
+      "dependsOn": [
+        "CMD-DI-1-3",
+        "CMD-DI-1-4",
+        "CMD-DI-2-1",
+        "CMD-DI-2-2",
+        "CMD-DI-2-3",
+        "CMD-DI-2-4",
+        "CMD-DI-3-3"
+      ],
+      "sources": [
+        "Room #9289",
+        "Room #9290",
+        "Room #9302"
+      ]
+    },
+    {
+      "id": "CMD-DI-4-1",
+      "title": "Architecture guard updates (per audit)",
+      "programme": "CMD-DI Wave 4",
+      "state": "PROPOSED",
+      "stateQualifier": "Planned in the corrected package; Wave 4 explicitly unauthorized (#9274, #9283, #9302 and later).",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Wave 4 unauthorized"
+      ],
+      "dependsOn": [
+        "CMD-DI-0-2"
+      ],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md (Wave 4)",
+        "Room #9302"
+      ]
+    },
+    {
+      "id": "CMD-DI-4-2",
+      "title": "New design-integration render tests",
+      "programme": "CMD-DI Wave 4",
+      "state": "PROPOSED",
+      "stateQualifier": "Planned; unauthorized. Note: tests/design-integration.test.tsx already exists and is used by 1-1/1-2 evidence (#9330, #9353); the attribution of that file to 4-2 is UNKNOWN.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Wave 4 unauthorized"
+      ],
+      "dependsOn": [],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md (Wave 4)",
+        "Room #9330"
+      ]
+    },
+    {
+      "id": "CMD-DI-4-3",
+      "title": "Production build verification (mandatory, B2)",
+      "programme": "CMD-DI Wave 4",
+      "state": "PROPOSED",
+      "stateQualifier": "Mandatory before Gate 1 release; unauthorized.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Wave 4 unauthorized"
+      ],
+      "dependsOn": [
+        "CMD-DI-3-4",
+        "CMD-DI-4-1",
+        "CMD-DI-4-2"
+      ],
+      "sources": [
+        "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:650"
+      ]
+    },
+    {
+      "id": "DP-GATE-A-PREP-001",
+      "title": "Deadpool Gate A preparation: deterministic LLM-free Room watcher (T1-T11)",
+      "programme": "Floor operations",
+      "state": "UNKNOWN",
+      "stateQualifier": "Authorized for PREPARATION ONLY at #9258/#9259 (Codex builder, Vision verifier). No build or T1-T11 result found in Room #9260-#9362. The authorization expires 7 days after append, about 2026-10-17T22:46Z, unless renewed.",
+      "owner": "@codex (builder); @vision (verifier); @deadpool (subject)",
+      "blockers": [
+        "no recorded build/result",
+        "activation requires a separate Founder directive"
+      ],
+      "dependsOn": [],
+      "sources": [
+        "Room #9258",
+        "Room #9259"
+      ]
+    },
+    {
+      "id": "ROOM-FORMAT-INVESTIGATION",
+      "title": "Room/Telegram literal \\n formatting investigation",
+      "programme": "Communications",
+      "state": "CLOSED",
+      "stateQualifier": "Bounded diagnostic and offline reproduction ACCEPTED (#9304); Founder closure #9305. Historical root cause UNKNOWN; no production correction authorized.",
+      "owner": "@vision, @codex",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "Room #9296-#9305"
+      ]
+    },
+    {
+      "id": "TELEGRAM-TRUNCATION",
+      "title": "Starq Telegram relay truncates at ~4,000 characters",
+      "programme": "Communications",
+      "state": "PROPOSED",
+      "stateQualifier": "Recorded as a separate open engineering issue requiring its own authorization (#9305).",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "no authorization"
+      ],
+      "dependsOn": [],
+      "sources": [
+        "Room #9298",
+        "Room #9305"
+      ]
+    },
+    {
+      "id": "MODS",
+      "title": "Minimum Operational Development Studio (accelerated strategy)",
+      "programme": "Strategy",
+      "state": "PROPOSED",
+      "stateQualifier": "Named by the Founder as the goal (#9354, #9358, #9361), and used to justify the single-theme revision in #9354. No Room record defines its scope or acceptance criteria; the definition is UNKNOWN beyond these references.",
+      "owner": "Founder",
+      "blockers": [
+        "no written definition / acceptance criteria located"
+      ],
+      "dependsOn": [
+        "CMD-DI-1-3",
+        "CMD-DI-1-4"
+      ],
+      "sources": [
+        "Room #9354",
+        "Room #9358",
+        "Room #9361"
+      ]
+    },
+    {
+      "id": "MISSION-SERP-AIKIDO-BASELINE",
+      "title": "First real product mission: StarqERP baseline assessment using Aikido",
+      "programme": "Strategy",
+      "state": "PROPOSED",
+      "stateQualifier": "Mentioned only as a 'planned' mission in #9358. No authorization, owner or scope found. Historical Aikido usage exists (SERP-226 gate #246; SERP-382 triage blocked on a Founder console export #260-#262), but that is prior context, not this mission. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "no Founder execution authorization",
+        "Room #9208 ALL-STOP in force"
+      ],
+      "dependsOn": [
+        "MODS"
+      ],
+      "sources": [
+        "Room #9358",
+        "Room #246",
+        "Room #260",
+        "Room #261",
+        "00_STARQ_HQ/decisions.json (DEC-100)",
+        "Room #9364"
+      ]
+    },
+    {
+      "id": "SERP-354",
+      "title": "Capture, refund and settlement commands into canonical structures (StarqERP, C2B)",
+      "programme": "StarqERP",
+      "state": "BLOCKED",
+      "stateQualifier": "Board status in_progress; work_state PRESERVED, i.e. deliberately stopped by the Founder with branches, commits and tests preserved and not resumed (command_work_model.json; serp_reclassification.md:74). Listed as subsequent work in #9358. Not authorized to resume. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization. Title conflict: AG #9364 describes SERP-354 as a principal-tenancy payment boundary, while command_work_model.json titles it capture/refund/settlement. Unreconciled; the work-model title is retained.",
+      "owner": "UNASSIGNED",
+      "blockers": [
+        "Founder stop; resumption not authorized",
+        "depends on first mission"
+      ],
+      "dependsOn": [
+        "MISSION-SERP-AIKIDO-BASELINE"
+      ],
+      "sources": [
+        "operations/starqerp-control-board/command_work_model.json",
+        "operations/starqerp-control-board/serp_reclassification.md:74",
+        "Room #8164-#8334",
+        "Room #9358",
+        "00_STARQ_HQ/decisions.json (DEC-100)",
+        "Room #9364"
+      ]
+    },
+    {
+      "id": "CONT-PKG-9358",
+      "title": "Continuity package (Deadpool attempt)",
+      "programme": "Continuity",
+      "state": "SUPERSEDED",
+      "stateQualifier": "Incomplete: 9 stubs; EVIDENCE_INDEX.json was not valid JSON; CONTINUITY_MANIFEST.json was absent. Preserved at continuity/_prior/deadpool-draft-20261012/ with SHA256SUMS. Superseded by #9361.",
+      "owner": "@deadpool",
+      "blockers": [],
+      "dependsOn": [],
+      "sources": [
+        "Room #9358",
+        "Room #9359",
+        "Room #9361",
+        "continuity/_prior/deadpool-draft-20261012/SHA256SUMS"
+      ]
+    },
+    {
+      "id": "CONT-PKG-9361",
+      "title": "Continuity package recovery and completion (this package)",
+      "programme": "Continuity",
+      "state": "BLOCKED",
+      "stateQualifier": "Codex #9366: manifest/checkpoint integrity ACCEPTED at #9364; START_HERE cold-start procedure REJECTED (reconciliation step wrote canonical files before authority was established). Founder #9367 authorized a bounded correction: steps 1-6 are now read-only/report-only, with a Step 7 owner/scope write gate, and timestamps are measured or declared unverified. Re-parked for review; no self-acceptance. Pre-correction copy: _prior/elder-20261012-cp9364/.",
+      "owner": "@elder (claude)",
+      "blockers": [
+        "Codex independent review pending (#9362)"
+      ],
+      "dependsOn": [
+        "CONT-PKG-9358"
+      ],
+      "sources": [
+        "Room #9361",
+        "Room #9362",
+        "Room #9363",
+        "Room #9364",
+        "Room #9365",
+        "Room #9366",
+        "Room #9367"
+      ]
+    }
+  ],
+  "generatedAtNote": "Measured system-clock UTC time at this write (#9367 correction). Prior values were not measured: 10:40:00Z (first draft, corrected per Cursor #9363), then 10:25:00Z, which Codex #9366 found later than the file mtime 10:20:05Z, the manifest generation 10:20:07Z and Room #9365 at 10:20:46Z. Those prior values are UNVERIFIED and superseded. The Room seq/hash checkpoint is the authoritative freshness marker."
+}

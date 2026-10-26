@@ -1,0 +1,146 @@
+PS D:\StarqTech\00_STARQ_HQ\operations> git -C D:\!starq ls-tree --name-only HEAD
+!
+.GeminiCLI
+.audit_reports_antigravity
+.avatar
+.cache
+.claude
+.dashboard_gen.py
+.design_iterate.py
+.gitignore
+.gitmodules
+.issues
+.starq
+.vscode
+.watchdog.py
+00_MASTER_CFO_AUDIT_BINDER_2026-08-25.docx
+00_STARQ_HQ
+01_PERSONAL_ACCOUNTANT
+01_PROJECT_MAP
+01_WIKI
+02_ANTRAC_NEXUS
+02_ORG
+03_PROJECTS
+03_VISION_PROTOTYPE
+04_IDEAS_EXPLORATIONS
+04_REPORTS
+05_HR
+05_WHATSAPP_INTEGRATION
+06_IDEAS
+06_QA_AUDITS
+07_ETHICS_SECURITY
+08_DATA_FILES
+09_CODE_SNIPPETS
+12_MISC
+ADMIN-ACTING-AS-GOVERNANCE.md
+AG_AUDIT_REMEDIATION_REPORT.md
+ANTR-020-OPERATIONAL-REALITY-SYNCHRONIZATION.md
+ANTRAC-ERP-DELIVERY-AUDIT.md
+ANTRAC-PROJECT-RESTRUCTURE-REPORT.md
+Antrac Nexus
+BOARD-ARCHITECTURE-REFERENCE.md
+CC_FIRST_PROMPT.md
+CLAUDE.md
+COLD_START_TAKEOVER_2026-08-26.md
+Codex instructions
+DATA_SYNC_AND_HOSTING.md
+DESIGN_SYSTEM_INTEGRATION_2026-06-11.md
+Dhiraagu domain
+ELDER-HANDOVER-ANTRAC-ORGSYNC.md
+FILE-MANIFEST.md
+FOLDER_MAP.md
+FOUNDING_DOCTRINE.md
+GUARDIAN-IDENTITY.md
+GUARDIAN-INBOX.md
+GUARDIAN-LOG.md
+GUARDIAN-MODE.md
+GUARDIAN-SCHEDULE.md
+GUARDIAN-STATUS.md
+Hoadha Ecosystem.docx
+Hoadha Ecosystem.md
+"Hoadha Merchant Node \342\200\224 Master Engineering & Agent-Swarm Execution Specification v1.0.md"
+IDENTITY-SEPARATION-GOVERNANCE.md
+INDEX.md
+KomputerMechanic-Hermes-Dashboard-Template.html
+MCSA 2025-26
+MCSA 2026-27
+MGCP
+MORNING-BRIEFING-TEMPLATE.md
+PORTAL_FINAL_PUSH.md
+PORTAL_HANDOVER.md
+PORTAL_STATE.md
+RELEASE-PACKAGE.md
+RISK-REGISTER.md
+SOPs
+STARQ-TECHNOLOGIES-PRODUCT-HIERARCHY.md
+STARQ
+STARQERP_Founder_to_Elder_State_of_the_Art_Audit_Requirements_2026-08-25.md
+STARQERP_National_Scale_State_of_the_Art_Assessment_2026-08-25.html
+STARQ_CI_AUDIT_READY_FINANCE_PACK.html
+STARQ_CI_AUDIT_READY_FINANCE_PACK.md
+STARQ_CI_Audit_Working_Papers_2026-08-25.xlsx
+STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md
+STARQ_COMMAND_PRODUCT_RECOVERY_IMPLEMENTATION_RECORD_2026-10-01.md
+STARQ_COMMAND_STRUCTURAL_IMPLEMENTATION_RECORD_2026-10-01.md
+STARQ_FOUNDATION_FREEZE_2026-06-11.md
+STARQ_NEXUS_CLAUDE_HANDOVER.md
+STARQ_NEXUS_FINAL_AUDIT.md
+STARQ_NEXUS_V2_ARCHITECTURE.md
+STARQ_PORTAL_SPEC.md
+Starq Technologies Pvt.docx
+Starq Technologies Pvt.md
+Starq Technologies Registration Docs
+THREE-PROJECT-RESTRUCTURE-HANDOVER.md
+UI-MIGRATION-REPORT.md
+VS_CODE_INDEPENDENT_AUDIT_REPORT.md
+Webhosting-Domain-Email-Application-Form-Filled-starq-mv-2026-08-20-FIELDS.txt
+_INBOX
+__HighPriority__
+__Inbox__
+_archive
+_audit
+_system
+_tmp_docx_inspect
+_vercel-sim
+academia
+aegis
+aegis_bridge_test
+aegis_packets
+agent-comms
+agent-roster.json
+athena-quiz-bot
+backups
+company-seats.json
+dashboard.html
+deepseek-harness-master.tar.gz
+docs
+dp perf.png
+hermes-core
+index.html
+library
+mockups
+mustarq land plot 20685
+new directive
+nexus_soul.txt
+orgsync-tasks-backup.json
+research
+scratch
+scripts
+snoop
+starq-shell
+starq-wire
+starqERP what means done.md
+starqNexus
+starqNexus.zip
+starqNexusMobileBeta
+starqOS Design System
+starqWeb
+starqos-mission-control
+starqos
+tmp
+tmp_ibp
+wc2026-nexus
+worker profile pictures
+workspaces
+worldcup2026
+PS D:\StarqTech\00_STARQ_HQ\operations>

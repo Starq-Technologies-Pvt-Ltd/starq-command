@@ -1,0 +1,245 @@
+{
+  "schema": "starq.command.lifecycle.config/v1",
+  "note": "THE single source of control-plane runtime truth: components, ports, health contracts, dependency order and the bootstrap profile. command-lifecycle.mjs and the PowerShell commands both read this file. Runtime port/URL overrides via environment variables are REJECTED, not merged.",
+  "workspace_root": "D:\\StarqTech",
+  "node": "D:\\StarqTech\\00_STARQ_HQ\\operations\\herdr-floor\\runtime\\nodejs\\node.exe",
+  "host": "127.0.0.1",
+  "timeouts_ms": {
+    "identity": 10000,
+    "health": 30000,
+    "graceful_exit": 10000,
+    "broker_request": 15000,
+    "agent_stop": 120000
+  },
+  "components": [
+    {
+      "name": "data",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\data-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5177,
+      "depends_on": [],
+      "health": {
+        "path": "/api/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "health.overall": "OK"
+        },
+        "json_has": [
+          "assembled_at",
+          "workspace",
+          "health"
+        ]
+      }
+    },
+    {
+      "name": "building",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\building-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5178,
+      "depends_on": [],
+      "health": {
+        "path": "/api/building/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "integrity": "SOURCE_READ"
+        },
+        "json_has": [
+          "generated_at",
+          "origin",
+          "integrity"
+        ]
+      }
+    },
+    {
+      "name": "herdrBroker",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\herdr-floor\\src\\main.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\herdr-floor",
+      "port": 5188,
+      "depends_on": [],
+      "lifecycle_token": "00_STARQ_HQ\\operations\\herdr-floor\\state\\lifecycle.token",
+      "manifest": "00_STARQ_HQ\\operations\\herdr-floor\\manifest.json",
+      "health": {
+        "path": "/api/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "ok": true,
+          "access": "LOOPBACK_ONLY"
+        },
+        "json_has": [
+          "boot_id"
+        ]
+      }
+    },
+    {
+      "name": "herdr",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\integrations\\herdr\\herdr-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5179,
+      "depends_on": [
+        "herdrBroker"
+      ],
+      "health": {
+        "path": "/api/herdr/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "ok": true,
+          "broker.ok": true
+        },
+        "json_has": [
+          "broker.boot_id"
+        ]
+      }
+    },
+    {
+      "name": "pm",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\pm-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5176,
+      "depends_on": [],
+      "health": {
+        "path": "/api/pm/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "state": "OK",
+          "scratch": false,
+          "room_post": "OFF"
+        }
+      }
+    },
+    {
+      "name": "ui",
+      "kind": "vite",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\node_modules\\vite\\dist\\node\\index.js",
+      "vite_config": "00_STARQ_HQ\\operations\\starq-command\\vite.config.ts",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5173,
+      "depends_on": [
+        "data",
+        "building",
+        "herdr",
+        "pm"
+      ],
+      "health": {
+        "path": "/",
+        "status": 200,
+        "content_type": "text/html",
+        "body_includes": [
+          "<title>STARQ // COMMAND</title>",
+          "<div id=\"root\"></div>"
+        ]
+      }
+    }
+  ],
+  "profile": {
+    "name": "starq-online/v1",
+    "definition": "Normal Founder use requires the six owned Command services, independently owned standalone Herdr runtime truth, and passive communications files. The Command herdr integration service is not standalone Herdr. Missing standalone ownership blocks normal-profile readiness.",
+    "required_components": [
+      "data",
+      "building",
+      "herdrBroker",
+      "herdr",
+      "pm",
+      "ui"
+    ],
+    "required_files": [
+      "STARQ.md",
+      "00_STARQ_HQ\\decisions.json",
+      "agent-comms\\room.jsonl",
+      "agent-comms\\protocol\\v1\\identities.json",
+      "agent-comms\\protocol\\v1\\staff-state.json",
+      "agent-comms\\protocol\\v1\\ledger-epoch.json",
+      "company-seats.json",
+      "00_STARQ_HQ\\operations\\starqerp-control-board\\contract.json"
+    ],
+    "communications": [
+      {
+        "id": "room-ledger",
+        "required": true,
+        "kind": "passive-file",
+        "path": "agent-comms\\room.jsonl",
+        "owner": "agent-comms protocol (file); written by room.mjs/send.mjs CLIs on demand",
+        "start_stop": "none - no process"
+      },
+      {
+        "id": "room-cli",
+        "required": false,
+        "kind": "on-demand-cli",
+        "path": "agent-comms\\scripts\\send.mjs",
+        "owner": "the invoking seat",
+        "start_stop": "none - runs and exits"
+      },
+      {
+        "id": "starq-telegram-bot",
+        "required": false,
+        "kind": "daemon",
+        "status": "NOT_MANAGED",
+        "owner": null,
+        "start_stop": "not started or stopped by the lifecycle; legacy launcher exists only under D:\\!starq (read-only historical)"
+      },
+      {
+        "id": "room-dispatcher",
+        "required": false,
+        "kind": "daemon",
+        "status": "NOT_MANAGED",
+        "owner": null,
+        "start_stop": "not started or stopped by the lifecycle; legacy keepalive respawn loop must not be revived"
+      },
+      {
+        "id": "room-web-server",
+        "required": false,
+        "kind": "daemon",
+        "status": "NOT_MANAGED",
+        "owner": null,
+        "start_stop": "not started or stopped by the lifecycle"
+      },
+      {
+        "id": "floor-format-watchdogs",
+        "required": false,
+        "kind": "daemon",
+        "status": "NOT_MANAGED",
+        "owner": null,
+        "start_stop": "not started or stopped by the lifecycle"
+      },
+      {
+        "id": "hermes-gateways",
+        "required": false,
+        "kind": "daemon",
+        "status": "NOT_MANAGED",
+        "owner": null,
+        "start_stop": "not started or stopped by the lifecycle (D:\\AgentRuntimes\\Hermes)"
+      }
+    ],
+    "external_required": [
+      {
+        "id": "standalone-herdr",
+        "canonical_owner": "the Founder, operating standalone Herdr interactively; not the Command lifecycle",
+        "owner_protocol": "OPERATOR_INTERACTIVE",
+        "command_actuation": "NONE",
+        "executable": "C:\\Users\\Ali Musthaq\\.herdr\\packages\\standalone\\releases\\0.9.5-x86_64-pc-windows-msvc\\herdr.exe",
+        "storage_root": "C:\\Users\\Ali Musthaq\\AppData\\Roaming\\herdr",
+        "storage_basis": "OBSERVED_DEFAULT: no HERDR_* override observed on 03 Oct 2026; Rule0 residency undecided",
+        "legacy_config_evidence": "D:\\!starq\\herdr\\config\\config.toml (read-only history; not adopted as current config)",
+        "observation": "read-only `herdr status` through the pinned executable only (broker HERDR_BIN); never PATH, never server/start/stop verbs",
+        "owner_record": "00_STARQ_HQ\\operations\\starq-lifecycle\\state\\standalone-herdr-owner.json",
+        "start_stop": "not managed by Command; lifecycle must not create a competing owner",
+        "status": "OWNERSHIP_UNPROVEN"
+      }
+    ],
+    "bounded_test_profile": {
+      "name": "windows-containment-review/v1",
+      "wsl_seats": "EXPLICITLY_UNAVAILABLE",
+      "normal_founder_profile": false,
+      "acceptance": "OFFLINE_ONLY; real disposable test requires separate authorization; whole-stack acceptance pending"
+    }
+  }
+}

@@ -1,0 +1,3158 @@
+{
+  "board_id": "STARQ-COMMAND-MODS",
+  "schema_version": "1.0.0",
+  "scope": {
+    "name": "Separate Starq Command/MODS offline planning board",
+    "canonical_path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\command-board.json",
+    "classification": "Command planning-board candidate; separate from StarqERP delivery board, Herdr execution TaskStore, Room, and historical continuity ledger.",
+    "excluded_scope": [
+      "StarqERP task-board mutation",
+      "Herdr TaskStore inspection or mutation",
+      "Command UI/projection wiring",
+      "services or runtime execution",
+      "B1 implementation or review",
+      "native containment execution",
+      "D:\\!starq"
+    ]
+  },
+  "revision": 1,
+  "previous_board_sha256": null,
+  "status": "CANDIDATE_NOT_ACCEPTED",
+  "last_reconciled_room_head": {
+    "sequence": 9455,
+    "eventId": "421f81968f26051917f1ee4bcc325ceac8437d92c4fca2db6428562a3f18493a",
+    "recordHash": "b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+    "previousRecordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+    "senderHandle": "mustarq",
+    "purpose": "Continuation of #9453 verifier verdict and stop conditions."
+  },
+  "source_manifest": {
+    "historical_ledger": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json",
+      "bytes": 26842,
+      "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+      "expected_sha256_from_room_9451": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+      "source_schema": "starq-command-continuity/task-ledger/v1",
+      "checkpoint_sequence": 9367,
+      "checkpoint_record_hash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+      "checkpoint_event_id": "1bab60fcf25cc85514493628816ea8d10037d22bf3a181948e8bb49ea94152b9",
+      "checkpoint_matched_canonical_room": true,
+      "role": "Immutable historical input; source state and owner fields remain unchanged."
+    },
+    "room_cutoff": {
+      "sequence": 9455,
+      "event_id": "421f81968f26051917f1ee4bcc325ceac8437d92c4fca2db6428562a3f18493a",
+      "record_hash": "b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+      "chain_start_sequence": 9367,
+      "chain_record_count": 89,
+      "sequence_and_previous_hash_links_valid": true
+    },
+    "board_schema_path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\board-schema.json",
+    "source_room_references": [
+      {
+        "sequence": 9208,
+        "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+        "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+        "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+        "senderHandle": "codex",
+        "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+      },
+      {
+        "sequence": 9360,
+        "eventId": "d5ac910480e96d167352f7606e8add4e06745606ffb68e993a79f8787ce25a66",
+        "recordHash": "085849f91fc00133dbc0fd513e0b2a46b400eeab8a876a105c4f878125d09cac",
+        "previousRecordHash": "861e87d1209d749336cbbfc18e6760cce565b8c09f9d422456ff4919bc19ff93",
+        "senderHandle": "vision",
+        "purpose": "Historical latest independent verdict referenced by the ledger; baseline for rejected rows."
+      },
+      {
+        "sequence": 9367,
+        "eventId": "1bab60fcf25cc85514493628816ea8d10037d22bf3a181948e8bb49ea94152b9",
+        "recordHash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+        "previousRecordHash": "610a8362aa77f326d9ba796cbd00be9821c7ffe120b48b27ad1d70b5c0afc127",
+        "senderHandle": "mustarq",
+        "purpose": "Founder-authorized ledger checkpoint; source SHA and record hash must match."
+      },
+      {
+        "sequence": 9371,
+        "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+        "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+        "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+      },
+      {
+        "sequence": 9372,
+        "eventId": "8335d97850ad464099e982a3561d0abc8e9646884cc52b096c88ab68fbb405eb",
+        "recordHash": "911253a6631898a858ee6a74615aacdc658a64e58de0ec281989238257d8b355",
+        "previousRecordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+        "senderHandle": "cursor",
+        "purpose": "Report-only reconciliation; no source-state mutation."
+      },
+      {
+        "sequence": 9374,
+        "eventId": "d4add4f0ab0789878066e4488ee8ccb474b3c4e944d77ce0825b70ab5e2bf8f0",
+        "recordHash": "4c118faff40239d6b8cf3fd8df50f2f9968627b3b2089d47dd7d051eff4a029e",
+        "previousRecordHash": "9d3e37aa511efc038da19a964a7e9b9fe0b868c5f5825fff29f3c578df8d2e6e",
+        "senderHandle": "mustarq",
+        "purpose": "Founder reaffirms bounded CMD-DI correction; Codex lane remains read-only."
+      },
+      {
+        "sequence": 9376,
+        "eventId": "4e73038ee72f23b62612e7fbdad0117c7c9ec2ba91264210403e14bbbdd3f8c9",
+        "recordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+        "previousRecordHash": "323db0599e874a3e8a8d9bd11376347b7df6e2423731eff133cd33198c76215b",
+        "senderHandle": "cursor",
+        "purpose": "Evidence for scoped CMD-DI correction."
+      },
+      {
+        "sequence": 9377,
+        "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+        "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+        "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+        "senderHandle": "vision",
+        "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+      },
+      {
+        "sequence": 9378,
+        "eventId": "167f2d46ed19f80c16125b2865478bb70af9318adc120a03d682b4370cd2096f",
+        "recordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+        "previousRecordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes only 320px staff readability correction."
+      },
+      {
+        "sequence": 9379,
+        "eventId": "98fe9ae5a734d5ccd9a1595684d129df05956a78c423ad39c08a7dc497e1fb70",
+        "recordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+        "previousRecordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+        "senderHandle": "claude",
+        "purpose": "Correction report; verification incomplete."
+      },
+      {
+        "sequence": 9380,
+        "eventId": "509b1d01ad10469a4d4fbb6520f6acb8b4d8d1d3e9058f58b17ae93d09e4f582",
+        "recordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+        "previousRecordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes bounded read-only verification."
+      },
+      {
+        "sequence": 9381,
+        "eventId": "dfbbe21ac4020accbd1429a935da7302d7c8c2252ea46e57fc5ce5f048dfde54",
+        "recordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+        "previousRecordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+        "senderHandle": "claude",
+        "purpose": "Verification evidence; no test outcome claimed."
+      },
+      {
+        "sequence": 9382,
+        "eventId": "5f7cb4cc70d6eab52d8a61224e71cb63e804ad1bea836e1542988fe9f94fa6a0",
+        "recordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+        "previousRecordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+        "senderHandle": "mustarq",
+        "purpose": "Follow-on Room record in scoped CMD-DI correction chain."
+      },
+      {
+        "sequence": 9383,
+        "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+        "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+        "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+        "senderHandle": "vision",
+        "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+      },
+      {
+        "sequence": 9384,
+        "eventId": "40b0e27fd5c7453e0a5475a61c45276f6d33be73a314948a5ab64427f44f2afa",
+        "recordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+        "previousRecordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+        "senderHandle": "mustarq",
+        "purpose": "Founder MODS readiness assessment directive."
+      },
+      {
+        "sequence": 9385,
+        "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+        "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+        "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+        "senderHandle": "codex",
+        "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+      },
+      {
+        "sequence": 9386,
+        "eventId": "3f0fa76d7d341840c03e9b873619c4a5bd004bb620b3b6f41f1cf122c72b9058",
+        "recordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+        "previousRecordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+        "senderHandle": "mustarq",
+        "purpose": "Founder defines MODS exit scope; not an execution grant."
+      },
+      {
+        "sequence": 9387,
+        "eventId": "583985b195af624a5e90065bc83535fd072ed47bbb9b1d949298732689d8079a",
+        "recordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+        "previousRecordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+        "senderHandle": "mustarq",
+        "purpose": "Founder assigns read-only MODS readiness assessment."
+      },
+      {
+        "sequence": 9388,
+        "eventId": "c79b0c9ba29edd52430002e10fe01435f0e1f8ab44423a2358bec29f50d66d80",
+        "recordHash": "5c8f05811f045730d05bdd628ef0b40f95616082536d2f53596a7290e29c772a",
+        "previousRecordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+        "senderHandle": "antigravity",
+        "purpose": "Antigravity readiness report; operational gating is not acceptance."
+      },
+      {
+        "sequence": 9391,
+        "eventId": "7803b66b8390ac6ba1ded19d49cc3746c3e74cdb2cc5118644f04678b223c44f",
+        "recordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+        "previousRecordHash": "54ab4ce6b9b7e742fee70a701741e13302c635e7ae3cfd8d402e14c723c2804f",
+        "senderHandle": "mustarq",
+        "purpose": "Founder read-only native-containment planning assignment; no execution authority."
+      },
+      {
+        "sequence": 9392,
+        "eventId": "b110c93bbf42cef2de67edf457247b39b6f17bb24d0ec129333e3fe45cbae065",
+        "recordHash": "589c1d41ee30f3d2656cd59d5798eeffe3d996eef9096a3beabe143c0a2a275d",
+        "previousRecordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+        "senderHandle": "codex",
+        "purpose": "Codex read-only plan/evidence report; no tests or services executed."
+      },
+      {
+        "sequence": 9395,
+        "eventId": "84f1cc22935bf8a00af49e7d7ae003ec255f45ea647afeb380c6ae903d13d8b0",
+        "recordHash": "1d80d7afbfc4738c6860d1b5021fe42fc72accbe7bf957ff10712d08027f982b",
+        "previousRecordHash": "cbd58800af505ad2851f255992acd8c909f9e0f5078c36d06a11aefc6158a12f",
+        "senderHandle": "vision",
+        "purpose": "Vision correction: N-1 readiness rejected; G-CONTAINMENT remains open."
+      },
+      {
+        "sequence": 9441,
+        "eventId": "430d6046a872f7e6a19b1b402ca9dc02fc1855259f13fecd3e4dea9a35160121",
+        "recordHash": "d61175e9ff0be73bd41ae208b8a1f7b0f2492dcc67f56d33291e89ed4f9ffe35",
+        "previousRecordHash": "79eb7f68447fbfb6fbd23484fd95831255d05037b91af55c9e7c171716c2e992",
+        "senderHandle": "mustarq",
+        "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+      },
+      {
+        "sequence": 9443,
+        "eventId": "f539ff79f3253b4dc01c345adb7ac136b9cf00f6f5a3bccae4ac1b15c919e2b0",
+        "recordHash": "bfec5b50276d0d86579e546843c34d66f8fe52d805955246e856a03f68e65a71",
+        "previousRecordHash": "00a6433a662a6503bef9bd4e72b59deaf1d4bbedaded1216ae3e5ac0f999ef18",
+        "senderHandle": "codex",
+        "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+      },
+      {
+        "sequence": 9450,
+        "eventId": "0e8f23d1a7912bb1da68bf3676a7e0d045c92cf15c780d99ccbf92b7c1eb34a8",
+        "recordHash": "9ec77695f6a9ed7eb58fca6ed45655ca1e489bf967afdb26f7b4eb2d1afd3fac",
+        "previousRecordHash": "e24bc004cb332a5132d42a7e848178c436c4be7ff832dd5d67143f9828b9d94f",
+        "senderHandle": "mustarq",
+        "purpose": "Founder directive initiating separate Command board proposal."
+      },
+      {
+        "sequence": 9451,
+        "eventId": "2ca1956225dd0393eaaedd71d2ae2f539835b348828abc244b9506d03b4dfc57",
+        "recordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+        "previousRecordHash": "9ec77695f6a9ed7eb58fca6ed45655ca1e489bf967afdb26f7b4eb2d1afd3fac",
+        "senderHandle": "codex",
+        "purpose": "Codex proposal and 33-row migration specification."
+      },
+      {
+        "sequence": 9452,
+        "eventId": "023d62eddd098be76ed229fca2dcf2a456a79cf89f4b76591278a8fb1b30f74c",
+        "recordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+        "previousRecordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+        "senderHandle": "mustarq",
+        "purpose": "Founder architecture approval in principle; not creation authority by itself."
+      },
+      {
+        "sequence": 9453,
+        "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+        "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+        "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+        "senderHandle": "mustarq",
+        "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+      },
+      {
+        "sequence": 9454,
+        "eventId": "dcf20f1e4b99ca8d74b737fe08d51c4c6aa9a8c08015c4d39aa5deddcf4a9fa7",
+        "recordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+        "previousRecordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+        "senderHandle": "mustarq",
+        "purpose": "Continuation of #9453 constraints and required evidence."
+      },
+      {
+        "sequence": 9455,
+        "eventId": "421f81968f26051917f1ee4bcc325ceac8437d92c4fca2db6428562a3f18493a",
+        "recordHash": "b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+        "previousRecordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+        "senderHandle": "mustarq",
+        "purpose": "Continuation of #9453 verifier verdict and stop conditions."
+      }
+    ],
+    "room_policy": "Room is authority for Founder directives, authorization, independent acceptance and audit; board rows do not supersede Room.",
+    "taskstore_classification": "Execution/runtime store only per #9453; no contents were accessed."
+  },
+  "reconciliation": {
+    "source_row_count": 33,
+    "imported_row_count": 33,
+    "source_id_order_preserved": true,
+    "new_or_deleted_task_rows": 0,
+    "duplicate_ids": [],
+    "unresolved_dependency_targets": [],
+    "all_current_owners_verifiers_and_workflow_stages": "UNKNOWN",
+    "historical_source_states_and_owners_are_preserved": true,
+    "conflicts": [
+      "CMD-DI-1-3 and CMD-DI-1-4 remain REJECTED for full responsive scope; only a 320px chip-readability sub-check was accepted at #9383.",
+      "MODS scope is defined at #9386, but #9385 says not ready to commission, #9388 says ready for operational gating, and #9395 rejects N-1 readiness. These claims cover different gates; no MODS operational acceptance is inferred.",
+      "CONT-PKG-9361 source_state BLOCKED at #9367; Founder #9371 accepts only documentation continuity/cold-start scope. Both are retained.",
+      "SERP-354 title discrepancy and StarqERP DEC-100 hold remain exactly as recorded in the source row; not adjudicated or resumed.",
+      "ERP D2 discrepancy remains unresolved per #9451; no external or master source was inspected."
+    ],
+    "unresolved": [
+      "Current owner, verifier, workflow stage and fresh task verdict remain UNKNOWN unless an exact overlay states a scoped disposition.",
+      "MODS operational readiness and runtime health are not established by this offline board recovery.",
+      "The documented StarqERP task SSOT path is absent; no replacement source was selected.",
+      "Herdr TaskStore contents remain UNKNOWN and were not accessed.",
+      "No previously accepted Command board snapshot exists at this path; rollback cannot promote or restore a prior accepted revision."
+    ],
+    "boundaries": [
+      "No StarqERP, historical ledger, TaskStore, Room history, UI, service, runtime, B1 or D:\\!starq mutation was made.",
+      "B1 state is retained only as the #9453 PAUSED/BLOCKED boundary; no B1 technical assessment, implementation, reassignment, or gate work was performed.",
+      "Room #9441 and #9443 are referenced only as the B1 boundary records named by #9453."
+    ]
+  },
+  "tasks": [
+    {
+      "id": "CMD-PHASE-1-5",
+      "title": "Command phases 1-5 (Building Shell, Truth & Health, Dev Studio, ERP Process, Founder Attention)",
+      "programme": "Command foundations",
+      "source_qualifier": "Historical. The README records all five as Complete; phases 3-5 are additionally marked Founder-authorised 29 Sep 2026 (bases 3487fd7, 38037d5). Not re-verified in this package.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "historical",
+      "source_record": {
+        "id": "CMD-PHASE-1-5",
+        "title": "Command phases 1-5 (Building Shell, Truth & Health, Dev Studio, ERP Process, Founder Attention)",
+        "programme": "Command foundations",
+        "state": "ACCEPTED",
+        "stateQualifier": "Historical. The README records all five as Complete; phases 3-5 are additionally marked Founder-authorised 29 Sep 2026 (bases 3487fd7, 38037d5). Not re-verified in this package.",
+        "owner": "historical",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "starq-command/README.md (sha256 05b6c5dc97be70b0650d358f5c4af2e482e902327e7ceac23b48fb54b24fccd4)"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/0",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 0
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-PHASE-6-7",
+      "title": "Phases 6-7",
+      "programme": "Command foundations",
+      "source_qualifier": "README says phases 6-7 are not authorised or implemented, but PHASE7_*.md records exist and Room #8402/#8407 record a Founder-accepted final visual/responsive wave (HEAD 1e993b2). The README phase list is dated 29 Sep and is stale relative to those records. Not reconciled here.",
+      "source_state": "UNKNOWN",
+      "source_owner_at_checkpoint": "UNKNOWN",
+      "source_record": {
+        "id": "CMD-PHASE-6-7",
+        "title": "Phases 6-7",
+        "programme": "Command foundations",
+        "state": "UNKNOWN",
+        "stateQualifier": "README says phases 6-7 are not authorised or implemented, but PHASE7_*.md records exist and Room #8402/#8407 record a Founder-accepted final visual/responsive wave (HEAD 1e993b2). The README phase list is dated 29 Sep and is stale relative to those records. Not reconciled here.",
+        "owner": "UNKNOWN",
+        "blockers": [
+          "Reconcile README phase list against PHASE7_* records and Room #8402-#8407"
+        ],
+        "dependsOn": [
+          "CMD-PHASE-1-5"
+        ],
+        "sources": [
+          "starq-command/README.md",
+          "starq-command/PHASE7_IMPLEMENTATION_PLAN.md",
+          "starq-command/PHASE7_VISION_IMPLEMENTATION_RECORD.md",
+          "Room #8402",
+          "Room #8407"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state UNKNOWN from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Reconcile README phase list against PHASE7_* records and Room #8402-#8407"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/1",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 1
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-0-1",
+      "title": "Pre-change source hash baseline (52-file core) plus B7 extension",
+      "programme": "CMD-DI Wave 0",
+      "source_qualifier": "Core baseline 52/52 accepted historically (corrected package line 745). B7 extension (53 entries) is evidence-closed for pinning/reproducibility only; it is not execution authority. Current tree: 41/52 core pins match, 11 drifted (Room #9290, #9314); the drifted files are pinned by the 126-file recovery baseline.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "historical",
+      "source_record": {
+        "id": "CMD-DI-0-1",
+        "title": "Pre-change source hash baseline (52-file core) plus B7 extension",
+        "programme": "CMD-DI Wave 0",
+        "state": "ACCEPTED",
+        "stateQualifier": "Core baseline 52/52 accepted historically (corrected package line 745). B7 extension (53 entries) is evidence-closed for pinning/reproducibility only; it is not execution authority. Current tree: 41/52 core pins match, 11 drifted (Room #9290, #9314); the drifted files are pinned by the 126-file recovery baseline.",
+        "owner": "historical",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:745",
+          "Room #9290",
+          "Room #9308",
+          "Room #9311",
+          "Room #9314",
+          "Room #9317"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/2",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 2
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-0-2",
+      "title": "Navigation test audit & presentation guard identification",
+      "programme": "CMD-DI Wave 0",
+      "source_qualifier": "Vision independent ACCEPT (bounded) #9310; Founder prospective gate APPROVAL #9311. Qualifications: no standalone raw test log; audit section 8 has stale 'Verified by @vision' wording; not historical task acceptance.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@opencode (audit author); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-0-2",
+        "title": "Navigation test audit & presentation guard identification",
+        "programme": "CMD-DI Wave 0",
+        "state": "ACCEPTED",
+        "stateQualifier": "Vision independent ACCEPT (bounded) #9310; Founder prospective gate APPROVAL #9311. Qualifications: no standalone raw test log; audit section 8 has stale 'Verified by @vision' wording; not historical task acceptance.",
+        "owner": "@opencode (audit author); @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-0-1"
+        ],
+        "sources": [
+          "DESIGN_INTEGRATION_TEST_AUDIT_2026-10-10.md (sha256 0c2ccc69494c98c05bdbc73cba40a4a8f05930d50181e9aa109e24f1ac18a6e4)",
+          "Room #9309",
+          "Room #9310",
+          "Room #9311"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/3",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 3
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-0-3",
+      "title": "Antigravity (AG) coordination reconciliation (P3A-1..6)",
+      "programme": "CMD-DI Wave 0",
+      "source_qualifier": "Vision ACCEPT of the memo #9320; OpenCode ACCEPT of the corrected P3A matrix #9326 (after REJECT #9323); Founder prospective APPROVAL with P3A dispositions #9327. The AG transcript digest discrepancy is unresolved and the transcript cannot be anchored (it is an active append log).",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@antigravity (author); @vision, @opencode (verifiers)",
+      "source_record": {
+        "id": "CMD-DI-0-3",
+        "title": "Antigravity (AG) coordination reconciliation (P3A-1..6)",
+        "programme": "CMD-DI Wave 0",
+        "state": "ACCEPTED",
+        "stateQualifier": "Vision ACCEPT of the memo #9320; OpenCode ACCEPT of the corrected P3A matrix #9326 (after REJECT #9323); Founder prospective APPROVAL with P3A dispositions #9327. The AG transcript digest discrepancy is unresolved and the transcript cannot be anchored (it is an active append log).",
+        "owner": "@antigravity (author); @vision, @opencode (verifiers)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-0-2"
+        ],
+        "sources": [
+          "DESIGN_INTEGRATION_AG_COORDINATION_2026-10-10.md (sha256 e0676614b4d46ce6f5f812c2db55f937b551a7d95549a8c7c0a88c3e0675f6c8)",
+          "Room #9313-#9327"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/4",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 4
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-1-1",
+      "title": "New component: staff-glance board (props-only, UNKNOWN-not-zero)",
+      "programme": "CMD-DI Wave 1",
+      "source_qualifier": "Prospective. REJECT #9330 (render test absent) -> six tests implemented under #9348 -> Vision ACCEPT #9353 -> Founder recorded ACCEPTED #9354. Historical dispatch/acceptance remains UNKNOWN.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@cursor (engineering); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-1-1",
+        "title": "New component: staff-glance board (props-only, UNKNOWN-not-zero)",
+        "programme": "CMD-DI Wave 1",
+        "state": "ACCEPTED",
+        "stateQualifier": "Prospective. REJECT #9330 (render test absent) -> six tests implemented under #9348 -> Vision ACCEPT #9353 -> Founder recorded ACCEPTED #9354. Historical dispatch/acceptance remains UNKNOWN.",
+        "owner": "@cursor (engineering); @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-0-2",
+          "CMD-DI-0-3"
+        ],
+        "sources": [
+          "Room #9330",
+          "Room #9333",
+          "Room #9348",
+          "Room #9349",
+          "Room #9353",
+          "Room #9354"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/5",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 5
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment recites checkpoint disposition; informational, not an independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-1-2",
+      "title": "New component: sessions + Herdr panes board",
+      "programme": "CMD-DI Wave 1",
+      "source_qualifier": "Prospective/static ACCEPT #9330, Founder recorded #9331; its three tests also passed in Vision's independent run #9353. No runtime PASS claimed.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "historical implementation; @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-1-2",
+        "title": "New component: sessions + Herdr panes board",
+        "programme": "CMD-DI Wave 1",
+        "state": "ACCEPTED",
+        "stateQualifier": "Prospective/static ACCEPT #9330, Founder recorded #9331; its three tests also passed in Vision's independent run #9353. No runtime PASS claimed.",
+        "owner": "historical implementation; @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-0-2"
+        ],
+        "sources": [
+          "Room #9330",
+          "Room #9331",
+          "Room #9353",
+          "Room #9354"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/6",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 6
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment recites checkpoint disposition; informational, not an independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-1-3",
+      "title": "CSS tier ladder (10/13/13-600/11/11-mono) and 320px mobile reflow",
+      "programme": "CMD-DI Wave 1",
+      "source_qualifier": "Latest verdict Vision #9360: strict descendant-overflow criteria fail on 12 routes (company-founder, company-infrastructure, company-portfolio, company-seats, company-structure, erp-integrity, erp-process, hoadha-overview, hoadha-waves, studio-capacity, studio-staff, system-sources). Page roots are 310/310 with no horizontal movement. Dark-mode/appearance parity was revised to single-theme and DEFERRED by #9354, so it is not a blocker. The #9355 four-route 320px pass does not cancel the #9360 twelve-route rejection (Cursor #9363).",
+      "source_state": "REJECTED",
+      "source_owner_at_checkpoint": "@cursor (engineering); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-1-3",
+        "title": "CSS tier ladder (10/13/13-600/11/11-mono) and 320px mobile reflow",
+        "programme": "CMD-DI Wave 1",
+        "state": "REJECTED",
+        "stateQualifier": "Latest verdict Vision #9360: strict descendant-overflow criteria fail on 12 routes (company-founder, company-infrastructure, company-portfolio, company-seats, company-structure, erp-integrity, erp-process, hoadha-overview, hoadha-waves, studio-capacity, studio-staff, system-sources). Page roots are 310/310 with no horizontal movement. Dark-mode/appearance parity was revised to single-theme and DEFERRED by #9354, so it is not a blocker. The #9355 four-route 320px pass does not cancel the #9360 twelve-route rejection (Cursor #9363).",
+        "owner": "@cursor (engineering); @vision (verifier)",
+        "blockers": [
+          "12-route descendant overflow (#9360)",
+          "Founder decision on a targeted corrective/recapture round (#9360 Action Required)"
+        ],
+        "dependsOn": [
+          "CMD-DI-0-2"
+        ],
+        "sources": [
+          "Room #9330",
+          "Room #9334",
+          "Room #9337",
+          "Room #9341",
+          "Room #9343",
+          "Room #9348-#9355",
+          "Room #9360",
+          "Room #9363"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "rejected",
+      "disposition_basis": "Full responsive task remains REJECTED; #9377 rejects full acceptance and #9383 accepts only the 320px chip-readability sub-check.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [
+        {
+          "sequence": 9360,
+          "eventId": "d5ac910480e96d167352f7606e8add4e06745606ffb68e993a79f8787ce25a66",
+          "recordHash": "085849f91fc00133dbc0fd513e0b2a46b400eeab8a876a105c4f878125d09cac",
+          "previousRecordHash": "861e87d1209d749336cbbfc18e6760cce565b8c09f9d422456ff4919bc19ff93",
+          "senderHandle": "vision",
+          "purpose": "Historical latest independent verdict referenced by the ledger; baseline for rejected rows."
+        },
+        {
+          "sequence": 9377,
+          "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+          "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+          "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+          "senderHandle": "vision",
+          "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+        },
+        {
+          "sequence": 9383,
+          "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+          "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+          "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+          "senderHandle": "vision",
+          "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+        }
+      ],
+      "blocker": {
+        "source_blockers": [
+          "12-route descendant overflow (#9360)",
+          "Founder decision on a targeted corrective/recapture round (#9360 Action Required)"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/7",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 7
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Founder authorizes bounded 12-route corrections; authorization is not acceptance.",
+          "room_ref": {
+            "sequence": 9371,
+            "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+            "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+          }
+        },
+        {
+          "effect": "Report-only reconciliation; source/task state unchanged.",
+          "room_ref": {
+            "sequence": 9372,
+            "eventId": "8335d97850ad464099e982a3561d0abc8e9646884cc52b096c88ab68fbb405eb",
+            "recordHash": "911253a6631898a858ee6a74615aacdc658a64e58de0ec281989238257d8b355",
+            "previousRecordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "senderHandle": "cursor",
+            "purpose": "Report-only reconciliation; no source-state mutation."
+          }
+        },
+        {
+          "effect": "Founder reaffirms the same bounded correction; no general expansion.",
+          "room_ref": {
+            "sequence": 9374,
+            "eventId": "d4add4f0ab0789878066e4488ee8ccb474b3c4e944d77ce0825b70ab5e2bf8f0",
+            "recordHash": "4c118faff40239d6b8cf3fd8df50f2f9968627b3b2089d47dd7d051eff4a029e",
+            "previousRecordHash": "9d3e37aa511efc038da19a964a7e9b9fe0b868c5f5825fff29f3c578df8d2e6e",
+            "senderHandle": "mustarq",
+            "purpose": "Founder reaffirms bounded CMD-DI correction; Codex lane remains read-only."
+          }
+        },
+        {
+          "effect": "Correction evidence submitted; not acceptance.",
+          "room_ref": {
+            "sequence": 9376,
+            "eventId": "4e73038ee72f23b62612e7fbdad0117c7c9ec2ba91264210403e14bbbdd3f8c9",
+            "recordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+            "previousRecordHash": "323db0599e874a3e8a8d9bd11376347b7df6e2423731eff133cd33198c76215b",
+            "senderHandle": "cursor",
+            "purpose": "Evidence for scoped CMD-DI correction."
+          }
+        },
+        {
+          "effect": "Vision rejects full responsive acceptance; accepts only 320x720 no-overflow sub-check.",
+          "room_ref": {
+            "sequence": 9377,
+            "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+            "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+            "senderHandle": "vision",
+            "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+          }
+        },
+        {
+          "effect": "Founder authorizes only the 320px staff chip-readability correction.",
+          "room_ref": {
+            "sequence": 9378,
+            "eventId": "167f2d46ed19f80c16125b2865478bb70af9318adc120a03d682b4370cd2096f",
+            "recordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+            "previousRecordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes only 320px staff readability correction."
+          }
+        },
+        {
+          "effect": "Correction reported applied; verification incomplete.",
+          "room_ref": {
+            "sequence": 9379,
+            "eventId": "98fe9ae5a734d5ccd9a1595684d129df05956a78c423ad39c08a7dc497e1fb70",
+            "recordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+            "previousRecordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+            "senderHandle": "claude",
+            "purpose": "Correction report; verification incomplete."
+          }
+        },
+        {
+          "effect": "Founder authorizes bounded read-only verification only.",
+          "room_ref": {
+            "sequence": 9380,
+            "eventId": "509b1d01ad10469a4d4fbb6520f6acb8b4d8d1d3e9058f58b17ae93d09e4f582",
+            "recordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+            "previousRecordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded read-only verification."
+          }
+        },
+        {
+          "effect": "Evidence report; no test outcome claimed.",
+          "room_ref": {
+            "sequence": 9381,
+            "eventId": "dfbbe21ac4020accbd1429a935da7302d7c8c2252ea46e57fc5ce5f048dfde54",
+            "recordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+            "previousRecordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+            "senderHandle": "claude",
+            "purpose": "Verification evidence; no test outcome claimed."
+          }
+        },
+        {
+          "effect": "Follow-on record retained in the narrow correction chain.",
+          "room_ref": {
+            "sequence": 9382,
+            "eventId": "5f7cb4cc70d6eab52d8a61224e71cb63e804ad1bea836e1542988fe9f94fa6a0",
+            "recordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+            "previousRecordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+            "senderHandle": "mustarq",
+            "purpose": "Follow-on Room record in scoped CMD-DI correction chain."
+          }
+        },
+        {
+          "effect": "Vision accepts the narrow chip-readability correction only; full task is not closed.",
+          "room_ref": {
+            "sequence": 9383,
+            "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+            "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+            "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+            "senderHandle": "vision",
+            "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+          }
+        },
+        {
+          "effect": "Codex says both full CMD-DI tasks remain rejected; the narrow check is scoped.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-1-4",
+      "title": "Studio presentation grouping, presentation-only (grouped nav + legend)",
+      "programme": "CMD-DI Wave 1",
+      "source_qualifier": "Latest verdict Vision #9360 (REJECT). The 328-capture single-theme corpus (41 routes x 8 viewports) is intact. The manifest records 21 HTTP errors across 14 rows: 15 x /api/herdr/state 500 and 6 x 403 (4 raw-path, 2 runtime-state per Cursor #9363; the 15/6 split was re-counted by Elder). Vision reproduced the 500 and has no overflow/typography metrics; OpenCode #9357 body is truncated. Historical byte-unchanged criterion for building-route.ts is UNPROVEN and not waived (#9335). Vision is appointed visual sign-off reviewer (#9344); no sign-off issued.",
+      "source_state": "REJECTED",
+      "source_owner_at_checkpoint": "@opencode (integration evidence); @vision (verifier and appointed design/UX sign-off)",
+      "source_record": {
+        "id": "CMD-DI-1-4",
+        "title": "Studio presentation grouping, presentation-only (grouped nav + legend)",
+        "programme": "CMD-DI Wave 1",
+        "state": "REJECTED",
+        "stateQualifier": "Latest verdict Vision #9360 (REJECT). The 328-capture single-theme corpus (41 routes x 8 viewports) is intact. The manifest records 21 HTTP errors across 14 rows: 15 x /api/herdr/state 500 and 6 x 403 (4 raw-path, 2 runtime-state per Cursor #9363; the 15/6 split was re-counted by Elder). Vision reproduced the 500 and has no overflow/typography metrics; OpenCode #9357 body is truncated. Historical byte-unchanged criterion for building-route.ts is UNPROVEN and not waived (#9335). Vision is appointed visual sign-off reviewer (#9344); no sign-off issued.",
+        "owner": "@opencode (integration evidence); @vision (verifier and appointed design/UX sign-off)",
+        "blockers": [
+          "/api/herdr/state HTTP 500 and 21 HTTP-error manifest entries",
+          "manifest lacks overflow/typography metrics",
+          "#9357 report body incomplete",
+          "Founder decision on corrective/recapture round"
+        ],
+        "dependsOn": [
+          "CMD-DI-0-2",
+          "CMD-DI-1-3"
+        ],
+        "sources": [
+          "Room #9330",
+          "Room #9335",
+          "Room #9340",
+          "Room #9344",
+          "Room #9345",
+          "Room #9347",
+          "Room #9352-#9357",
+          "Room #9360",
+          "Room #9363"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "rejected",
+      "disposition_basis": "Full responsive task remains REJECTED; #9377 rejects full acceptance and #9383 accepts only the 320px chip-readability sub-check.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [
+        {
+          "sequence": 9360,
+          "eventId": "d5ac910480e96d167352f7606e8add4e06745606ffb68e993a79f8787ce25a66",
+          "recordHash": "085849f91fc00133dbc0fd513e0b2a46b400eeab8a876a105c4f878125d09cac",
+          "previousRecordHash": "861e87d1209d749336cbbfc18e6760cce565b8c09f9d422456ff4919bc19ff93",
+          "senderHandle": "vision",
+          "purpose": "Historical latest independent verdict referenced by the ledger; baseline for rejected rows."
+        },
+        {
+          "sequence": 9377,
+          "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+          "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+          "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+          "senderHandle": "vision",
+          "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+        },
+        {
+          "sequence": 9383,
+          "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+          "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+          "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+          "senderHandle": "vision",
+          "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+        }
+      ],
+      "blocker": {
+        "source_blockers": [
+          "/api/herdr/state HTTP 500 and 21 HTTP-error manifest entries",
+          "manifest lacks overflow/typography metrics",
+          "#9357 report body incomplete",
+          "Founder decision on corrective/recapture round"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/8",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 8
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Founder authorizes bounded 12-route corrections; authorization is not acceptance.",
+          "room_ref": {
+            "sequence": 9371,
+            "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+            "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+          }
+        },
+        {
+          "effect": "Report-only reconciliation; source/task state unchanged.",
+          "room_ref": {
+            "sequence": 9372,
+            "eventId": "8335d97850ad464099e982a3561d0abc8e9646884cc52b096c88ab68fbb405eb",
+            "recordHash": "911253a6631898a858ee6a74615aacdc658a64e58de0ec281989238257d8b355",
+            "previousRecordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "senderHandle": "cursor",
+            "purpose": "Report-only reconciliation; no source-state mutation."
+          }
+        },
+        {
+          "effect": "Founder reaffirms the same bounded correction; no general expansion.",
+          "room_ref": {
+            "sequence": 9374,
+            "eventId": "d4add4f0ab0789878066e4488ee8ccb474b3c4e944d77ce0825b70ab5e2bf8f0",
+            "recordHash": "4c118faff40239d6b8cf3fd8df50f2f9968627b3b2089d47dd7d051eff4a029e",
+            "previousRecordHash": "9d3e37aa511efc038da19a964a7e9b9fe0b868c5f5825fff29f3c578df8d2e6e",
+            "senderHandle": "mustarq",
+            "purpose": "Founder reaffirms bounded CMD-DI correction; Codex lane remains read-only."
+          }
+        },
+        {
+          "effect": "Correction evidence submitted; not acceptance.",
+          "room_ref": {
+            "sequence": 9376,
+            "eventId": "4e73038ee72f23b62612e7fbdad0117c7c9ec2ba91264210403e14bbbdd3f8c9",
+            "recordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+            "previousRecordHash": "323db0599e874a3e8a8d9bd11376347b7df6e2423731eff133cd33198c76215b",
+            "senderHandle": "cursor",
+            "purpose": "Evidence for scoped CMD-DI correction."
+          }
+        },
+        {
+          "effect": "Vision rejects full responsive acceptance; accepts only 320x720 no-overflow sub-check.",
+          "room_ref": {
+            "sequence": 9377,
+            "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+            "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+            "senderHandle": "vision",
+            "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+          }
+        },
+        {
+          "effect": "Founder authorizes only the 320px staff chip-readability correction.",
+          "room_ref": {
+            "sequence": 9378,
+            "eventId": "167f2d46ed19f80c16125b2865478bb70af9318adc120a03d682b4370cd2096f",
+            "recordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+            "previousRecordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes only 320px staff readability correction."
+          }
+        },
+        {
+          "effect": "Correction reported applied; verification incomplete.",
+          "room_ref": {
+            "sequence": 9379,
+            "eventId": "98fe9ae5a734d5ccd9a1595684d129df05956a78c423ad39c08a7dc497e1fb70",
+            "recordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+            "previousRecordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+            "senderHandle": "claude",
+            "purpose": "Correction report; verification incomplete."
+          }
+        },
+        {
+          "effect": "Founder authorizes bounded read-only verification only.",
+          "room_ref": {
+            "sequence": 9380,
+            "eventId": "509b1d01ad10469a4d4fbb6520f6acb8b4d8d1d3e9058f58b17ae93d09e4f582",
+            "recordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+            "previousRecordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded read-only verification."
+          }
+        },
+        {
+          "effect": "Evidence report; no test outcome claimed.",
+          "room_ref": {
+            "sequence": 9381,
+            "eventId": "dfbbe21ac4020accbd1429a935da7302d7c8c2252ea46e57fc5ce5f048dfde54",
+            "recordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+            "previousRecordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+            "senderHandle": "claude",
+            "purpose": "Verification evidence; no test outcome claimed."
+          }
+        },
+        {
+          "effect": "Follow-on record retained in the narrow correction chain.",
+          "room_ref": {
+            "sequence": 9382,
+            "eventId": "5f7cb4cc70d6eab52d8a61224e71cb63e804ad1bea836e1542988fe9f94fa6a0",
+            "recordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+            "previousRecordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+            "senderHandle": "mustarq",
+            "purpose": "Follow-on Room record in scoped CMD-DI correction chain."
+          }
+        },
+        {
+          "effect": "Vision accepts the narrow chip-readability correction only; full task is not closed.",
+          "room_ref": {
+            "sequence": 9383,
+            "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+            "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+            "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+            "senderHandle": "vision",
+            "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+          }
+        },
+        {
+          "effect": "Codex says both full CMD-DI tasks remain rejected; the narrow check is scoped.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-1-5",
+      "title": "Studio Overview: mount StaffGlance in company.tsx -> DevStudio",
+      "programme": "CMD-DI Wave 1",
+      "source_qualifier": "Vision ACCEPT #9360, bounded to the Studio Overview mount and honest UNKNOWN presentation (all six buckets UNKNOWN). company.tsx and ERP overview.tsx match the preserved recovery pins. Historical residual-scope/authorship of company.tsx remains UNKNOWN (#9335). No Founder acknowledgement of #9360 is recorded at checkpoint #9362.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@opencode (evidence); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-1-5",
+        "title": "Studio Overview: mount StaffGlance in company.tsx -> DevStudio",
+        "programme": "CMD-DI Wave 1",
+        "state": "ACCEPTED",
+        "stateQualifier": "Vision ACCEPT #9360, bounded to the Studio Overview mount and honest UNKNOWN presentation (all six buckets UNKNOWN). company.tsx and ERP overview.tsx match the preserved recovery pins. Historical residual-scope/authorship of company.tsx remains UNKNOWN (#9335). No Founder acknowledgement of #9360 is recorded at checkpoint #9362.",
+        "owner": "@opencode (evidence); @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-1-1"
+        ],
+        "sources": [
+          "Room #9330",
+          "Room #9335",
+          "Room #9341",
+          "Room #9343",
+          "Room #9353",
+          "Room #9360"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/9",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 9
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment recites checkpoint disposition; informational, not an independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-2-1",
+      "title": "Staff surface: card/grid view + status grouping",
+      "programme": "CMD-DI Wave 2",
+      "source_qualifier": "Historical closure not supported (#9295). Static readiness assessed (#9307, accepted #9308). Wave 2 is serialized after Wave 1 approval; no prospective verification is authorized.",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-2-1",
+        "title": "Staff surface: card/grid view + status grouping",
+        "programme": "CMD-DI Wave 2",
+        "state": "BLOCKED",
+        "stateQualifier": "Historical closure not supported (#9295). Static readiness assessed (#9307, accepted #9308). Wave 2 is serialized after Wave 1 approval; no prospective verification is authorized.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Wave 1 not closed",
+          "no Founder authorization for Wave 2 verification/implementation"
+        ],
+        "dependsOn": [
+          "CMD-DI-0-2",
+          "CMD-DI-1-1",
+          "CMD-DI-1-2",
+          "CMD-DI-1-3",
+          "CMD-DI-1-4",
+          "CMD-DI-1-5"
+        ],
+        "sources": [
+          "Room #9295",
+          "Room #9307",
+          "Room #9308"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state BLOCKED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 1 not closed",
+          "no Founder authorization for Wave 2 verification/implementation"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/10",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 10
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment recites checkpoint disposition; informational, not an independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-2-2",
+      "title": "Project board generalization",
+      "programme": "CMD-DI Wave 2",
+      "source_qualifier": "As 2-1. P3A-6 decoupled from 2-2 by Founder #9327; server/building.mjs, server/building-service.mjs and the BuildingProjection contract are read-only boundaries.",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-2-2",
+        "title": "Project board generalization",
+        "programme": "CMD-DI Wave 2",
+        "state": "BLOCKED",
+        "stateQualifier": "As 2-1. P3A-6 decoupled from 2-2 by Founder #9327; server/building.mjs, server/building-service.mjs and the BuildingProjection contract are read-only boundaries.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Wave 1 not closed",
+          "no Founder authorization"
+        ],
+        "dependsOn": [
+          "CMD-DI-1-1",
+          "CMD-DI-1-2",
+          "CMD-DI-1-3",
+          "CMD-DI-1-4",
+          "CMD-DI-1-5"
+        ],
+        "sources": [
+          "Room #9295",
+          "Room #9307",
+          "Room #9327"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state BLOCKED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 1 not closed",
+          "no Founder authorization"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/11",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 11
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-2-3",
+      "title": "Company OS: advisory reporting disclaimer",
+      "programme": "CMD-DI Wave 2",
+      "source_qualifier": "A one-file worker evidence report exists, but there is no task-specific Room dispatch or independent verdict (#9295).",
+      "source_state": "UNKNOWN",
+      "source_owner_at_checkpoint": "UNKNOWN",
+      "source_record": {
+        "id": "CMD-DI-2-3",
+        "title": "Company OS: advisory reporting disclaimer",
+        "programme": "CMD-DI Wave 2",
+        "state": "UNKNOWN",
+        "stateQualifier": "A one-file worker evidence report exists, but there is no task-specific Room dispatch or independent verdict (#9295).",
+        "owner": "UNKNOWN",
+        "blockers": [
+          "no independent verification",
+          "Wave 1 not closed"
+        ],
+        "dependsOn": [
+          "CMD-DI-1-1",
+          "CMD-DI-1-2",
+          "CMD-DI-1-3",
+          "CMD-DI-1-4",
+          "CMD-DI-1-5"
+        ],
+        "sources": [
+          "DESIGN_INTEGRATION_CMD_DI_2_3_EVIDENCE_2026-10-10.md (sha256 04ed7b38044049050a09fea2476bce4f0c9e07d744dda5e03d4ad67d506bf6ee)",
+          "Room #9292",
+          "Room #9293",
+          "Room #9295"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state UNKNOWN from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "no independent verification",
+          "Wave 1 not closed"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/12",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 12
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-2-4",
+      "title": "Rooms: read-only chronological conversation view (EvidenceRoomsPeer)",
+      "programme": "CMD-DI Wave 2",
+      "source_qualifier": "Static readiness found it unmet against a missing message contract (#9307/#9308).",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-2-4",
+        "title": "Rooms: read-only chronological conversation view (EvidenceRoomsPeer)",
+        "programme": "CMD-DI Wave 2",
+        "state": "BLOCKED",
+        "stateQualifier": "Static readiness found it unmet against a missing message contract (#9307/#9308).",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "missing message contract",
+          "Wave 1 not closed"
+        ],
+        "dependsOn": [
+          "CMD-DI-1-1",
+          "CMD-DI-1-2",
+          "CMD-DI-1-3",
+          "CMD-DI-1-4",
+          "CMD-DI-1-5"
+        ],
+        "sources": [
+          "Room #9295",
+          "Room #9307",
+          "Room #9308"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state BLOCKED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "missing message contract",
+          "Wave 1 not closed"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/13",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 13
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-2-5",
+      "title": "Work interface scope decision",
+      "programme": "CMD-DI Wave 2",
+      "source_qualifier": "Closed by Founder decision B3: Work is IN SCOPE, realized by 3-2a/b/c. Not an implementation task.",
+      "source_state": "CLOSED",
+      "source_owner_at_checkpoint": "Founder",
+      "source_record": {
+        "id": "CMD-DI-2-5",
+        "title": "Work interface scope decision",
+        "programme": "CMD-DI Wave 2",
+        "state": "CLOSED",
+        "stateQualifier": "Closed by Founder decision B3: Work is IN SCOPE, realized by 3-2a/b/c. Not an implementation task.",
+        "owner": "Founder",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:736",
+          "Room #9295",
+          "Room #9306"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "closed_scope",
+      "disposition_basis": "Historical source_state CLOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/14",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 14
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-1",
+      "title": "Staff glance counts (server side, /api/floor)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "Prospective ACCEPT #9269; corrective ACCEPT #9272 (unavailable roster publishes no counts; verified-empty publishes six zeroes). Historical REJECTED/provenance record retained; pre-image UNKNOWN.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@codex (accountable owner of any further server/floor.mjs work per #9327); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-3-1",
+        "title": "Staff glance counts (server side, /api/floor)",
+        "programme": "CMD-DI Wave 3",
+        "state": "ACCEPTED",
+        "stateQualifier": "Prospective ACCEPT #9269; corrective ACCEPT #9272 (unavailable roster publishes no counts; verified-empty publishes six zeroes). Historical REJECTED/provenance record retained; pre-image UNKNOWN.",
+        "owner": "@codex (accountable owner of any further server/floor.mjs work per #9327); @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "Room #9263",
+          "Room #9269",
+          "Room #9272",
+          "evidence/CMD-DI-PROSPECTIVE-RECOVERY-BASELINE-2026-10-11.json"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/15",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 15
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-2",
+      "title": "Work-package contract design (original)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "Folded into CMD-DI-3-2a.",
+      "source_state": "SUPERSEDED",
+      "source_owner_at_checkpoint": "n/a",
+      "source_record": {
+        "id": "CMD-DI-3-2",
+        "title": "Work-package contract design (original)",
+        "programme": "CMD-DI Wave 3",
+        "state": "SUPERSEDED",
+        "stateQualifier": "Folded into CMD-DI-3-2a.",
+        "owner": "n/a",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:737"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "superseded",
+      "disposition_basis": "Historical source_state SUPERSEDED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/16",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 16
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": [
+        "CMD-DI-3-2a"
+      ]
+    },
+    {
+      "id": "CMD-DI-3-2a",
+      "title": "Work-package contract (src/lib/contracts.ts WorkPackageRow)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "Prospective acceptance of the current contract only: contracts.ts 40,629 B / 81f6e9f6...d29d99d. Historical acceptance pin and continuity UNKNOWN. Frozen.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "historical; @opencode (prospective refreeze verifier)",
+      "source_record": {
+        "id": "CMD-DI-3-2a",
+        "title": "Work-package contract (src/lib/contracts.ts WorkPackageRow)",
+        "programme": "CMD-DI Wave 3",
+        "state": "ACCEPTED",
+        "stateQualifier": "Prospective acceptance of the current contract only: contracts.ts 40,629 B / 81f6e9f6...d29d99d. Historical acceptance pin and continuity UNKNOWN. Frozen.",
+        "owner": "historical; @opencode (prospective refreeze verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-2-5"
+        ],
+        "sources": [
+          "CMD_DI_3_2A_PROSPECTIVE_REFREEZE_VERIFICATION_2026-10-11.md (sha256 bc5a1fa6d22173d01252135e199620371636a06a180d06f1f457a92e9af475ee)",
+          "Room #9261",
+          "Room #9290"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/17",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 17
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [
+        "CMD-DI-3-2"
+      ],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-2b",
+      "title": "Work-package surface (read-only UI, filters, separate from Evidence->Rooms)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "Prospective ACCEPT #9269 (route supplies null until an authorized data source exists; UI shows UNKNOWN). Historical rejections and provenance UNKNOWNs retained.",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "historical; @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-3-2b",
+        "title": "Work-package surface (read-only UI, filters, separate from Evidence->Rooms)",
+        "programme": "CMD-DI Wave 3",
+        "state": "ACCEPTED",
+        "stateQualifier": "Prospective ACCEPT #9269 (route supplies null until an authorized data source exists; UI shows UNKNOWN). Historical rejections and provenance UNKNOWNs retained.",
+        "owner": "historical; @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-3-2a"
+        ],
+        "sources": [
+          "Room #9269",
+          "Room #9323",
+          "Room #9326"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/18",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 18
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-2c",
+      "title": "Contract-fulfilment test (tests/work-package-contract-fulfilment.test.tsx)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "The work was done outside a task-specific directive; the Founder recorded a provenance exception (#9270). Vision REJECT #9273 -> test-only corrective #9274/#9275 -> Vision ACCEPT #9276 (POST 25,492 B / a5e72855...d8b4059; suite 924/918/6).",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@opencode (builder); @vision (verifier)",
+      "source_record": {
+        "id": "CMD-DI-3-2c",
+        "title": "Contract-fulfilment test (tests/work-package-contract-fulfilment.test.tsx)",
+        "programme": "CMD-DI Wave 3",
+        "state": "ACCEPTED",
+        "stateQualifier": "The work was done outside a task-specific directive; the Founder recorded a provenance exception (#9270). Vision REJECT #9273 -> test-only corrective #9274/#9275 -> Vision ACCEPT #9276 (POST 25,492 B / a5e72855...d8b4059; suite 924/918/6).",
+        "owner": "@opencode (builder); @vision (verifier)",
+        "blockers": [],
+        "dependsOn": [
+          "CMD-DI-3-2a",
+          "CMD-DI-3-2b"
+        ],
+        "sources": [
+          "Room #9270",
+          "Room #9271",
+          "Room #9273",
+          "Room #9274",
+          "Room #9275",
+          "Room #9276"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/19",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 19
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-3",
+      "title": "Observation candidate pin verification",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "ACCEPTED as verification work (#9282) and as a corrected, internally consistent 27-entry prospective manifest (#9288, after REJECT #9285). The Observation CANDIDATE itself is NOT accepted; candidate acceptance is BLOCKED (provenance UNKNOWNs, G-CONTAINMENT unresolved).",
+      "source_state": "ACCEPTED",
+      "source_owner_at_checkpoint": "@codex (builder); @opencode (verifier)",
+      "source_record": {
+        "id": "CMD-DI-3-3",
+        "title": "Observation candidate pin verification",
+        "programme": "CMD-DI Wave 3",
+        "state": "ACCEPTED",
+        "stateQualifier": "ACCEPTED as verification work (#9282) and as a corrected, internally consistent 27-entry prospective manifest (#9288, after REJECT #9285). The Observation CANDIDATE itself is NOT accepted; candidate acceptance is BLOCKED (provenance UNKNOWNs, G-CONTAINMENT unresolved).",
+        "owner": "@codex (builder); @opencode (verifier)",
+        "blockers": [
+          "Observation candidate acceptance not authorized",
+          "G-CONTAINMENT unresolved"
+        ],
+        "dependsOn": [
+          "CMD-DI-3-2c"
+        ],
+        "sources": [
+          "Room #9277-#9288"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Historical source_state ACCEPTED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Observation candidate acceptance not authorized",
+          "G-CONTAINMENT unresolved"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/20",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 20
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-3-4",
+      "title": "Post-change SHA-256 source manifest (55 files: src/** + server/data-service.mjs + server/floor.mjs)",
+      "programme": "CMD-DI Wave 3",
+      "source_qualifier": "Preflight BLOCKED #9290. Not authorized; locked in every later Founder directive. The planned output .source-baseline-2026-10-10-post.json does not exist (#9290).",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "@codex (preflight author)",
+      "source_record": {
+        "id": "CMD-DI-3-4",
+        "title": "Post-change SHA-256 source manifest (55 files: src/** + server/data-service.mjs + server/floor.mjs)",
+        "programme": "CMD-DI Wave 3",
+        "state": "BLOCKED",
+        "stateQualifier": "Preflight BLOCKED #9290. Not authorized; locked in every later Founder directive. The planned output .source-baseline-2026-10-10-post.json does not exist (#9290).",
+        "owner": "@codex (preflight author)",
+        "blockers": [
+          "Wave 1-2 task closure not established",
+          "no explicit CMD-DI-3-4 execution authorization"
+        ],
+        "dependsOn": [
+          "CMD-DI-1-3",
+          "CMD-DI-1-4",
+          "CMD-DI-2-1",
+          "CMD-DI-2-2",
+          "CMD-DI-2-3",
+          "CMD-DI-2-4",
+          "CMD-DI-3-3"
+        ],
+        "sources": [
+          "Room #9289",
+          "Room #9290",
+          "Room #9302"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state BLOCKED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 1-2 task closure not established",
+          "no explicit CMD-DI-3-4 execution authorization"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/21",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 21
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment recites checkpoint disposition; informational, not an independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-4-1",
+      "title": "Architecture guard updates (per audit)",
+      "programme": "CMD-DI Wave 4",
+      "source_qualifier": "Planned in the corrected package; Wave 4 explicitly unauthorized (#9274, #9283, #9302 and later).",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-4-1",
+        "title": "Architecture guard updates (per audit)",
+        "programme": "CMD-DI Wave 4",
+        "state": "PROPOSED",
+        "stateQualifier": "Planned in the corrected package; Wave 4 explicitly unauthorized (#9274, #9283, #9302 and later).",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "dependsOn": [
+          "CMD-DI-0-2"
+        ],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md (Wave 4)",
+          "Room #9302"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Historical source_state PROPOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/22",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 22
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-4-2",
+      "title": "New design-integration render tests",
+      "programme": "CMD-DI Wave 4",
+      "source_qualifier": "Planned; unauthorized. Note: tests/design-integration.test.tsx already exists and is used by 1-1/1-2 evidence (#9330, #9353); the attribution of that file to 4-2 is UNKNOWN.",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-4-2",
+        "title": "New design-integration render tests",
+        "programme": "CMD-DI Wave 4",
+        "state": "PROPOSED",
+        "stateQualifier": "Planned; unauthorized. Note: tests/design-integration.test.tsx already exists and is used by 1-1/1-2 evidence (#9330, #9353); the attribution of that file to 4-2 is UNKNOWN.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "dependsOn": [],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md (Wave 4)",
+          "Room #9330"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Historical source_state PROPOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/23",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 23
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CMD-DI-4-3",
+      "title": "Production build verification (mandatory, B2)",
+      "programme": "CMD-DI Wave 4",
+      "source_qualifier": "Mandatory before Gate 1 release; unauthorized.",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "CMD-DI-4-3",
+        "title": "Production build verification (mandatory, B2)",
+        "programme": "CMD-DI Wave 4",
+        "state": "PROPOSED",
+        "stateQualifier": "Mandatory before Gate 1 release; unauthorized.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "dependsOn": [
+          "CMD-DI-3-4",
+          "CMD-DI-4-1",
+          "CMD-DI-4-2"
+        ],
+        "sources": [
+          "DESIGN_INTEGRATION_EXECUTION_PACKAGE_CORRECTED_2026-10-10.md:650"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Historical source_state PROPOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Wave 4 unauthorized"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/24",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 24
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "DP-GATE-A-PREP-001",
+      "title": "Deadpool Gate A preparation: deterministic LLM-free Room watcher (T1-T11)",
+      "programme": "Floor operations",
+      "source_qualifier": "Authorized for PREPARATION ONLY at #9258/#9259 (Codex builder, Vision verifier). No build or T1-T11 result found in Room #9260-#9362. The authorization expires 7 days after append, about 2026-10-17T22:46Z, unless renewed.",
+      "source_state": "UNKNOWN",
+      "source_owner_at_checkpoint": "@codex (builder); @vision (verifier); @deadpool (subject)",
+      "source_record": {
+        "id": "DP-GATE-A-PREP-001",
+        "title": "Deadpool Gate A preparation: deterministic LLM-free Room watcher (T1-T11)",
+        "programme": "Floor operations",
+        "state": "UNKNOWN",
+        "stateQualifier": "Authorized for PREPARATION ONLY at #9258/#9259 (Codex builder, Vision verifier). No build or T1-T11 result found in Room #9260-#9362. The authorization expires 7 days after append, about 2026-10-17T22:46Z, unless renewed.",
+        "owner": "@codex (builder); @vision (verifier); @deadpool (subject)",
+        "blockers": [
+          "no recorded build/result",
+          "activation requires a separate Founder directive"
+        ],
+        "dependsOn": [],
+        "sources": [
+          "Room #9258",
+          "Room #9259"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state UNKNOWN from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "no recorded build/result",
+          "activation requires a separate Founder directive"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/25",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 25
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "ROOM-FORMAT-INVESTIGATION",
+      "title": "Room/Telegram literal \\n formatting investigation",
+      "programme": "Communications",
+      "source_qualifier": "Bounded diagnostic and offline reproduction ACCEPTED (#9304); Founder closure #9305. Historical root cause UNKNOWN; no production correction authorized.",
+      "source_state": "CLOSED",
+      "source_owner_at_checkpoint": "@vision, @codex",
+      "source_record": {
+        "id": "ROOM-FORMAT-INVESTIGATION",
+        "title": "Room/Telegram literal \\n formatting investigation",
+        "programme": "Communications",
+        "state": "CLOSED",
+        "stateQualifier": "Bounded diagnostic and offline reproduction ACCEPTED (#9304); Founder closure #9305. Historical root cause UNKNOWN; no production correction authorized.",
+        "owner": "@vision, @codex",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "Room #9296-#9305"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "closed_scope",
+      "disposition_basis": "Historical source_state CLOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/26",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 26
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "TELEGRAM-TRUNCATION",
+      "title": "Starq Telegram relay truncates at ~4,000 characters",
+      "programme": "Communications",
+      "source_qualifier": "Recorded as a separate open engineering issue requiring its own authorization (#9305).",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "TELEGRAM-TRUNCATION",
+        "title": "Starq Telegram relay truncates at ~4,000 characters",
+        "programme": "Communications",
+        "state": "PROPOSED",
+        "stateQualifier": "Recorded as a separate open engineering issue requiring its own authorization (#9305).",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "no authorization"
+        ],
+        "dependsOn": [],
+        "sources": [
+          "Room #9298",
+          "Room #9305"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Historical source_state PROPOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "no authorization"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/27",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 27
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "MODS",
+      "title": "Minimum Operational Development Studio (accelerated strategy)",
+      "programme": "Strategy",
+      "source_qualifier": "Named by the Founder as the goal (#9354, #9358, #9361), and used to justify the single-theme revision in #9354. No Room record defines its scope or acceptance criteria; the definition is UNKNOWN beyond these references.",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "Founder",
+      "source_record": {
+        "id": "MODS",
+        "title": "Minimum Operational Development Studio (accelerated strategy)",
+        "programme": "Strategy",
+        "state": "PROPOSED",
+        "stateQualifier": "Named by the Founder as the goal (#9354, #9358, #9361), and used to justify the single-theme revision in #9354. No Room record defines its scope or acceptance criteria; the definition is UNKNOWN beyond these references.",
+        "owner": "Founder",
+        "blockers": [
+          "no written definition / acceptance criteria located"
+        ],
+        "dependsOn": [
+          "CMD-DI-1-3",
+          "CMD-DI-1-4"
+        ],
+        "sources": [
+          "Room #9354",
+          "Room #9358",
+          "Room #9361"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Source remains PROPOSED; #9386 defines exit criteria but not execution authority/completion. #9385/#9388 are assessments; #9395 rejects N-1 readiness.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "no written definition / acceptance criteria located"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/28",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 28
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Founder requested read-only MODS readiness assessment.",
+          "room_ref": {
+            "sequence": 9384,
+            "eventId": "40b0e27fd5c7453e0a5475a61c45276f6d33be73a314948a5ab64427f44f2afa",
+            "recordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "previousRecordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+            "senderHandle": "mustarq",
+            "purpose": "Founder MODS readiness assessment directive."
+          }
+        },
+        {
+          "effect": "Codex says not ready to commission; informational report, not independent verdict.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        },
+        {
+          "effect": "Founder defines MODS exit criteria and defers nonessential work; no execution authority.",
+          "room_ref": {
+            "sequence": 9386,
+            "eventId": "3f0fa76d7d341840c03e9b873619c4a5bd004bb620b3b6f41f1cf122c72b9058",
+            "recordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+            "previousRecordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "senderHandle": "mustarq",
+            "purpose": "Founder defines MODS exit scope; not an execution grant."
+          }
+        },
+        {
+          "effect": "Founder assigns read-only MODS assessment only.",
+          "room_ref": {
+            "sequence": 9387,
+            "eventId": "583985b195af624a5e90065bc83535fd072ed47bbb9b1d949298732689d8079a",
+            "recordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+            "previousRecordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+            "senderHandle": "mustarq",
+            "purpose": "Founder assigns read-only MODS readiness assessment."
+          }
+        },
+        {
+          "effect": "Antigravity says ready for operational gating; this is not operational acceptance.",
+          "room_ref": {
+            "sequence": 9388,
+            "eventId": "c79b0c9ba29edd52430002e10fe01435f0e1f8ab44423a2358bec29f50d66d80",
+            "recordHash": "5c8f05811f045730d05bdd628ef0b40f95616082536d2f53596a7290e29c772a",
+            "previousRecordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+            "senderHandle": "antigravity",
+            "purpose": "Antigravity readiness report; operational gating is not acceptance."
+          }
+        },
+        {
+          "effect": "Founder read-only containment plan assignment only.",
+          "room_ref": {
+            "sequence": 9391,
+            "eventId": "7803b66b8390ac6ba1ded19d49cc3746c3e74cdb2cc5118644f04678b223c44f",
+            "recordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+            "previousRecordHash": "54ab4ce6b9b7e742fee70a701741e13302c635e7ae3cfd8d402e14c723c2804f",
+            "senderHandle": "mustarq",
+            "purpose": "Founder read-only native-containment planning assignment; no execution authority."
+          }
+        },
+        {
+          "effect": "Codex plan/evidence report; no execution.",
+          "room_ref": {
+            "sequence": 9392,
+            "eventId": "b110c93bbf42cef2de67edf457247b39b6f17bb24d0ec129333e3fe45cbae065",
+            "recordHash": "589c1d41ee30f3d2656cd59d5798eeffe3d996eef9096a3beabe143c0a2a275d",
+            "previousRecordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only plan/evidence report; no tests or services executed."
+          }
+        },
+        {
+          "effect": "Vision rejects N-1 readiness; G-CONTAINMENT open, not MODS acceptance.",
+          "room_ref": {
+            "sequence": 9395,
+            "eventId": "84f1cc22935bf8a00af49e7d7ae003ec255f45ea647afeb380c6ae903d13d8b0",
+            "recordHash": "1d80d7afbfc4738c6860d1b5021fe42fc72accbe7bf957ff10712d08027f982b",
+            "previousRecordHash": "cbd58800af505ad2851f255992acd8c909f9e0f5078c36d06a11aefc6158a12f",
+            "senderHandle": "vision",
+            "purpose": "Vision correction: N-1 readiness rejected; G-CONTAINMENT remains open."
+          }
+        },
+        {
+          "effect": "Board recovery only; no MODS operational readiness may be inferred.",
+          "room_ref": {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "MISSION-SERP-AIKIDO-BASELINE",
+      "title": "First real product mission: StarqERP baseline assessment using Aikido",
+      "programme": "Strategy",
+      "source_qualifier": "Mentioned only as a 'planned' mission in #9358. No authorization, owner or scope found. Historical Aikido usage exists (SERP-226 gate #246; SERP-382 triage blocked on a Founder console export #260-#262), but that is prior context, not this mission. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization.",
+      "source_state": "PROPOSED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "MISSION-SERP-AIKIDO-BASELINE",
+        "title": "First real product mission: StarqERP baseline assessment using Aikido",
+        "programme": "Strategy",
+        "state": "PROPOSED",
+        "stateQualifier": "Mentioned only as a 'planned' mission in #9358. No authorization, owner or scope found. Historical Aikido usage exists (SERP-226 gate #246; SERP-382 triage blocked on a Founder console export #260-#262), but that is prior context, not this mission. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "no Founder execution authorization",
+          "Room #9208 ALL-STOP in force"
+        ],
+        "dependsOn": [
+          "MODS"
+        ],
+        "sources": [
+          "Room #9358",
+          "Room #246",
+          "Room #260",
+          "Room #261",
+          "00_STARQ_HQ/decisions.json (DEC-100)",
+          "Room #9364"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "undecided",
+      "disposition_basis": "Historical source_state PROPOSED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "no Founder execution authorization",
+          "Room #9208 ALL-STOP in force"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/29",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 29
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment reports no mission authorization.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        },
+        {
+          "effect": "Founder excludes StarqERP mission activation and Aikido assessment.",
+          "room_ref": {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "SERP-354",
+      "title": "Capture, refund and settlement commands into canonical structures (StarqERP, C2B)",
+      "programme": "StarqERP",
+      "source_qualifier": "Board status in_progress; work_state PRESERVED, i.e. deliberately stopped by the Founder with branches, commits and tests preserved and not resumed (command_work_model.json; serp_reclassification.md:74). Listed as subsequent work in #9358. Not authorized to resume. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization. Title conflict: AG #9364 describes SERP-354 as a principal-tenancy payment boundary, while command_work_model.json titles it capture/refund/settlement. Unreconciled; the work-model title is retained.",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "UNASSIGNED",
+      "source_record": {
+        "id": "SERP-354",
+        "title": "Capture, refund and settlement commands into canonical structures (StarqERP, C2B)",
+        "programme": "StarqERP",
+        "state": "BLOCKED",
+        "stateQualifier": "Board status in_progress; work_state PRESERVED, i.e. deliberately stopped by the Founder with branches, commits and tests preserved and not resumed (command_work_model.json; serp_reclassification.md:74). Listed as subsequent work in #9358. Not authorized to resume. DEC-100 (decisions.json, closed 2026-09-28): StarqERP implementation is ON HOLD pending explicit Founder restart authorization. Title conflict: AG #9364 describes SERP-354 as a principal-tenancy payment boundary, while command_work_model.json titles it capture/refund/settlement. Unreconciled; the work-model title is retained.",
+        "owner": "UNASSIGNED",
+        "blockers": [
+          "Founder stop; resumption not authorized",
+          "depends on first mission"
+        ],
+        "dependsOn": [
+          "MISSION-SERP-AIKIDO-BASELINE"
+        ],
+        "sources": [
+          "operations/starqerp-control-board/command_work_model.json",
+          "operations/starqerp-control-board/serp_reclassification.md:74",
+          "Room #8164-#8334",
+          "Room #9358",
+          "00_STARQ_HQ/decisions.json (DEC-100)",
+          "Room #9364"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "unknown",
+      "disposition_basis": "Historical source_state BLOCKED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Founder stop; resumption not authorized",
+          "depends on first mission"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/30",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 30
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Codex read-only assessment reports the existing hold.",
+          "room_ref": {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        },
+        {
+          "effect": "Founder excludes StarqERP mission work.",
+          "room_ref": {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          }
+        },
+        {
+          "effect": "Founder continues to preserve the separate hold.",
+          "room_ref": {
+            "sequence": 9454,
+            "eventId": "dcf20f1e4b99ca8d74b737fe08d51c4c6aa9a8c08015c4d39aa5deddcf4a9fa7",
+            "recordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+            "previousRecordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "senderHandle": "mustarq",
+            "purpose": "Continuation of #9453 constraints and required evidence."
+          }
+        }
+      ],
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "CONT-PKG-9358",
+      "title": "Continuity package (Deadpool attempt)",
+      "programme": "Continuity",
+      "source_qualifier": "Incomplete: 9 stubs; EVIDENCE_INDEX.json was not valid JSON; CONTINUITY_MANIFEST.json was absent. Preserved at continuity/_prior/deadpool-draft-20261012/ with SHA256SUMS. Superseded by #9361.",
+      "source_state": "SUPERSEDED",
+      "source_owner_at_checkpoint": "@deadpool",
+      "source_record": {
+        "id": "CONT-PKG-9358",
+        "title": "Continuity package (Deadpool attempt)",
+        "programme": "Continuity",
+        "state": "SUPERSEDED",
+        "stateQualifier": "Incomplete: 9 stubs; EVIDENCE_INDEX.json was not valid JSON; CONTINUITY_MANIFEST.json was absent. Preserved at continuity/_prior/deadpool-draft-20261012/ with SHA256SUMS. Superseded by #9361.",
+        "owner": "@deadpool",
+        "blockers": [],
+        "dependsOn": [],
+        "sources": [
+          "Room #9358",
+          "Room #9359",
+          "Room #9361",
+          "continuity/_prior/deadpool-draft-20261012/SHA256SUMS"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "superseded",
+      "disposition_basis": "Historical source_state SUPERSEDED from immutable Room #9367 checkpoint; no fresh task-execution authorization implied.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/31",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 31
+        }
+      ],
+      "room_overlay_refs": [],
+      "supersedes": [],
+      "superseded_by": [
+        "CONT-PKG-9361"
+      ]
+    },
+    {
+      "id": "CONT-PKG-9361",
+      "title": "Continuity package recovery and completion (this package)",
+      "programme": "Continuity",
+      "source_qualifier": "Codex #9366: manifest/checkpoint integrity ACCEPTED at #9364; START_HERE cold-start procedure REJECTED (reconciliation step wrote canonical files before authority was established). Founder #9367 authorized a bounded correction: steps 1-6 are now read-only/report-only, with a Step 7 owner/scope write gate, and timestamps are measured or declared unverified. Re-parked for review; no self-acceptance. Pre-correction copy: _prior/elder-20261012-cp9364/.",
+      "source_state": "BLOCKED",
+      "source_owner_at_checkpoint": "@elder (claude)",
+      "source_record": {
+        "id": "CONT-PKG-9361",
+        "title": "Continuity package recovery and completion (this package)",
+        "programme": "Continuity",
+        "state": "BLOCKED",
+        "stateQualifier": "Codex #9366: manifest/checkpoint integrity ACCEPTED at #9364; START_HERE cold-start procedure REJECTED (reconciliation step wrote canonical files before authority was established). Founder #9367 authorized a bounded correction: steps 1-6 are now read-only/report-only, with a Step 7 owner/scope write gate, and timestamps are measured or declared unverified. Re-parked for review; no self-acceptance. Pre-correction copy: _prior/elder-20261012-cp9364/.",
+        "owner": "@elder (claude)",
+        "blockers": [
+          "Codex independent review pending (#9362)"
+        ],
+        "dependsOn": [
+          "CONT-PKG-9358"
+        ],
+        "sources": [
+          "Room #9361",
+          "Room #9362",
+          "Room #9363",
+          "Room #9364",
+          "Room #9365",
+          "Room #9366",
+          "Room #9367"
+        ]
+      },
+      "current_owner": "UNKNOWN",
+      "current_verifier": "UNKNOWN",
+      "workflow_stage": "unknown",
+      "disposition": "accepted_scoped",
+      "disposition_basis": "Founder #9371 accepts documentation continuity/cold-start only; source_state BLOCKED remains preserved; no runtime commissioning acceptance.",
+      "current_authorization_status": "not_authorized_for_new_task_execution",
+      "authorization_refs": [
+        {
+          "sequence": 9208,
+          "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+          "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+          "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+          "senderHandle": "codex",
+          "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+        },
+        {
+          "sequence": 9453,
+          "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+          "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+          "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+          "senderHandle": "mustarq",
+          "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+        }
+      ],
+      "independent_verdict_refs": [],
+      "blocker": {
+        "source_blockers": [
+          "Codex independent review pending (#9362)"
+        ],
+        "current": "UNKNOWN"
+      },
+      "evidence_refs": [
+        {
+          "kind": "historical-ledger-row",
+          "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json#/tasks/32",
+          "sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+          "source_row_index": 32
+        }
+      ],
+      "room_overlay_refs": [
+        {
+          "effect": "Founder accepts continuity documentation/cold-start only; source checkpoint BLOCKED and runtime boundary remain.",
+          "room_ref": {
+            "sequence": 9371,
+            "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+            "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+          }
+        }
+      ],
+      "supersedes": [
+        "CONT-PKG-9358"
+      ],
+      "superseded_by": []
+    }
+  ]
+}
+

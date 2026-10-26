@@ -1,0 +1,64 @@
+{
+  "generatedAt": "2026-10-12T09:45:00Z",
+  "latestRoomSeqObserved": 9359,
+  "verifiedEvidenceLevel": "P1 STARQBOT E2E + D2/D3 independent verification through Room seq 8672 (see EVIDENCE_INDEX.json)",
+  "statusClassifications": "VERIFIED, ACCEPTED, REJECTED, BLOCKED, PROPOSED, UNKNOWN, SUPERSEDED",
+  "tasks": [
+    {
+      "id": "phase-1-building-shell",
+      "owner": "historical",
+      "state": "ACCEPTED",
+      "blockers": [],
+      "evidence": ["starq-command/README.md phases 1-5 complete table", "Room seq 8514 G-WSL gate acceptance by @vision"],
+      "dependency": null
+    },
+    {
+      "id": "phase-2-truth-health-floor",
+      "owner": "historical",
+      "state": "ACCEPTED",
+      "blockers": [],
+      "evidence": ["starq-command/README.md", "Room seq 8514 gate acceptance scope all distros (WSL+docker-desktop)"],
+      "dependency": "phase-1-building-shell"
+    },
+    {
+      "id": "phase-3-dev-studio-floor",
+      "owner": "historical",
+      "state": "ACCEPTED",
+      "blockers": [],
+      "evidence": ["starq-command/README.md phases table (founder-authorised 29 Sep 2026)"],
+      "dependency": "phase-2-truth-health-floor"
+    },
+    {
+      "id": "phase-4-erp-process-floor",
+      "owner": "historical",
+      "state": "ACCEPTED",
+      "blockers": [],
+      "evidence": ["starq-command/README.md phases table (founder-authorised 29 Sep 2026, base 3487fd7)"],
+      "dependency": "phase-3-dev-studio-floor"
+    },
+    {
+      "id": "phase-5-founder-attention",
+      "owner": "historical",
+      "state": "ACCEPTED",
+      "blockers": [],
+      "evidence": ["starq-command/README.md phases table (founder-authorised 29 Sep 2026, base 38037d5)"],
+      "dependency": "phase-4-erp-process-floor"
+    },
+    {
+      "id": "phase-6-not-authorised",
+      "owner": "founder-gate",
+      "state": "PROPOSED/NOT_AUTHORISED",
+      "blockers": ["founder authorisation; phases 6-7 explicitly not implemented"],
+      "evidence": ["starq-command/README.md: phases 6-7 not authorised; empty shell registry"],
+      "dependency": null
+    },
+    {
+      "id": "continuity-package",
+      "owner": "@deadpool",
+      "state": "BLOCKED_PENDING",
+      "blockers": ["execution under way; no self-acceptance"],
+      "evidence": ["Room seq 9358/9359"],
+      "dependency": null
+    }
+  ]
+}

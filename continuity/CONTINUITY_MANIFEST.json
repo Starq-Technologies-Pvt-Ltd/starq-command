@@ -1,0 +1,99 @@
+{
+  "schema": "starq-command-continuity/manifest/v1",
+  "schemaVersion": "1.0.0",
+  "generatedAtUtc": "2026-10-12T10:59:03Z",
+  "generatedBy": "claude (@elder) under Founder Room #9361 / #9362",
+  "packageLocation": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\",
+  "sourceCheckpoints": {
+    "roomHeadSeq": 9367,
+    "roomHeadRecordHash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+    "latestIndependentVerdictSeq": 9360,
+    "recoveryBaselineSha256": "9a10d43982eeabd689798100a736220da7dbaf928b7687bcd24a4e7bc17cb9eb",
+    "roomHeadAtValidation": 9367
+  },
+  "files": [
+    {
+      "path": "START_HERE.md",
+      "bytes": 10324,
+      "sha256": "6943d0b9efe52b9c26cfc2cc2436c814e1df2bf7a72f09f3128adffcd3ef1700"
+    },
+    {
+      "path": "PROJECT_IDENTITY.md",
+      "bytes": 6980,
+      "sha256": "848f518ecb297c4831dd340927978dfdb98bcd145c074e06893cb4c729a478b8"
+    },
+    {
+      "path": "CURRENT_STATE.md",
+      "bytes": 7816,
+      "sha256": "73444e9366b842652bb220a001cce932444ad98f5a375cd1f3e186599166075f"
+    },
+    {
+      "path": "TASK_LEDGER.json",
+      "bytes": 26842,
+      "sha256": "91c16b4fb74f8551cfbfad0e260c1d9747e919910a1a5db3d0f11d016187297f"
+    },
+    {
+      "path": "DECISION_LEDGER.md",
+      "bytes": 10405,
+      "sha256": "a8b8bb0fd2a0c5823db8a2d35451bb99f396b86b692b638dec453b0b3158ee7f"
+    },
+    {
+      "path": "EVIDENCE_INDEX.json",
+      "bytes": 18929,
+      "sha256": "163a03b46f0251cb41a93d13fb71b2c60da8a3bae90192e49ef78dd30015b04d"
+    },
+    {
+      "path": "WORKFORCE.md",
+      "bytes": 5240,
+      "sha256": "fe306ab7d1f8dc621c6012237bbd1ae685718da16a29337262c59cc2652c2e04"
+    },
+    {
+      "path": "RUNTIME_AND_RECOVERY.md",
+      "bytes": 5315,
+      "sha256": "d8168ea2718b6160eddc7dc7d318abcfcdcb83cbcd193c3134971b07b7bef600"
+    },
+    {
+      "path": "OPEN_BLOCKERS.md",
+      "bytes": 5659,
+      "sha256": "250a1ef3f2fc38059b2b2cf2ce9f4277af0f00a6c06ae95da1633a912115264f"
+    },
+    {
+      "path": "NEXT_EXECUTION.md",
+      "bytes": 4200,
+      "sha256": "0d26a7c91a3129947d672e6d068767236eeb250214a92395620687f8a0f5f079"
+    },
+    {
+      "path": "HISTORY.md",
+      "bytes": 11853,
+      "sha256": "178a109f42334764bb5de286c24c0b98d2fba5741579bd1fa1079c3787445eec"
+    },
+    {
+      "path": "CONTINUITY_MANIFEST.json",
+      "bytes": null,
+      "sha256": null,
+      "note": "Self-hash cannot be embedded; posted in the Room submission record."
+    }
+  ],
+  "nonCanonicalFiles": [
+    {
+      "path": "CONTINUITY_MANIFEST.md",
+      "bytes": 272,
+      "sha256": "12d9aae62b394ff0c96da572c108d23c913783ee27c7c1aaa0107342870f0c2a",
+      "note": "superseded stub pointer"
+    },
+    {
+      "path": "_prior/deadpool-draft-20261012/",
+      "note": "preserved prior draft; see its SHA256SUMS",
+      "sha256sumsSha256": "c2b272f440e37c4eb566365e5320ca5e51e4119e5e35f18a220b5bb259c1a194"
+    }
+  ],
+  "validation": {
+    "jsonParse": "PASS (TASK_LEDGER.json, EVIDENCE_INDEX.json, CONTINUITY_MANIFEST.json)",
+    "taskCount": 33,
+    "taskDependencyCheck": "PASS",
+    "sourcePathsChecked": 20,
+    "artifactHashesRechecked": 29,
+    "roomSeqRefsChecked": 148,
+    "problems": []
+  }
+}
