@@ -32,6 +32,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CANONICAL, CONTROL_BOARD_FILES, PROTOCOL_FILES, abs } from './paths.mjs';
+import { readRoomSnapshot } from './room-snapshot.mjs';
 
 // ── Dimension state vocabulary ──────────────────────────────────────────────
 // One vocabulary, shared with the UI (src/lib/states.ts). These are NOT the
@@ -120,9 +121,24 @@ export function readSourceReachability(root) {
     };
   }
 
+  const roomSnapshot = readRoomSnapshot(root);
   const sources = SOURCE_ROLES.map((s) => {
     const target = abs(root, s.path);
     const base = { id: s.id, path: s.path, role: s.role };
+    if (s.id === 'roomLedger') {
+      const valid = roomSnapshot.state === 'OK' && roomSnapshot.stable && roomSnapshot.parseStatus === 'OK';
+      const state = valid ? DIMENSION.OK :
+        roomSnapshot.state === 'UNAVAILABLE' || roomSnapshot.state === 'EMPTY' ? DIMENSION.UNAVAILABLE : DIMENSION.UNREADABLE;
+      return {
+        ...base,
+        state,
+        detail: valid ? 'reachable, stable and parsed by the sanctioned Room reader' : (roomSnapshot.reason ?? 'Room snapshot unavailable'),
+        bytes: roomSnapshot.byteLength,
+        modified_at: roomSnapshot.modifiedAt,
+        sha256_prefix: roomSnapshot.sha256Prefix,
+        hashed: valid,
+      };
+    }
     let stat;
     try {
       stat = fs.statSync(target);
@@ -132,9 +148,8 @@ export function readSourceReachability(root) {
     if (!stat.isFile()) {
       return { ...base, state: DIMENSION.UNAVAILABLE, detail: 'path is not a regular file', bytes: null, modified_at: null, sha256_prefix: null };
     }
-    // Hash only files that are safe to hash. The Room ledger is tens of
-    // megabytes; hashing it on every request would trade a truthful surface
-    // for a slow one, and its integrity is covered by the epoch verifier.
+    // Hash only the other files that are safe to hash here. The Room ledger
+    // has already been measured through readRoomSnapshot() above.
     const hashable = stat.size <= 4 * 1024 * 1024;
     let digest = null;
     if (hashable) {
@@ -181,8 +196,9 @@ let epochCache = { key: null, result: null, at: null };
 
 function epochCacheKey(root) {
   const parts = [];
+  const room = readRoomSnapshot(root);
+  parts.push(`room:${room.state}:${room.byteLength ?? 'UNKNOWN'}:${room.sha256 ?? 'UNKNOWN'}`);
   for (const p of [
-    CANONICAL.roomLedger,
     `${CANONICAL.protocol}/${PROTOCOL_FILES.ledgerEpochFile}`,
   ]) {
     try {
@@ -202,6 +218,17 @@ export async function readLedgerIntegrity(root) {
       detail: 'workspace root unresolved',
       current: null,
       preserved_historical: [],
+    };
+  }
+
+  const roomSnapshot = readRoomSnapshot(root);
+  if (roomSnapshot.state !== 'OK' || !roomSnapshot.stable || roomSnapshot.parseStatus !== 'OK') {
+    return {
+      state: roomSnapshot.state === 'UNAVAILABLE' || roomSnapshot.state === 'EMPTY' ? DIMENSION.UNAVAILABLE : DIMENSION.UNREADABLE,
+      detail: roomSnapshot.reason ?? `Room snapshot is ${roomSnapshot.state}/${roomSnapshot.parseStatus}`,
+      current: null,
+      preserved_historical: [],
+      evidence: [CANONICAL.roomLedger],
     };
   }
 

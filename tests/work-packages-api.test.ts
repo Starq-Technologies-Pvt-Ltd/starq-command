@@ -1,6 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../server/data-service.mjs';
-import { readRoomVisibility } from '../server/room-work.mjs';
+
+const { roomVisibilityMock } = vi.hoisted(() => ({
+  roomVisibilityMock: vi.fn(() => ({ work: null })),
+}));
+vi.mock('../server/room-work.mjs', () => ({ readRoomVisibility: roomVisibilityMock }));
 
 async function request(method: string, url: string) {
   return new Promise<{ status: number; body: string; headers: Record<string, string> }>((resolve) => {
@@ -31,6 +35,8 @@ const priorObservationMode = process.env.COMMAND_OBSERVATION_ONLY;
 const priorRoot = process.env.STARQ_WORKSPACE;
 beforeEach(() => { process.env.STARQ_WORKSPACE = 'D:/__command_missing_fixture_root__'; });
 afterEach(() => {
+  roomVisibilityMock.mockReset();
+  roomVisibilityMock.mockReturnValue({ work: null });
   if (priorObservationMode === undefined) delete process.env.COMMAND_OBSERVATION_ONLY;
   else process.env.COMMAND_OBSERVATION_ONLY = priorObservationMode;
   if (priorRoot === undefined) delete process.env.STARQ_WORKSPACE;
@@ -60,14 +66,17 @@ describe('GET /api/work-packages', () => {
     expect(response.status).toBe(405);
     expect(server.listening).toBe(false);
   });
-  it('preserves canonical ingestion availability and exact project filtering under #9538', async () => {
-    process.env.STARQ_WORKSPACE = 'D:/StarqTech';
+  it('preserves exact project filtering without reading the live Room in this API test', async () => {
+    const rows = [
+      { project_id: 'hoadha', id: 'fixture-hoadha', record: { current_execution: 'UNKNOWN', independent_verification: 'UNKNOWN' } },
+      { project_id: 'starq-erp', id: 'fixture-erp', record: { current_execution: 'UNKNOWN', independent_verification: 'UNKNOWN' } },
+    ];
+    roomVisibilityMock.mockReturnValue({ work: rows });
     const response = await request('GET', '/api/work-packages?project_id=hoadha');
     expect(response.status).toBe(200);
-    const rows = JSON.parse(response.body);
-    const expected=readRoomVisibility('D:/StarqTech').work;
-    expect(rows).toEqual(expected===null ? null : expected.filter((r:any)=>r.project_id==='hoadha'));
-    if(rows) expect(rows.every((r: any) => r.project_id === 'hoadha' && r.record.current_execution === 'UNKNOWN' && r.record.independent_verification === 'UNKNOWN')).toBe(true);
+    const result = JSON.parse(response.body);
+    expect(result).toEqual([rows[0]]);
+    expect(result.every((r: any) => r.project_id === 'hoadha' && r.record.current_execution === 'UNKNOWN' && r.record.independent_verification === 'UNKNOWN')).toBe(true);
     expect(server.listening).toBe(false);
   });
 });

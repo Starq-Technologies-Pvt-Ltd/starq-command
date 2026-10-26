@@ -16,7 +16,7 @@ import { osVerdict } from '../inspect.mjs';
 import { InspectionError } from '../inspect.mjs';
 
 const NODE = 'D:\\fake\\runtime\\node.exe';
-const PORTS = { data: 5177, building: 5178, herdrBroker: 5188, herdr: 5179, ui: 5173 };
+const PORTS = { data: 5177, building: 5178, herdrBroker: 5188, herdr: 5179, pm: 5176, ui: 5173 };
 
 function baseConfig(root) {
   const c = (name, deps, extra = {}) => ({
@@ -30,7 +30,8 @@ function baseConfig(root) {
       c('data', []), c('building', []),
       c('herdrBroker', [], { lifecycle_token: 'tok.txt', manifest: 'manifest.json' }),
       c('herdr', ['herdrBroker']),
-      c('ui', ['data', 'building', 'herdr'], { vite_config: 'vite.config.ts', health: { path: '/', status: 200, content_type: 'text/html', body_includes: ['root'] } }),
+      c('pm', []),
+      c('ui', ['data', 'building', 'herdr', 'pm'], { vite_config: 'vite.config.ts', health: { path: '/', status: 200, content_type: 'text/html', body_includes: ['root'] } }),
     ],
     profile: { required_files: [] },
   };
@@ -85,7 +86,19 @@ function world({ mutateConfig = null, env = {} } = {}) {
       const name = opts.env.STARQ_LC_NAME;
       // Snapshot the persisted state at the moment of each spawn (persist-as-you-go evidence).
       const snap = readState(path.join(runtimeDir, 'state.json'));
-      calls.spawn.push({ name, pid, exe, priorChildren: snap.kind === 'OK' ? snap.state.children.map((c) => `${c.name}:${c.status}`) : [] });
+      calls.spawn.push({
+        name, pid, exe,
+        priorChildren: snap.kind === 'OK' ? snap.state.children.map((c) => `${c.name}:${c.status}`) : [],
+        env: {
+          PM_PORT: opts.env.PM_PORT ?? null,
+          PM_ROOM_POST: opts.env.PM_ROOM_POST ?? null,
+          PM_DB_PATH: opts.env.PM_DB_PATH ?? null,
+          PM_ROOM_LEDGER: opts.env.PM_ROOM_LEDGER ?? null,
+          PM_ROOM_FROM: opts.env.PM_ROOM_FROM ?? null,
+          PM_ROOM_INSTANCE: opts.env.PM_ROOM_INSTANCE ?? null,
+          PM_ROOM_SEND_SCRIPT: opts.env.PM_ROOM_SEND_SCRIPT ?? null,
+        },
+      });
       procs.set(pid, { found: true, name: 'node.exe', exe, created: iso() });
       pipes.set(pid, { instance: opts.env.STARQ_LC_INSTANCE, name });
       listeners.push({ port: Number(opts.env.STARQ_LC_PORT), pid });
@@ -197,9 +210,19 @@ test('START: dependency-readiness order, every launch persisted as it occurs', a
   try {
     const r = await w.owner.start();
     assert.equal(r.result, RESULT.READY);
-    assert.deepEqual(w.calls.spawn.map((s) => s.name), ['data', 'building', 'herdrBroker', 'herdr', 'ui']);
+    assert.deepEqual(w.calls.spawn.map((s) => s.name), ['data', 'building', 'herdrBroker', 'herdr', 'pm', 'ui']);
     // When herdr is spawned, its dependency herdrBroker is already persisted READY.
     assert.deepEqual(w.calls.spawn[3].priorChildren, ['data:READY', 'building:READY', 'herdrBroker:READY']);
+    const pmSpawn = w.calls.spawn.find((s) => s.name === 'pm');
+    assert.equal(pmSpawn.env.PM_PORT, '5176');
+    assert.equal(pmSpawn.env.PM_ROOM_POST, 'off');
+    assert.equal(pmSpawn.env.PM_DB_PATH, null);
+    assert.equal(pmSpawn.env.PM_ROOM_LEDGER, null);
+    assert.equal(pmSpawn.env.PM_ROOM_FROM, null);
+    const dataSpawn = w.calls.spawn.find((s) => s.name === 'data');
+    assert.equal(dataSpawn.env.PM_PORT, null);
+    const s = await w.owner.status();
+    assert.ok(s.components.some((c) => c.name === 'pm' && c.port === 5176));
     assert.ok(w.calls.spawn.every((s) => s.exe === NODE));
     const st = readState(w.statePath);
     assert.equal(st.kind, 'OK');
@@ -258,7 +281,7 @@ test('HTTP 404 / non-health responses never satisfy a health contract', () => {
 // ── Fail-closed preconditions ───────────────────────────────────────────────
 
 test('PORT OVERRIDE MISMATCH: any runtime override is refused before anything spawns', async () => {
-  for (const env of [{ COMMAND_PORT: '5199' }, { HERDR_FLOOR_URL: 'http://127.0.0.1:6000' }, { COMMAND_UI_PORT: '5173' }, { STARQ_WORKSPACE: 'D:\\elsewhere' }]) {
+  for (const env of [{ COMMAND_PORT: '5199' }, { HERDR_FLOOR_URL: 'http://127.0.0.1:6000' }, { COMMAND_UI_PORT: '5173' }, { STARQ_WORKSPACE: 'D:\\elsewhere' }, { COMMS_ROOM_PATH: 'D:\\scratch\\room.fixture' }, { PM_ROOM_LEDGER: 'D:\\scratch\\room.fixture' }, { PM_PORT: '5191' }, { PM_DB_PATH: 'D:\\scratch\\pm.db' }, { PM_ROOM_POST: 'on' }, { PM_ROOM_FROM: 'cursor' }, { PM_ROOM_INSTANCE: 'x' }, { PM_ROOM_SEND_SCRIPT: 'D:\\scratch\\send.mjs' }]) {
     const w = world({ env });
     try {
       const r = await w.owner.start();
@@ -286,7 +309,7 @@ test('INCOMPLETE COMPONENT REGISTRY: config missing a component is invalid; star
   cyc.components[0].depends_on = ['ui'];
   assert.ok(validateConfig(cyc, { checkFiles: false }).some((p) => /cycle/.test(p)));
   const ui = baseConfig('D:\\x');
-  ui.components[4].port = 5999;
+  ui.components.find((c) => c.name === 'ui').port = 5999;
   assert.ok(validateConfig(ui, { checkFiles: false }).some((p) => /ui port must be 5173/.test(p)));
 });
 
@@ -444,7 +467,7 @@ test('STOP sequence: drain -> agents -> verify drained -> ui, herdr, herdrBroker
     const b = w.calls.broker;
     assert.ok(b.indexOf('POST /api/lifecycle/drain') < b.indexOf('POST /api/lifecycle/stop-agents'));
     assert.ok(b.indexOf('POST /api/lifecycle/stop-agents') < b.lastIndexOf('POST /api/lifecycle/shutdown'));
-    assert.deepEqual(w.calls.shutdown, ['ui', 'herdr', 'herdrBroker', 'building', 'data']);
+    assert.deepEqual(w.calls.shutdown, ['ui', 'pm', 'herdr', 'herdrBroker', 'building', 'data']);
     assert.deepEqual(w.calls.forceKill, []);
     assert.equal(readState(w.statePath).state.state, 'STOPPED');
     assert.equal(r.verification.ports_free, true);
@@ -472,7 +495,7 @@ test('STOP: a component that ignores shutdown halts the sequence as STOP_INCOMPL
     w.behaviour.herdr = 'stubborn';
     const r = await w.owner.stop();
     assert.equal(r.result, RESULT.STOP_INCOMPLETE);
-    assert.deepEqual(w.calls.shutdown, ['ui', 'herdr']);
+    assert.deepEqual(w.calls.shutdown, ['ui', 'pm', 'herdr']);
     assert.deepEqual(w.calls.forceKill, []);
     // Explicit recovery forces only what it can re-prove.
     const rec = await w.owner.recoverForce();

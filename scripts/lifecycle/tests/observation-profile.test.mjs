@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -19,9 +19,10 @@ import { inspectProcesses, listListeners } from '../inspect.mjs';
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const PROFILE_CONFIG = path.join(PACKAGE_ROOT, 'lifecycle.observation.config.json');
 const OBS_ROOT = path.join(PACKAGE_ROOT, 'observation');
+const loadObservationConfig = () => loadConfig(PROFILE_CONFIG, { checkFiles: false });
 
 test('profile pins exactly data, Building, and UI; no Herdr or worker admission environment', () => {
-  const cfg = loadConfig(PROFILE_CONFIG);
+  const cfg = loadObservationConfig();
   assert.equal(cfg.profile.name, OBSERVATION_PROFILE);
   assert.deepEqual(cfg.components.map((c) => [c.name, c.port]), [['data', 5177], ['building', 5178], ['ui', 5173]]);
   assert.deepEqual(cfg.components.find((c) => c.name === 'ui').depends_on, ['data', 'building']);
@@ -39,7 +40,7 @@ test('profile pins exactly data, Building, and UI; no Herdr or worker admission 
     COMMAND_OBSERVATION_ONLY: '1',
   });
   const full = loadConfig(path.join(PACKAGE_ROOT, 'lifecycle.config.json'), { checkFiles: false });
-  assert.deepEqual(full.components.map((c) => c.name), ['data', 'building', 'herdrBroker', 'herdr', 'ui']);
+  assert.deepEqual(full.components.map((c) => c.name), ['data', 'building', 'herdrBroker', 'herdr', 'pm', 'ui']);
   assert.equal(componentEnv(full, 'ui').HERDR_SERVICE, 'http://127.0.0.1:5179');
   assert.equal(componentEnv(full, 'data').COMMAND_OBSERVATION_ONLY, undefined);
   assert.equal(listenerHost({ COMMAND_OBSERVATION_ONLY: '1', COMMAND_HOST: '0.0.0.0' }), '127.0.0.1');
@@ -203,7 +204,7 @@ function makeOwner({ gates, dir, onSpawn = () => {}, env = {}, listListeners = a
 }
 
 test('observer gates fail closed on missing inventory and configuration/ownership drift', () => {
-  const cfg = loadConfig(PROFILE_CONFIG);
+  const cfg = loadObservationConfig();
   const scopedSpecs = observationRuntimeSpecs(cfg.workspace_root, cfg);
   const scopedPaths = scopedSpecs.map((spec) => String(spec.path).toLowerCase());
   assert.ok(scopedPaths.some((p) => p.endsWith('node.exe')));
@@ -234,17 +235,26 @@ test('observer gates fail closed on missing inventory and configuration/ownershi
 });
 
 test('observer inventory declares the real child host and the historical incorrect path fails closed', () => {
-  const cfg = loadConfig(PROFILE_CONFIG);
-  const specs = observationRuntimeSpecs(cfg.workspace_root, cfg);
-  const child = specs.find((spec) => spec.owner === 'observation-child-host');
-  const expected = path.join(PACKAGE_ROOT, 'scripts/lifecycle-child.mjs');
-  const historicalWrong = path.join(PACKAGE_ROOT, 'lifecycle-child.mjs');
-  assert.equal(child?.path, expected);
-  assert.equal(existsSync(expected), true);
-  assert.equal(existsSync(historicalWrong), false);
-  const failed = inventoryPaths([{ path: historicalWrong, role: 'entry', owner: 'observation-child-host' }]);
-  assert.equal(failed.entries.length, 0);
-  assert.deepEqual(failed.unresolved.map(({ path: unresolvedPath, error }) => ({ path: unresolvedPath, error })), [{ path: historicalWrong, error: 'ENOENT' }]);
+  const cfg = loadObservationConfig();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'starq-observation-child-path-'));
+  try {
+    const testCfg = { ...cfg, workspace_root: workspace };
+    const specs = observationRuntimeSpecs(workspace, testCfg);
+    const child = specs.find((spec) => spec.owner === 'observation-child-host');
+    const commandRoot = path.join(workspace, '00_STARQ_HQ', 'operations', 'starq-command');
+    const expected = path.join(commandRoot, 'scripts/lifecycle-child.mjs');
+    const historicalWrong = path.join(commandRoot, 'lifecycle-child.mjs');
+    mkdirSync(path.dirname(expected), { recursive: true });
+    writeFileSync(expected, '');
+    assert.equal(child?.path, expected);
+    assert.equal(existsSync(expected), true);
+    assert.equal(existsSync(historicalWrong), false);
+    const failed = inventoryPaths([{ path: historicalWrong, role: 'entry', owner: 'observation-child-host' }]);
+    assert.equal(failed.entries.length, 0);
+    assert.deepEqual(failed.unresolved.map(({ path: unresolvedPath, error }) => ({ path: unresolvedPath, error })), [{ path: historicalWrong, error: 'ENOENT' }]);
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 });
 
 test('named observer gates never fall through to the full-profile evaluator; unknown names fail closed', () => {
@@ -289,7 +299,7 @@ test('observer environment injection and listener override keys are identified w
 });
 
 test('observer native wrapper rejects injection before invoking pinned Node; inspection tools are path-pinned', async () => {
-  const cfg = loadConfig(PROFILE_CONFIG);
+  const cfg = loadObservationConfig();
   const ps = readFileSync(path.join(PACKAGE_ROOT, 'scripts/observation-start.ps1'), 'utf8');
   const batch = readFileSync(path.join(PACKAGE_ROOT, 'Start-Command-Observation.bat'), 'utf8');
   assert.ok(ps.indexOf('$unsafeNames') < ps.indexOf('& $node'));

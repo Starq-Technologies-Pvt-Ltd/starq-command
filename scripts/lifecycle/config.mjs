@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 export const CONFIG_SCHEMA = 'starq.command.lifecycle.config/v1';
-export const REQUIRED_COMPONENTS = Object.freeze(['data', 'building', 'herdrBroker', 'herdr', 'ui']);
+export const REQUIRED_COMPONENTS = Object.freeze(['data', 'building', 'herdrBroker', 'herdr', 'pm', 'ui']);
 export const OBSERVATION_PROFILE = 'command-observation-only/v1';
 export const OBSERVATION_COMPONENTS = Object.freeze(['data', 'building', 'ui']);
 const OBSERVATION_COMPONENT_PINS = Object.freeze({
@@ -64,10 +64,17 @@ const OBSERVATION_ENV_BLOCKLIST = new Set([
   'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
 ]);
 
+/** PM child mapping is config-owned. Set in the OWNER's env = refusal. */
+export const PM_OVERRIDE_ENV = Object.freeze([
+  'PM_PORT', 'PM_DB_PATH', 'PM_ROOM_POST', 'PM_ROOM_LEDGER', 'PM_ROOM_FROM', 'PM_ROOM_INSTANCE', 'PM_ROOM_SEND_SCRIPT',
+]);
+
 /** Every env var a component reads for a port/URL. Set in the OWNER's env = refusal. */
 export const OVERRIDE_ENV = Object.freeze([
   'COMMAND_PORT', 'BUILDING_SERVICE_PORT', 'HERDR_FLOOR_PORT', 'HERDR_SERVICE_PORT', 'COMMAND_UI_PORT',
   'HERDR_FLOOR_URL', 'COMMAND_DATA_SERVICE', 'BUILDING_SERVICE', 'HERDR_SERVICE', 'COMMAND_UI_ORIGIN',
+  'COMMS_ROOM_PATH',
+  ...PM_OVERRIDE_ENV,
 ]);
 
 /** Runtime binaries pinned by config. Set in the OWNER's env = refusal (a second binary truth). */
@@ -83,6 +90,8 @@ export const STANDALONE_HERDR_PROTOCOL = Object.freeze({ owner_protocol: 'OPERAT
 
 /** The broker's Origin allowlist is pinned to this UI port (herdr-floor DEFAULT_ALLOWED_ORIGINS). */
 export const PINNED_UI_PORT = 5173;
+/** Production PM is always this port. Scratch 5190-5199 is not a lifecycle child. */
+export const PINNED_PM_PORT = 5176;
 
 export class ConfigError extends Error {
   constructor(problems) {
@@ -175,6 +184,14 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
   }
   const ui = comps.find((c) => c?.name === 'ui');
   if (ui && ui.port !== PINNED_UI_PORT) p.push(`ui port must be ${PINNED_UI_PORT}: the broker Origin allowlist is pinned to it`);
+  if (!observationOnly) {
+    const pm = comps.find((c) => c?.name === 'pm');
+    if (pm) {
+      if (pm.port !== PINNED_PM_PORT) p.push(`pm port must be ${PINNED_PM_PORT}`);
+      if (JSON.stringify(pm.depends_on) !== JSON.stringify([])) p.push('pm: depends_on must be []');
+    }
+    if (ui && !ui.depends_on?.includes('pm')) p.push('ui: depends_on must include pm so UI readiness cannot precede PM health');
+  }
   if (doc.profile?.external_required !== undefined) {
     const ext = doc.profile.external_required;
     if (!Array.isArray(ext)) p.push('profile.external_required must be an array');
@@ -272,6 +289,7 @@ export function componentEnv(cfg, name) {
       HERDR_SERVICE_PORT: String(portOf(cfg, 'herdr')), HERDR_FLOOR_PORT: String(portOf(cfg, 'herdrBroker')),
       HERDR_FLOOR_URL: u('herdrBroker'), COMMAND_UI_ORIGIN: u('ui'),
     };
+    case 'pm': return { PM_PORT: String(portOf(cfg, 'pm')), PM_ROOM_POST: 'off' };
     case 'ui': return {
       COMMAND_DATA_SERVICE: u('data'), BUILDING_SERVICE: u('building'),
       ...(observationOnly ? { COMMAND_OBSERVATION_ONLY: '1' } : { HERDR_SERVICE: u('herdr') }),

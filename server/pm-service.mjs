@@ -35,6 +35,7 @@ import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
+import { readRoomSnapshot } from './room-snapshot.mjs';
 
 // Production is always 5176. A disposable verification instance (PM_DB_PATH set)
 // may use one unused loopback port in 5190-5199 and nothing else.
@@ -161,28 +162,31 @@ if (ROOT) {
 }
 const LEDGER_PATH = () => {
   const o = process.env.PM_ROOM_LEDGER;
-  if (o && SCRATCH) return path.resolve(o);
+  if (SCRATCH) return o ? path.resolve(o) : null;
   return abs(ROOT, CANONICAL.roomLedger);
 };
 
 function readLedger() {
   if (!ROOT) throw new HttpError(503, 'UNAVAILABLE', 'Workspace unresolved.');
   if (!computeRecordHash) throw new HttpError(503, 'UNAVAILABLE', 'Room hash function unavailable; Room references cannot be authenticated.');
-  try {
-    return fs.readFileSync(LEDGER_PATH(), 'utf8');
-  } catch {
-    throw new HttpError(503, 'UNAVAILABLE', 'Room ledger unreadable; reference cannot be verified.');
-  }
+  const path = LEDGER_PATH();
+  if (SCRATCH && !path)
+    throw new HttpError(503, 'UNAVAILABLE', 'Scratch Room fixture path is not configured; Room references are unavailable.');
+  if (!SCRATCH && process.env.PM_ROOM_LEDGER)
+    throw new HttpError(503, 'UNAVAILABLE', 'PM_ROOM_LEDGER is allowed only for isolated scratch runs.');
+  const snapshot = readRoomSnapshot(ROOT, { roomPath: SCRATCH ? path : null, fixturePath: SCRATCH });
+  if (SCRATCH && snapshot.state === 'EMPTY') return [];
+  if (snapshot.state !== 'OK' || !snapshot.stable || snapshot.parseStatus !== 'OK')
+    throw new HttpError(503, 'UNAVAILABLE', snapshot.reason ?? 'Room ledger unreadable; reference cannot be verified.');
+  return snapshot.records;
 }
 
-// Authenticate one ledger line: recomputed record hash, previous-record link, and
+// Authenticate one snapshot record: recomputed record hash, previous-record link, and
 // the broker's own authority decision plus the registry level of the sender.
-function describeRecord(text, start, end) {
-  const rec = JSON.parse(text.slice(start, end));
+function describeRecord(rec, previousRecord = null) {
   let hashVerified = computeRecordHash(rec) === rec.recordHash;
   if (hashVerified && rec.brokerSequence > 1) {
-    const pStart = text.lastIndexOf('\n', start - 2) + 1;
-    try { hashVerified = JSON.parse(text.slice(pStart, start - 1)).recordHash === rec.previousRecordHash; } catch { hashVerified = false; }
+    hashVerified = previousRecord?.recordHash === rec.previousRecordHash;
   }
   const sender = rec.event?.senderHandle ?? null;
   const level = sender ? (identityLevels().get(sender) ?? 'UNREGISTERED') : 'UNREGISTERED';
@@ -202,36 +206,25 @@ function describeRecord(text, start, end) {
 }
 
 function lookupRoom(sequence) {
-  const text = readLedger();
-  const needle = `"brokerSequence":${sequence},`;
-  let from = 0;
-  for (;;) {
-    const idx = text.indexOf(needle, from);
-    if (idx < 0) return null;
-    const start = text.lastIndexOf('\n', idx) + 1;
-    let end = text.indexOf('\n', idx);
-    if (end < 0) end = text.length;
-    try {
-      const info = describeRecord(text, start, end);
-      if (info.sequence === sequence) return info;
-    } catch { /* keep scanning */ }
-    from = end;
-  }
+  const records = readLedger();
+  const index = records.findIndex((record) => record.brokerSequence === sequence);
+  if (index < 0) return null;
+  try { return describeRecord(records[index], records[index - 1] ?? null); }
+  catch { return null; }
 }
 
 // Idempotency for Room sync: has an event already been written for this token?
 function findRoomByToken(token) {
-  const text = readLedger();
-  // Inside the ledger a body's line break is the two characters backslash + n.
-  const idx = text.lastIndexOf(token + '\\n');
-  if (idx < 0) return null;
-  const start = text.lastIndexOf('\n', idx) + 1;
-  let end = text.indexOf('\n', idx);
-  if (end < 0) end = text.length;
-  try {
-    const info = describeRecord(text, start, end);
-    return info.senderHandle === ROOM_FROM && info.body.includes(token) ? info : null;
-  } catch { return null; }
+  const records = readLedger();
+  for (let index = records.length - 1; index >= 0; index--) {
+    const record = records[index];
+    const body = record.event?.body;
+    if (record.event?.senderHandle !== ROOM_FROM || typeof body !== 'string' ||
+        !body.split('\n').slice(0, -1).some((line) => line.includes(token))) continue;
+    try { return describeRecord(record, records[index - 1] ?? null); }
+    catch { return null; }
+  }
+  return null;
 }
 
 function effectiveHold(project) {

@@ -573,7 +573,8 @@ describe('BOUNDARIES — Command stays derived, Herdr stays runtime truth', () =
     // The registry is READ. Nothing asked to serve its bytes, and the evidence
     // drawer is a door that must not get wider as a side effect of a surface.
     expect(surface.read_only_sources).not.toContain('company-seats.json');
-    expect(surface.read_only_sources).toHaveLength(6);
+    expect(surface.read_only_sources).not.toContain('agent-comms/room.jsonl');
+    expect(surface.read_only_sources).toHaveLength(5);
   });
 
   it('keeps Phase 1 health at four conditions — a company surface is not a fault', () => {

@@ -96,6 +96,24 @@
       }
     },
     {
+      "name": "pm",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\pm-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5176,
+      "depends_on": [],
+      "health": {
+        "path": "/api/pm/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "state": "OK",
+          "scratch": false,
+          "room_post": "OFF"
+        }
+      }
+    },
+    {
       "name": "ui",
       "kind": "vite",
       "entry": "00_STARQ_HQ\\operations\\starq-command\\node_modules\\vite\\dist\\node\\index.js",
@@ -105,7 +123,8 @@
       "depends_on": [
         "data",
         "building",
-        "herdr"
+        "herdr",
+        "pm"
       ],
       "health": {
         "path": "/",
@@ -120,12 +139,13 @@
   ],
   "profile": {
     "name": "starq-online/v1",
-    "definition": "Normal Founder use requires the five owned Command services, independently owned standalone Herdr runtime truth, and passive communications files. The Command herdr integration service is not standalone Herdr. Missing standalone ownership blocks normal-profile readiness.",
+    "definition": "Normal Founder use requires the six owned Command services, independently owned standalone Herdr runtime truth, and passive communications files. The Command herdr integration service is not standalone Herdr. Missing standalone ownership blocks normal-profile readiness.",
     "required_components": [
       "data",
       "building",
       "herdrBroker",
       "herdr",
+      "pm",
       "ui"
     ],
     "required_files": [

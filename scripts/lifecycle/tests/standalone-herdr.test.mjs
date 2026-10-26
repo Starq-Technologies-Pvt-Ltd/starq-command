@@ -15,13 +15,13 @@ const ENTRY = {
   id: 'standalone-herdr', owner_protocol: 'OPERATOR_INTERACTIVE', command_actuation: 'NONE',
   executable: 'D:\\fake\\herdr.exe', storage_root: 'D:\\fake\\herdr-data', owner_record: 'state\\standalone-herdr-owner.json',
 };
-const PORTS = { data: 5177, building: 5178, herdrBroker: 5188, herdr: 5179, ui: 5173 };
+const PORTS = { data: 5177, building: 5178, herdrBroker: 5188, herdr: 5179, pm: 5176, ui: 5173 };
 function config(entry = ENTRY) {
   const c = (name, deps, extra = {}) => ({ name, kind: name === 'ui' ? 'vite' : 'module', entry: `x\\${name}.mjs`, cwd: 'x', port: PORTS[name], depends_on: deps, health: { path: '/h', status: 200, json_has: ['ok'] }, ...extra });
   return {
     schema: 'starq.command.lifecycle.config/v1', workspace_root: 'D:\\fake', node: 'D:\\fake\\node.exe', host: '127.0.0.1',
     timeouts_ms: { identity: 1, health: 1, graceful_exit: 1, broker_request: 1, agent_stop: 1 },
-    components: [c('data', []), c('building', []), c('herdrBroker', [], { lifecycle_token: 't', manifest: 'm' }), c('herdr', ['herdrBroker']), c('ui', ['data', 'building', 'herdr'], { vite_config: 'v' })],
+    components: [c('data', []), c('building', []), c('herdrBroker', [], { lifecycle_token: 't', manifest: 'm' }), c('herdr', ['herdrBroker']), c('pm', []), c('ui', ['data', 'building', 'herdr', 'pm'], { vite_config: 'v' })],
     profile: { required_files: [], external_required: entry ? [entry] : [] },
   };
 }
@@ -51,6 +51,8 @@ test('config: the broker probe receives the pinned binary; an operator HERDR_BIN
   assert.equal(componentEnv(config(null), 'herdrBroker').HERDR_BIN, undefined);
   assert.equal(standaloneHerdr(cfg).id, 'standalone-herdr');
   assert.deepEqual(findEnvOverrides({ HERDR_BIN: 'C:\\other\\herdr.exe' }), ['HERDR_BIN=C:\\other\\herdr.exe']);
+  assert.deepEqual(findEnvOverrides({ COMMS_ROOM_PATH: 'D:\\scratch\\room.fixture' }), ['COMMS_ROOM_PATH=D:\\scratch\\room.fixture']);
+  assert.deepEqual(findEnvOverrides({ PM_ROOM_LEDGER: 'D:\\scratch\\room.fixture' }), ['PM_ROOM_LEDGER=D:\\scratch\\room.fixture']);
 });
 
 test('G-PROFILE: missing record, self-verification, actuation, path mismatch, hash drift and evidence drift all refuse', () => {

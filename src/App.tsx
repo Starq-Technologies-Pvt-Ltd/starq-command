@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { BuildingSurface } from '@/surfaces/building';
+import { PmBoardSurface } from '@/surfaces/pm-board';
+import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
 import { parseBuildingRoute, routeHash, type BuildingRoute } from '@/lib/building-route';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Rail, RoomSwitcher, TopBar, type ViewId } from '@/components/shell';
@@ -52,6 +54,7 @@ export default function App() {
     parseBuildingRoute(typeof window === 'undefined' ? '' : window.location.hash),
   );
   const view = route.view as ViewId;
+  const pmFallbackRoute = pmRouteWithoutCoreProjection(route);
   const [railExpanded, setRailExpanded] = React.useState(() =>
     typeof window === 'undefined' ? true : window.innerWidth > 800,
   );
@@ -254,11 +257,26 @@ export default function App() {
           {status === 'LOADING' && !surface ? <LoadingState /> : null}
 
           {status === 'UNAVAILABLE' && !surface ? (
-            <UnavailableState
-              reason="The read-only data service is not reachable."
-              detail={error}
-              onRetry={() => void refresh()}
-            />
+            <>
+              <UnavailableState
+                reason={
+                  pmFallbackRoute
+                    ? 'The core data service is unavailable. This PM surface uses its separate service.'
+                    : 'The read-only data service is not reachable.'
+                }
+                detail={error}
+                onRetry={() => void refresh()}
+              />
+              {pmFallbackRoute ? (
+                <div className="px-4 pb-4" data-pm-without-core-projection="">
+                  {pmFallbackRoute.kind === 'portfolio' ? (
+                    <PmPortfolioSurface />
+                  ) : (
+                    <PmBoardSurface projectId={pmFallbackRoute.projectId} />
+                  )}
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           {/*
@@ -350,6 +368,32 @@ export default function App() {
       </div>
     </div>
   );
+}
+
+type PmFallbackRoute =
+  | { kind: 'portfolio' }
+  | { kind: 'board'; projectId: 'command' | 'erp' | 'hoadha' };
+
+/**
+ * The PM service has its own API and state gate. Keep these routes reachable
+ * when the unrelated core projection service is unavailable, while the
+ * UnavailableState above continues to qualify the rest of Command.
+ */
+function pmRouteWithoutCoreProjection(route: BuildingRoute): PmFallbackRoute | null {
+  if (route.view !== 'studio') return null;
+  if (route.projectId?.toLowerCase() === 'command') {
+    return { kind: 'board', projectId: 'command' };
+  }
+  if (route.room === 'erp' && route.tab === 'Tasks') {
+    return { kind: 'board', projectId: 'erp' };
+  }
+  if (route.room === 'hoadha' && route.tab === 'Board') {
+    return { kind: 'board', projectId: 'hoadha' };
+  }
+  if (route.room === null && !route.projectId && route.tab === 'Projects') {
+    return { kind: 'portfolio' };
+  }
+  return null;
 }
 
 /**

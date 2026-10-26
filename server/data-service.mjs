@@ -37,6 +37,8 @@ import { loadCompanyOs } from './company-os.mjs';
 import { buildSnapshot } from './snapshot.mjs';
 import { runReadOnlyGates } from './gates.mjs';
 import { readRoomVisibility } from './room-work.mjs';
+import { readRoomSnapshot } from './room-snapshot.mjs';
+import { classifyFilesystemPath } from './room-path.mjs';
 
 const PORT = Number(process.env.COMMAND_PORT || 5177);
 // The observer profile is pinned to loopback even if a caller bypasses the
@@ -177,12 +179,15 @@ function readExecutionTruth(activity, sourceState, workspaceRoot) {
   let ledgerReason = null;
 
   try {
-    const ledgerPath = abs(workspaceRoot, CANONICAL.roomLedger);
-    if (!fs.existsSync(ledgerPath)) {
+    const room = readRoomSnapshot(workspaceRoot);
+    if (room.state === 'UNAVAILABLE' || room.state === 'EMPTY') {
       ledgerState = STATE.UNAVAILABLE;
-      ledgerReason = 'room ledger not found';
+      ledgerReason = room.reason ?? 'room ledger unavailable';
+    } else if (room.state !== 'OK' || !room.stable || room.parseStatus !== 'OK') {
+      ledgerState = STATE.UNREADABLE;
+      ledgerReason = room.reason ?? `Room snapshot is ${room.state}/${room.parseStatus}`;
     } else {
-      liveHash = sha256Prefix(ledgerPath);
+      liveHash = room.sha256Prefix;
       if (recordedHash && liveHash !== recordedHash) {
         ledgerState = STATE.STALE;
         ledgerReason = 'room ledger changed since last ingest; regeneration required';
@@ -554,6 +559,23 @@ function checkProvenanceDrift(contract, sourceState, workspaceRoot) {
     const target = abs(workspaceRoot, rel);
     const recordedDigest = entry.sha256_prefix ?? null;
 
+    const roomPathIdentity = classifyFilesystemPath(target, abs(workspaceRoot, CANONICAL.roomLedger));
+    if (roomPathIdentity === 'SAME') {
+      const room = readRoomSnapshot(workspaceRoot);
+      if (room.state !== 'OK' || !room.stable || room.parseStatus !== 'OK') {
+        const state = room.state === 'UNAVAILABLE' || room.state === 'EMPTY' ? STATE.UNAVAILABLE : STATE.UNREADABLE;
+        results.push({ name, path: rel, state, recorded: recordedDigest, live: null, reason: room.reason ?? 'Room snapshot unavailable' });
+        continue;
+      }
+      const live = room.sha256Prefix;
+      results.push({ name, path: rel, state: live === recordedDigest ? STATE.OK : STATE.DRIFT, recorded: recordedDigest, live });
+      continue;
+    }
+    if (roomPathIdentity === 'UNKNOWN') {
+      results.push({ name, path: rel, state: STATE.UNREADABLE, recorded: recordedDigest, live: null, reason: 'Room path identity could not be established; generic hashing refused.' });
+      continue;
+    }
+
     if (!fs.existsSync(target)) {
       results.push({ name, path: rel, state: STATE.UNAVAILABLE, recorded: recordedDigest, live: null, reason: 'canonical source not found on disk' });
       continue;
@@ -724,7 +746,6 @@ export function buildSurface() {
     // phase3.reads is the place a new source is recorded.
     read_only_sources: [
       CANONICAL.controlBoard,
-      CANONICAL.roomLedger,
       CANONICAL.identities,
       CANONICAL.staffState,
       CANONICAL.decisions,

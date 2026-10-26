@@ -334,6 +334,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       : { ...env };
     for (const k of Object.keys(childEnv)) if (k.startsWith('STARQ_LC_')) delete childEnv[k];
     delete childEnv.COMMAND_OBSERVATION_ONLY;
+    for (const k of Object.keys(childEnv)) if (k.startsWith('PM_')) delete childEnv[k];
     if (observationOnly) {
       for (const k of Object.keys(childEnv)) if (k.startsWith('HERDR_') || k === 'COMMAND_UI_ORIGIN') delete childEnv[k];
     }

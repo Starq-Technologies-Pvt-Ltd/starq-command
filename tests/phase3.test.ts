@@ -558,12 +558,12 @@ describe('Phase 3 — RULING 5: avatars stay out and the read surface is not wid
     // was the coupling seq 8361 forbids.
     expect(surface.read_only_sources).toEqual([
       '00_STARQ_HQ/operations/starqerp-control-board',
-      'agent-comms/room.jsonl',
       'agent-comms/protocol/v1/identities.json',
       'agent-comms/protocol/v1/staff-state.json',
       '00_STARQ_HQ/decisions.json',
       '00_STARQ_HQ/operations/ONBOARDING.md',
     ]);
+    expect(surface.read_only_sources).not.toContain('agent-comms/room.jsonl');
     // The Phase 5 read surface is not widened by Phase 7 at all — not even by
     // a Hoadha source, and not even read-only.
     for (const src of surface.read_only_sources) {
