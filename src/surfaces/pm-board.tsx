@@ -2,7 +2,7 @@
  * Nexus-style writable kanban. Five columns, create/edit/move, no lifecycle gates.
  */
 import * as React from 'react';
-import { Chip, Panel, SourceGap } from '@/components/console';
+import { Panel, Chip, SourceGap } from '@/components/console';
 import { PmNav } from '@/surfaces/pm-portfolio';
 import {
   PM_STATUSES,
@@ -59,8 +59,22 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [editTitle, setEditTitle] = React.useState('');
   const [editOwner, setEditOwner] = React.useState('');
   const [editDescription, setEditDescription] = React.useState('');
+  const [executionByTask, setExecutionByTask] = React.useState<Record<string, any>>({});
 
   const setActor = (value: string) => { setActorState(value); storeActor(value); };
+
+  const loadExecution = React.useCallback(async () => {
+    try {
+      const response = await fetch(`/api/command/tasks?project=${encodeURIComponent(projectId)}`);
+      if (!response.ok) return;
+      const body = await response.json();
+      const next: Record<string, any> = {};
+      for (const task of body.tasks ?? []) {
+        if (task.taskId && task.execution) next[task.taskId] = task.execution;
+      }
+      setExecutionByTask(next);
+    } catch { /* PM remains usable when the execution surface is unavailable. */ }
+  }, [projectId]);
 
   const load = React.useCallback(async (keepSelected?: string | null) => {
     const [m, p, t] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId)]);
@@ -96,6 +110,12 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     setSelectedId(null); setDetail(null); setCreating(false); setTasks(null); setProject(null);
     void load(requestedTaskId());
   }, [projectId, load]);
+
+  React.useEffect(() => {
+    void loadExecution();
+    const timer = window.setInterval(() => void loadExecution(), 10000);
+    return () => window.clearInterval(timer);
+  }, [loadExecution]);
 
   const select = async (id: string) => {
     if (selectedId === id) { setSelectedId(null); setDetail(null); return; }
@@ -209,7 +229,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             <input aria-label="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ID, title, owner" />
           </label>
           <button type="button" className="go-link" disabled={busy} onClick={() => { setCreating(true); setSelectedId(null); setDetail(null); }}>New card</button>
-          <button type="button" className="go-link" onClick={() => void load(selectedId)}>Refresh</button>
+          <button type="button" className="go-link" onClick={() => { void load(selectedId); void loadExecution(); }}>Refresh</button>
         </div>
         {flash ? <p role="status" className="px-3 pt-2 text-xs text-truth-ok">{flash}</p> : null}
         {errors.length && !detail ? <ul role="alert" className="px-3 pt-2 text-xs text-truth-drift">{errors.map((error) => <li key={error}>{error}</li>)}</ul> : null}
@@ -265,6 +285,12 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                         </span>
                         <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
                         <span className="mt-1 block border-t border-border pt-1 text-[10px] text-muted-foreground">{t.owner}</span>
+                        {executionByTask[t.id] ? (
+                          <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state={executionByTask[t.id].state}>
+                            <Chip value={`EXEC ${executionByTask[t.id].state}`} tone={executionByTask[t.id].state === 'BLOCKED' ? 'drift' : 'room'} />
+                            <span className="text-[10px] text-muted-foreground">{executionByTask[t.id].builderSeat ?? 'NO BUILDER'} · {executionByTask[t.id].branch ?? 'NO WORKTREE'}</span>
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   ))}
@@ -283,6 +309,16 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             <Chip value={PM_STATUS_LABELS[detail.task.status]} />
           </div>
           <div className="grid gap-3 p-3">
+            {executionByTask[detail.task.id] ? (
+              <Panel title="Software factory execution" count={executionByTask[detail.task.id].state}>
+                <dl className="body grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div><dt className="meta">Builder / verifier</dt><dd className="mono">{executionByTask[detail.task.id].builderSeat ?? 'UNKNOWN'} / {executionByTask[detail.task.id].verifierSeat ?? 'UNKNOWN'}</dd></div>
+                  <div><dt className="meta">Herdr sessions</dt><dd className="mono">{executionByTask[detail.task.id].herdrSessionId ?? 'UNKNOWN'} / {executionByTask[detail.task.id].verifierSessionId ?? 'NOT ASSIGNED'}</dd></div>
+                  <div><dt className="meta">Worktrees</dt><dd className="mono break-all">{executionByTask[detail.task.id].workspacePath ?? 'NOT PROVISIONED'}{executionByTask[detail.task.id].verifierWorkspacePath ? ` · ${executionByTask[detail.task.id].verifierWorkspacePath}` : ''}</dd></div>
+                  <div><dt className="meta">Lease / candidate</dt><dd className="mono break-all">{executionByTask[detail.task.id].leaseId ?? 'NO LEASE'} / {executionByTask[detail.task.id].candidateSha ?? 'NO CANDIDATE'}</dd></div>
+                </dl>
+              </Panel>
+            ) : null}
             {errors.length ? <ul role="alert" className="text-xs text-truth-drift">{errors.map((e) => <li key={e}>{e}</li>)}</ul> : null}
             <label className="grid gap-1 text-2xs text-muted-foreground">
               Title

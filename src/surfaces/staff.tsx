@@ -100,6 +100,15 @@ type LiveSeat = {
   state: string;
   pid: number | null;
   session_id: string | null;
+  availability: string;
+  availability_reason: string;
+  dispatch_eligible: boolean;
+  dispatch_blocker: string;
+  pane_binding: {
+    state: string;
+    pane: { workspace_id: string | null; pane_id: string | null; terminal_id: string | null } | null;
+  };
+  observed_at: string | null;
 };
 
 type HerdrLiveJoin = {
@@ -126,12 +135,8 @@ function useHerdrLive(): HerdrLiveJoin {
 
   React.useEffect(() => {
     let live = true;
-    // No interval. The Herdr surface already polls this endpoint at 5s and owns
-    // that cadence; a second poller would be two clocks disagreeing about the
-    // same live state. This reads once on mount so the staff board can carry a
-    // live column, and a reader who needs it refreshing has one button that
-    // already exists.
-    void (async () => {
+    let timer: number | undefined;
+    const poll = async () => {
       try {
         const res = await fetch('/api/herdr/state');
         if (!res.ok) {
@@ -144,31 +149,84 @@ function useHerdrLive(): HerdrLiveJoin {
           return;
         }
         const data = (await res.json()) as {
+          timestamp?: string | null;
+          broker?: { online?: boolean };
           agents?: Array<{ id: string; state?: string; pid?: number | null; session_id?: string | null }>;
+          sessions?: Array<{ agent_id: string; session_id: string }>;
+          standalone?: { panes?: Array<{
+            attribution: string;
+            binding_state?: string | null;
+            seat_id?: string | null;
+            binding?: { bound_by?: string | null; authority?: string | null; bound_at?: string | null } | null;
+            pane?: { workspace_id?: string | null; pane_id?: string | null; terminal_id?: string | null } | null;
+          }> };
         };
         const bySeatId: Record<string, LiveSeat> = {};
-        for (const a of data.agents ?? []) {
-          bySeatId[a.id] = {
-            id: a.id,
-            state: a.state ?? 'UNKNOWN',
-            pid: a.pid ?? null,
-            session_id: a.session_id ?? null,
+        for (const agent of data.agents ?? []) {
+          const state = agent.state ?? 'UNKNOWN';
+          const matchingSessions = (data.sessions ?? []).filter((session) =>
+            session.agent_id === agent.id && session.session_id === agent.session_id,
+          );
+          const bindings = (data.standalone?.panes ?? []).filter((pane) =>
+            pane.attribution === 'BOUND' && pane.seat_id === agent.id,
+          );
+          let paneBinding: LiveSeat['pane_binding'] = { state: 'UNBOUND', pane: null };
+          if (bindings.length > 1) paneBinding = { state: 'CONFLICT', pane: null };
+          else if (bindings.length === 1) {
+            const binding = bindings[0];
+            paneBinding = binding.binding_state === 'BOUND' && binding.pane
+              ? {
+                  state: 'BOUND',
+                  pane: {
+                    workspace_id: binding.pane.workspace_id ?? null,
+                    pane_id: binding.pane.pane_id ?? null,
+                    terminal_id: binding.pane.terminal_id ?? null,
+                  },
+                }
+              : { state: binding.binding_state ?? 'UNKNOWN', pane: null };
+          }
+          const availability = state === 'EXITED'
+            ? 'OFFLINE'
+            : state === 'RUNNING' && matchingSessions.length === 1
+              ? 'ACTIVE_UNKNOWN_LOAD'
+              : 'UNKNOWN';
+          bySeatId[agent.id] = {
+            id: agent.id,
+            state,
+            pid: agent.pid ?? null,
+            session_id: matchingSessions.length === 1 ? matchingSessions[0].session_id : null,
+            availability,
+            availability_reason: availability === 'OFFLINE'
+              ? 'Herdr observed the declared seat process as EXITED.'
+              : availability === 'ACTIVE_UNKNOWN_LOAD'
+                ? 'A broker session is active; task load and free capacity are not established.'
+                : 'A live read did not establish dispatch availability.',
+            dispatch_eligible: false,
+            dispatch_blocker: availability === 'OFFLINE' ? 'SEAT_OFFLINE' : 'AVAILABILITY_UNPROVEN',
+            pane_binding: paneBinding,
+            observed_at: data.timestamp ?? null,
           };
         }
         if (live) {
           setJoin({
-            state: 'LIVE',
-            reason: 'Broker projection read. Values are as of that read and are never cached here.',
+            state: data.broker?.online === true ? 'LIVE' : 'UNREACHABLE',
+            reason: data.broker?.online === true
+              ? 'Herdr seat observations refresh every 5 seconds; standalone pane bindings remain a separate fact.'
+              : 'Herdr broker state is UNKNOWN; no seat is treated as dispatchable.',
             liveStateSource: 'GET /api/herdr/state (Herdr broker, read-only)',
             bySeatId,
           });
         }
       } catch {
         if (live) setJoin(HERDR_LIVE_UNREACHABLE);
+      } finally {
+        if (live) timer = window.setTimeout(poll, 5000);
       }
-    })();
+    };
+    void poll();
     return () => {
       live = false;
+      if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
 
@@ -1056,7 +1114,7 @@ export function StaffSurface({ surface }: { surface: CommandSurface }) {
                           {e.herdr?.declared === false
                             ? 'NO MANIFEST ROW'
                             : live
-                              ? `${live.state}${live.pid ? ` pid ${live.pid}` : ''}`
+                              ? `${live.state} · ${live.availability}${live.pid ? ` pid ${live.pid}` : ''}`
                               : herdrLive.state === 'LIVE'
                                 ? 'EXITED'
                                 : 'UNKNOWN'}
@@ -1338,6 +1396,13 @@ function StaffDetail({
               ['Live process state', live ? live.state : herdrLive.state === 'LIVE' ? 'EXITED' : 'UNKNOWN'],
               ['Live PID', live?.pid ? String(live.pid) : 'NONE RECORDED'],
               ['Live PTY session', live?.session_id ?? 'NONE RECORDED'],
+              ['Dispatch eligibility', live?.dispatch_eligible ? 'YES' : live?.dispatch_blocker ?? 'UNKNOWN'],
+              ['Explicit pane binding', live?.pane_binding.state ?? 'UNKNOWN'],
+              ['Pane / terminal', live?.pane_binding.pane
+                ? `${live.pane_binding.pane.workspace_id ?? '?'} / ${live.pane_binding.pane.pane_id ?? '?'} / ${live.pane_binding.pane.terminal_id ?? '?'}`
+                : 'NONE CONFIRMED'],
+              ['Availability reason', live?.availability_reason ?? 'No live seat observation.'],
+              ['Observed at', live?.observed_at ?? 'UNKNOWN'],
               ['Live state source', herdrLive.liveStateSource],
             ]}
           />

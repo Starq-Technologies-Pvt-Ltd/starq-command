@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHerdrService } from '../integrations/herdr/herdr-service.mjs';
 import { TaskStore } from '../integrations/control-plane/task-store.ts';
-import { QuotaTracker } from '../src/capacity/quota-tracker.ts';
 import { StuckDetector } from '../src/detector/stuck-detector.ts';
 import { RoomEventAdapter } from '../integrations/room/event-adapter.ts';
 import * as os from 'node:os';
@@ -19,7 +18,6 @@ describe('Control Plane HTTP Service & Security Guards', () => {
   let port: number;
   let taskStore: TaskStore;
   let stuckDetector: StuckDetector;
-  let quotaTracker: QuotaTracker;
   let roomAdapter: RoomEventAdapter;
   let tempLedger: string;
   let activeSessionCookie: string;
@@ -29,7 +27,6 @@ describe('Control Plane HTTP Service & Security Guards', () => {
     tempLedger = path.join(os.tmpdir(), `test-room-ledger-${Date.now()}.jsonl`);
     taskStore = new TaskStore(':memory:');
     stuckDetector = new StuckDetector();
-    quotaTracker = new QuotaTracker();
     roomAdapter = new RoomEventAdapter({ eventsLedgerPath: tempLedger });
 
     const mockClient = {
@@ -43,7 +40,17 @@ describe('Control Plane HTTP Service & Security Guards', () => {
         };
       },
       async getHealth() { return { ok: true, boot_id: 'test-boot-id' }; },
-      async getState() { return { ok: true }; },
+      async getState() {
+        return {
+          timestamp: '2026-10-28T06:00:00.000Z',
+          broker: { online: true, boot_id: 'test-boot-id' },
+          herdr: { state: 'AVAILABLE' },
+          floor: { floor_opened: true, floor_opens: 1 },
+          agents: [],
+          sessions: [],
+          standalone: { bindings_state: 'OK', panes: [] },
+        };
+      },
       async getAgents() { return []; },
       async getSessions() { return []; },
     };
@@ -53,7 +60,6 @@ describe('Control Plane HTTP Service & Security Guards', () => {
       client: mockClient as any,
       taskStore,
       stuckDetector,
-      quotaTracker,
       roomAdapter,
     });
 
@@ -293,12 +299,19 @@ describe('Control Plane HTTP Service & Security Guards', () => {
     const fleetRes = await fetch(`http://127.0.0.1:${port}/api/command/fleet`);
     const fleetBody = await fleetRes.json();
     expect(fleetBody.ok).toBe(true);
-    expect(fleetBody.fleet.length).toBeGreaterThanOrEqual(10);
+    expect(fleetBody.fleet).toHaveLength(10);
+    expect(fleetBody.seats.find((seat: any) => seat.handle === 'codex').availability).toBe('UNJOINED');
+    expect(fleetBody.seats.every((seat: any) => seat.dispatch_eligible === false)).toBe(true);
+
+    const workforceRes = await fetch(`http://127.0.0.1:${port}/api/command/workforce`);
+    const workforceBody = await workforceRes.json();
+    expect(workforceBody.declared_seat_count).toBe(10);
 
     const capRes = await fetch(`http://127.0.0.1:${port}/api/command/capacity`);
     const capBody = await capRes.json();
     expect(capBody.ok).toBe(true);
-    expect(capBody.capacity.length).toBeGreaterThanOrEqual(10);
+    expect(capBody.capacity).toHaveLength(10);
+    expect(capBody.capacity.every((seat: any) => seat.quotaStatus === 'UNKNOWN')).toBe(true);
 
     const stuckRes = await fetch(`http://127.0.0.1:${port}/api/command/stuck`);
     const stuckBody = await stuckRes.json();

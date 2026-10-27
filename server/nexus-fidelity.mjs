@@ -196,7 +196,13 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
     if (!projectId) continue;
 
     const key = `${originalId}:${projectId}`;
-    if (handle.prepare('SELECT 1 FROM pm_tasks WHERE id = ?').get(key)) continue;
+    if (handle.prepare('SELECT 1 FROM pm_tasks WHERE id = ?').get(key)) {
+      // The import rebuilds source rows as DUPLICATE_TASK_ID on every start.
+      // If an earlier start already restored the task, relink provenance here.
+      handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
+        .run(key, row.source_key);
+      continue;
+    }
 
     const ts = nowIso();
     const f = fidelityFromPayload(p, { sourceFile: row.source_file, sourceKey: row.source_key });

@@ -25,6 +25,7 @@ export interface RoomEventEnvelope {
   timestamp: string; // ISO 8601
   summary: string;
   payload: Record<string, unknown>;
+  room_ref?: { sequence: number; status: 'POSTED' } | { status: 'UNCONFIRMED'; reason: string };
 }
 
 export function formatRoomEventText(envelope: RoomEventEnvelope): string {

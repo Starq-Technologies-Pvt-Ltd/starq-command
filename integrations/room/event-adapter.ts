@@ -101,8 +101,9 @@ export type RoomEventsRead =
 export class RoomEventAdapter {
   private eventsLedgerPath: string;
   private commsScriptPath: string;
+  private instanceId?: string;
 
-  constructor(options?: { eventsLedgerPath?: string; commsScriptPath?: string }) {
+  constructor(options?: { eventsLedgerPath?: string; commsScriptPath?: string; instanceId?: string }) {
     this.eventsLedgerPath = assertEventsLedgerIsNotCanonicalRoom(
       options?.eventsLedgerPath ||
       path.resolve(process.cwd(), 'agent-comms', 'room-events.jsonl'),
@@ -110,11 +111,16 @@ export class RoomEventAdapter {
     this.commsScriptPath =
       options?.commsScriptPath ||
       path.resolve(process.cwd(), 'agent-comms', 'scripts', 'send.mjs');
+    this.instanceId = options?.instanceId;
 
     const dir = path.dirname(this.eventsLedgerPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+  }
+
+  public requiredRoomDeliveryReady(): boolean {
+    return Boolean(this.instanceId && fs.existsSync(this.commsScriptPath));
   }
 
   /**
@@ -129,6 +135,10 @@ export class RoomEventAdapter {
       summary: string;
       payload?: Record<string, unknown>;
       broadcastToRoom?: boolean;
+      recipient?: string;
+      subject?: string;
+      actionRequired?: string;
+      requiredRoomDelivery?: boolean;
     }
   ): Promise<RoomEventEnvelope> {
     const envelope: RoomEventEnvelope = {
@@ -137,7 +147,7 @@ export class RoomEventAdapter {
       sender: params.sender,
       timestamp: new Date().toISOString(),
       summary: params.summary,
-      payload: params.payload || {},
+      payload: { ...(params.payload || {}), ...(params.recipient ? { recipient: params.recipient } : {}) },
     };
 
     // 1. Append to typed events JSONL — never the canonical Room ledger.
@@ -149,9 +159,23 @@ export class RoomEventAdapter {
     );
 
     // 2. Broadcast to live Room if requested
+    if (params.broadcastToRoom && params.requiredRoomDelivery && !fs.existsSync(this.commsScriptPath)) {
+      throw new Error(`Required Room delivery script is missing: ${this.commsScriptPath}`);
+    }
     if (params.broadcastToRoom && fs.existsSync(this.commsScriptPath)) {
-      const roomBody = this.formatRoomBody(envelope);
-      await this.postViaSendScript(params.sender, roomBody, params.taskId);
+      if (params.requiredRoomDelivery && !this.instanceId) {
+        throw new Error('Required Room delivery needs an explicit stable Room writer instance id.');
+      }
+      const roomBody = this.formatRoomBody(envelope, params.recipient, params.actionRequired);
+      const result = await this.postViaSendScript(params.sender, roomBody, params.taskId, {
+        subject: params.subject ?? `[${type}] ${params.summary}`,
+        actionRequired: params.actionRequired ?? 'NONE',
+        instanceId: this.instanceId ?? `${params.sender}-control-plane`,
+        required: params.requiredRoomDelivery === true,
+      });
+      envelope.room_ref = result.sequence
+        ? { sequence: result.sequence, status: 'POSTED' }
+        : { status: 'UNCONFIRMED', reason: result.stdout || 'send.mjs did not report a Room sequence.' };
     }
 
     return envelope;
@@ -160,11 +184,13 @@ export class RoomEventAdapter {
   /**
    * Format structured event for Room
    */
-  public formatRoomBody(envelope: RoomEventEnvelope): string {
+  public formatRoomBody(envelope: RoomEventEnvelope, recipient?: string, actionRequired?: string): string {
     const lines = [
       `[CONTROL-PLANE // ${envelope.type}]`,
+      recipient ? `@${recipient}` : '',
       envelope.taskId ? `Task: ${envelope.taskId}` : '',
       `Summary: ${envelope.summary}`,
+      actionRequired && actionRequired !== 'NONE' ? `Action required: ${actionRequired}` : '',
     ].filter(Boolean);
 
     if (Object.keys(envelope.payload).length > 0) {
@@ -174,15 +200,21 @@ export class RoomEventAdapter {
     return lines.join('\n');
   }
 
-  private postViaSendScript(sender: string, body: string, taskId?: string): Promise<void> {
-    return new Promise((resolve) => {
+  private postViaSendScript(sender: string, body: string, taskId: string | undefined, options: {
+    subject: string; actionRequired: string; instanceId: string; required: boolean;
+  }): Promise<{ stdout: string; sequence: number | null }> {
+    return new Promise((resolve, reject) => {
       const args = [
         this.commsScriptPath,
         '--from',
         sender,
         '--instance',
-        `${sender}-control-plane`,
+        options.instanceId,
         '--room',
+        '--subject',
+        options.subject,
+        '--action-required',
+        options.actionRequired,
         '--body',
         body,
       ];
@@ -190,12 +222,17 @@ export class RoomEventAdapter {
         args.push('--task', taskId);
       }
 
-      execFile('node', args, { timeout: 15000 }, (error) => {
-        // We log but don't blow up if send.mjs fails (e.g. during test run or mock environment)
+      execFile('node', args, { timeout: 15000 }, (error, stdout = '') => {
         if (error) {
           console.warn(`[RoomEventAdapter] Room broadcast warning: ${error.message}`);
+          if (options.required) {
+            reject(new Error(`Required Room delivery failed: ${error.message}`));
+            return;
+          }
         }
-        resolve();
+        const sequence = /Room Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1]
+          ?? /Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1];
+        resolve({ stdout, sequence: sequence ? Number(sequence) : null });
       });
     });
   }
