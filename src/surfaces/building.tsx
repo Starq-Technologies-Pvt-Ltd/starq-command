@@ -37,6 +37,7 @@ import { CompanyOverview, DevStudio, ExecutiveOverview } from '@/surfaces/compan
 import { CompanyOsSurface } from '@/surfaces/company-os';
 import { LibrarySurface } from '@/surfaces/library';
 import { CortexSurface } from '@/surfaces/cortex';
+import { CommsSurface } from '@/surfaces/comms';
 import { ErpRoom } from '@/surfaces/erp-room';
 import { ProjectBoard } from '@/surfaces/project-board';
 import { HoadhaRoom } from '@/surfaces/hoadha-room';
@@ -1339,6 +1340,7 @@ export function BuildingSurface({
 
   if (route.view === 'library') return <LibrarySurface />;
   if (route.view === 'cortex') return <CortexSurface />;
+  if (route.view === 'comms') return <CommsSurface />;
 
   /*
     CMD-DI-3-2b. Work is its own surface. It does not replace Evidence → Rooms,

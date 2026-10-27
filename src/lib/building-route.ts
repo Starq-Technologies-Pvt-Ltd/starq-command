@@ -3,6 +3,7 @@ export const COMPANY_VIEWS = [
   'company',
   'library',
   'cortex',
+  'comms',
   'building',
   'studio',
   'attention',

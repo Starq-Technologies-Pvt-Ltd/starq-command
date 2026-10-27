@@ -12,6 +12,7 @@ import {
   Network,
   Settings2,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
@@ -24,6 +25,7 @@ export type ViewId =
   | 'company'
   | 'library'
   | 'cortex'
+  | 'comms'
   | 'studio'
   | 'overview'
   | 'attention'
@@ -91,6 +93,13 @@ export const NAV: NavItem[] = [
     label: 'Cortex',
     hint: 'Connected work and evidence',
     icon: Network,
+    live: true,
+  },
+  {
+    id: 'comms',
+    label: 'Comms',
+    hint: 'Room messenger',
+    icon: MessageSquare,
     live: true,
   },
   {

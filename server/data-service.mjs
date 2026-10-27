@@ -38,6 +38,12 @@ import { buildSnapshot } from './snapshot.mjs';
 import { runReadOnlyGates } from './gates.mjs';
 import { readRoomVisibility } from './room-work.mjs';
 import { readRoomSnapshot, readRoomBoundSnapshot } from './room-snapshot.mjs';
+import {
+  channelMessages,
+  listChannels,
+  peopleDirectory,
+  searchMessages,
+} from './comms.mjs';
 import { classifyFilesystemPath } from './room-path.mjs';
 import { classifyRoomLedgerRelation } from './room-ledger-relation.mjs';
 
@@ -1091,6 +1097,35 @@ function sendCachedJson(req, res, route, payload, entry, hit, status = 200) {
   res.end(body);
 }
 
+
+// -- COMMS PROJECTION CACHE -------------------------------------------------
+/**
+ * The messenger reads the whole 15.8k-record ledger, which is exactly the
+ * O(entire history) cost the projection cache exists to avoid paying per
+ * request. The Room snapshot already reports a tailSequence and tailHash, so
+ * the records are cached on those: a poll that finds the same tail does no
+ * re-read of the ledger at all. Appends change the tail and drop the cache.
+ */
+let commsCache = null;
+
+function commsRecords() {
+  const snap = readRoomSnapshot();
+  if (snap.state !== 'OK' || !Array.isArray(snap.records)) {
+    return { ok: false, state: snap.state ?? 'UNAVAILABLE', reason: snap.reason ?? 'Room unavailable', records: [] };
+  }
+  const key = (snap.tailSequence ?? snap.recordCount ?? 0) + ':' + (snap.tailHash ?? '');
+  if (!commsCache || commsCache.key !== key) {
+    commsCache = {
+      key,
+      records: snap.records,
+      tail_sequence: snap.tailSequence ?? null,
+      record_count: snap.recordCount ?? snap.records.length,
+      assembled_at: new Date().toISOString(),
+    };
+  }
+  return { ok: true, ...commsCache };
+}
+
 // ── HTTP: thin, local, read-only. GET only. ────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -1197,6 +1232,44 @@ const server = http.createServer(async (req, res) => {
     const project = url.searchParams.get('project_id');
     return sendJson(res, 200, visibility.work === null ? null :
       project ? visibility.work.filter(row => row.project_id === project) : visibility.work);
+  }
+
+  // ── Communications (the messenger). Read-only projection of the Room. ──────
+  if (url.pathname === '/api/comms/channels') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    return sendJson(res, 200, {
+      state: 'OK', tail_sequence: c.tail_sequence, record_count: c.record_count,
+      assembled_at: c.assembled_at, channels: listChannels(c.records),
+    });
+  }
+
+  if (url.pathname === '/api/comms/messages') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const channel = url.searchParams.get('channel') || 'common';
+    const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    const before = url.searchParams.get('before') ? Number(url.searchParams.get('before')) : null;
+    const includeCoordination = url.searchParams.get('coordination') !== 'exclude';
+    const page = channelMessages(c.records, channel, { limit, before, includeCoordination });
+    return sendJson(res, 200, { state: 'OK', tail_sequence: c.tail_sequence, assembled_at: c.assembled_at, ...page });
+  }
+
+  if (url.pathname === '/api/comms/search') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const q = url.searchParams.get('q') || '';
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+    const from = url.searchParams.get('from') || null;
+    const project = url.searchParams.get('project') || null;
+    return sendJson(res, 200, { state: 'OK', ...searchMessages(c.records, q, { limit, from, project }) });
+  }
+
+  if (url.pathname === '/api/comms/people') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
+    return sendJson(res, 200, { state: 'OK', people: peopleDirectory(identitiesSource.data, c.records) });
   }
 
   // Phase 2: the versioned, transport-agnostic envelope.
@@ -1328,4 +1401,5 @@ export { server, PORT, HOST };
 // future route until it is reviewed for observation-only safety.
 export const OBSERVATION_READ_ROUTES = new Set([
   '/api/health', '/api/surface', '/api/work-packages',
+  '/api/comms/channels', '/api/comms/messages', '/api/comms/search', '/api/comms/people',
 ]);

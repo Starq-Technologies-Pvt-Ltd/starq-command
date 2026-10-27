@@ -42,6 +42,7 @@ import {
   createAppointment as orgCreateAppointment,
   orgPeopleHandles,
 } from './operating-org.mjs';
+import { buildSendArgs } from './comms.mjs';
 import {
   backfillNexusAttributes,
   ensureFidelityColumns,
@@ -801,6 +802,32 @@ function roomBody(row, task, dbId) {
   ].filter(Boolean).join('\n');
 }
 
+function postCommsMessage({ from, body, channel, replyTo, subject, actionRequired, taskId }) {
+  if (!SEND_SCRIPT) throw new HttpError(503, 'ROOM_UNAVAILABLE', 'Room send script is not resolved.');
+  if (!knownHandles().has(from)) {
+    throw new HttpError(422, 'UNKNOWN_SENDER', from + ' is not a known active identity.');
+  }
+  let args;
+  try {
+    args = buildSendArgs({ from, body, channel, replyTo, subject, actionRequired, taskId });
+  } catch (e) {
+    throw new HttpError(422, 'COMPOSE_INVALID', e.message);
+  }
+  const instance = from + '-command-comms';
+  const full = [SEND_SCRIPT, '--instance', instance, ...args];
+  return new Promise((resolve, reject) => {
+    execFile(process.execPath, full, { cwd: path.dirname(path.dirname(SEND_SCRIPT)), timeout: 45000, windowsHide: true, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+      const out = String(stdout || '');
+      const m = /Broker Record #(\d+) posted/.exec(out) || /Record #(\d+)/.exec(out);
+      if (!err && m) return resolve({ sequence: Number(m[1]), raw: out.trim().slice(0, 300) });
+      // send.mjs refuses a Founder impersonation attempt with a clear message;
+      // surface it verbatim rather than as a generic failure.
+      const detail = String(stderr || out || (err && err.message) || 'send failed').trim().slice(0, 400);
+      reject(new HttpError(/REFUSED/i.test(detail) ? 403 : 502, 'SEND_FAILED', detail));
+    });
+  });
+}
+
 function postToRoom(body) {
   requireExplicitRoomWriter();
   return new Promise((resolve, reject) => {
@@ -1373,6 +1400,20 @@ async function handle(req, res) {
       requireDb();
       enqueueRoomSync();
       return send(res, 202, { queued: true, pending_room_sync: health().pending_room_sync }, origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/comms/send') {
+      const body = await readBody(req);
+      only(body, ['from', 'body', 'channel', 'reply_to', 'subject', 'action_required', 'task_id']);
+      const result = await postCommsMessage({
+        from: str(body, 'from', { min: 2, max: 40, required: true }),
+        body: str(body, 'body', { min: 1, max: 7800, required: true }),
+        channel: str(body, 'channel', { max: 80 }),
+        replyTo: str(body, 'reply_to', { max: 80 }),
+        subject: str(body, 'subject', { max: 120 }),
+        actionRequired: str(body, 'action_required', { max: 300 }),
+        taskId: str(body, 'task_id', { max: 40 }),
+      });
+      return send(res, 201, { posted: true, ...result }, origin);
     }
     throw new HttpError(404, 'NOT_FOUND', 'No such route.');
   } catch (e) {
