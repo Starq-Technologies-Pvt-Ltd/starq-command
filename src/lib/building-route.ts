@@ -1,6 +1,8 @@
 export const COMPANY_VIEWS = [
   'overview',
   'company',
+  'library',
+  'cortex',
   'building',
   'studio',
   'attention',
@@ -20,7 +22,8 @@ export const SYSTEM_TABS = ['Health', 'Runtime', 'Sources', 'Contracts', 'Projec
  * rooms truthful. Founder is the acting-capacity surface. Infrastructure is the
  * systems that are NOT staff.
  *
- * One nav item, not five. Splitting these across the top rail would be the
+ * Operate is the writable PM operating org and does not use company-os.
+ * One nav item. Splitting these across the top rail would be the
  * "second dashboard" the wave forbids.
  */
 export const COMPANY_OS_TABS = [
@@ -29,6 +32,7 @@ export const COMPANY_OS_TABS = [
   'Portfolio',
   'Founder',
   'Infrastructure',
+  'Operate',
 ];
 export const STUDIO_TABS = ['Overview', 'Staff', 'Projects', 'Capacity', 'Activity', 'Herdr'];
 export const ERP_TABS = [

@@ -64,3 +64,9 @@ continuity-support/
 ._*
 
 scripts/.command-runtime-test/
+
+# Recovered Nexus assets (23,509 files / 1.63 GB), Founder authorization 2026-10-28.
+# These are READ AT RUNTIME by server/nexus-library.mjs (library root) and
+# server/nexus-cortex.mjs (graph.json), so the tree must stay in place on disk.
+# It is source-copy evidence, not source code: preserved, never staged.
+/recovered/

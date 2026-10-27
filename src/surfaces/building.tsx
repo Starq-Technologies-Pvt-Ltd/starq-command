@@ -35,6 +35,8 @@ import { UnknownValue } from '@/components/state-gate';
 import { PeerWorkHeader, QualifierRow, WorkArea, WorkRow } from '@/components/work-area';
 import { CompanyOverview, DevStudio, ExecutiveOverview } from '@/surfaces/company';
 import { CompanyOsSurface } from '@/surfaces/company-os';
+import { LibrarySurface } from '@/surfaces/library';
+import { CortexSurface } from '@/surfaces/cortex';
 import { ErpRoom } from '@/surfaces/erp-room';
 import { ProjectBoard } from '@/surfaces/project-board';
 import { HoadhaRoom } from '@/surfaces/hoadha-room';
@@ -58,12 +60,12 @@ import { HistoricalPmSurface } from '@/surfaces/historical-pm';
  * mounted without waiting for the Building projection. `standalone` routes
  * render even when that projection is unavailable.
  */
-function pmRouteFor(route: BuildingRoute): { project: 'command' | 'erp' | 'hoadha' | null; standalone: boolean } | null {
+function pmRouteFor(route: BuildingRoute): { project: string | null; standalone: boolean } | null {
   if (route.view !== 'studio') return null;
-  if (route.projectId?.toLowerCase() === 'command') return { project: 'command', standalone: true };
-  if (route.room === 'erp' && route.tab === 'Tasks') return { project: 'erp', standalone: false };
-  if (route.room === 'hoadha' && route.tab === 'Board') return { project: 'hoadha', standalone: false };
-  if (route.room === null && !route.projectId && route.tab === 'Projects') return { project: null, standalone: false };
+  if (route.projectId) return { project: route.projectId, standalone: true };
+  if (route.room === 'erp' && route.tab === 'Tasks') return { project: 'erp', standalone: true };
+  if (route.room === 'hoadha' && route.tab === 'Board') return { project: 'hoadha', standalone: true };
+  if (route.room === null && !route.projectId && route.tab === 'Projects') return { project: null, standalone: true };
   return null;
 }
 
@@ -1208,25 +1210,13 @@ function RoomContent({
 }) {
   if (route.room === 'hoadha') {
     if (route.tab === 'Board')
-      return (
-        <>
-          <PmBoardSurface projectId="hoadha" />
-          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
-          <HoadhaRoom tab={route.tab} building={building} surface={surface} />
-        </>
-      );
+      return <PmBoardSurface projectId="hoadha" />;
     return <HoadhaRoom tab={route.tab} building={building} surface={surface} />;
   }
 
   if (route.room === 'erp') {
     if (route.tab === 'Tasks')
-      return (
-        <>
-          <PmBoardSurface projectId="erp" />
-          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
-          <ErpRoom tab={route.tab} building={building} surface={surface} />
-        </>
-      );
+      return <PmBoardSurface projectId="erp" />;
     if (route.tab === 'Process')
       return (
         <div className="command-stack">
@@ -1339,12 +1329,16 @@ export function BuildingSurface({
             Portfolio: surface.company_os?.counts?.rooms ?? null,
             Founder: surface.company_os?.founder?.reserved_to_founder.length ?? null,
             Infrastructure: surface.company_os?.shared_infrastructure.length ?? null,
+            Operate: null,
           }}
         />
         <CompanyOsSurface surface={surface} tab={route.tab} />
       </div>
     );
   }
+
+  if (route.view === 'library') return <LibrarySurface />;
+  if (route.view === 'cortex') return <CortexSurface />;
 
   /*
     CMD-DI-3-2b. Work is its own surface. It does not replace Evidence → Rooms,
@@ -1365,10 +1359,6 @@ export function BuildingSurface({
     return (
       <div className="room-root" data-room="studio" data-pm-route={pmRoute.project ?? 'portfolio'}>
         {pmRoute.project ? <PmBoardSurface projectId={pmRoute.project} /> : <PmPortfolioSurface />}
-        {pmRoute.project === 'command' ? <GoLink href="#studio/projects">Historical CMD-DI board (pinned, read-only) →</GoLink> : null}
-        {pmRoute.project === 'erp' || pmRoute.project === 'hoadha' ? (
-          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
-        ) : null}
       </div>
     );
   }

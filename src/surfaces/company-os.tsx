@@ -47,6 +47,7 @@ import {
   StatRail,
 } from '@/components/console';
 import { AboutMethod, PeerWorkHeader } from '@/components/work-area';
+import { OrgOperateSurface } from '@/surfaces/org-operate';
 
 /**
  * State vocabulary for rooms and floors.
@@ -807,7 +808,10 @@ function CompanyOsConflicts({ company }: { company: CompanyOsProjection }) {
 }
 
 /**
- * CompanyOsSurface — one nav item, five tabs, the whole company.
+ * CompanyOsSurface — one nav item, the whole company.
+ *
+ * Operate talks to the PM service and must render even when the company_os
+ * projection is missing or unavailable.
  */
 export function CompanyOsSurface({
   surface,
@@ -816,6 +820,10 @@ export function CompanyOsSurface({
   surface: CommandSurface;
   tab?: string;
 }) {
+  if (tab === 'Operate') {
+    return <OrgOperateSurface />;
+  }
+
   const company = surface.company_os;
   if (!company) {
     return (

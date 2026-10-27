@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "STARQ // COMMAND — permanent Founder operating surface for Starq Dev Studio. A DERIVED_PROJECTION of canonical Starq truth. Read-only.",
+  "description": "STARQ // COMMAND — configurable Company Operating System with governed projections and writable operating records.",
   "engines": {
     "node": ">=20"
   },
@@ -20,6 +20,7 @@
     "test:lifecycle": "node --test scripts/lifecycle/tests/",
     "data": "node server/data-service.mjs",
     "pm:start": "node server/pm-service.mjs",
+    "os:start": "node scripts/start-command-os.mjs",
     "herdr": "node integrations/herdr/herdr-service.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
