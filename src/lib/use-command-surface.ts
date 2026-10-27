@@ -28,11 +28,6 @@ export type LoadStatus = 'LOADING' | 'READY' | 'UNAVAILABLE' | 'ERROR';
 
 /** Hung listeners must fail closed so PM fallback and honesty banners can render. */
 const FETCH_TIMEOUT_MS = 4000;
-function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit = {}, ms = FETCH_TIMEOUT_MS) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(input, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
 
 export interface SurfaceResponse {
   status: LoadStatus;
@@ -66,7 +61,10 @@ export function useCommandSurface(pollMs = 15000): SurfaceResponse {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const res = await fetchWithTimeout('/api/surface', { cache: 'no-store' });
+      const res = await fetch('/api/surface', {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
       if (!res.ok) throw new Error(`data service returned ${res.status}`);
       const data = (await res.json()) as CommandSurface;
       if (!mounted.current) return;
@@ -170,7 +168,10 @@ export function useBuildingProjection(pollMs = 30000): BuildingResponse {
     mounted.current = true;
     const load = async () => {
       try {
-        const res = await fetchWithTimeout('/api/building', { cache: 'no-store' });
+        const res = await fetch('/api/building', {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
         if (!res.ok) throw new Error(`building projection returned ${res.status}`);
         const data = (await res.json()) as BuildingProjection;
         if (!mounted.current) return;
