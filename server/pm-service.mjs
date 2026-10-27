@@ -43,6 +43,12 @@ import {
   orgPeopleHandles,
 } from './operating-org.mjs';
 import {
+  backfillNexusAttributes,
+  ensureFidelityColumns,
+  restoreCollidedRecords,
+  workersOf,
+} from './nexus-fidelity.mjs';
+import {
   GATED_STAGES,
   PROVENANCE,
   allowedStageNext,
@@ -54,6 +60,7 @@ import {
 } from './gated-lifecycle.mjs';
 import {
   KANBAN_STATUSES,
+  NEXUS_BOARDS,
   allowedKanbanNext,
   importNexusBoards,
   importLegacyPmSnapshot,
@@ -380,6 +387,10 @@ function initSchema(handle) {
   `);
   initOrgSchema(handle);
   ensureGatedColumns(handle);
+  // Founder 28 Oct: promote the full original Nexus record out of raw_payload
+  // back into queryable columns, and restore the records the importer's global
+  // id guard discarded. Both steps are idempotent and run on every start.
+  ensureFidelityColumns(handle);
   const has = handle.prepare('SELECT value FROM pm_meta WHERE key = ?');
   if (!has.get('schema_version')) {
     const put = handle.prepare('INSERT INTO pm_meta (key, value) VALUES (?, ?)');
@@ -596,7 +607,23 @@ function startDatabase() {
         nowIso,
         json,
       });
+      // Fidelity runs AFTER the import, inside the same transaction. The
+      // importer rebuilds pm_source_records from the board files on every
+      // start, so anything written before it is overwritten.
+      const restored = restoreCollidedRecords(handle, {
+        nowIso,
+        boardsById: Object.fromEntries(NEXUS_BOARDS.filter((b) => b.file).map((b) => [b.file, b.id])),
+      });
+      const fill = backfillNexusAttributes(handle);
       handle.exec('COMMIT');
+      for (const r of restored) {
+        console.error('[pm] restored collided Nexus record ' + r.original_id + ' from ' + r.source_key + ' as ' + r.stored_as);
+      }
+      if (restored.length) {
+        drift.push('Nexus id collisions restored: ' + restored.map((r) => r.original_id + ' -> ' + r.stored_as).join(', '));
+      }
+      if (fill.updated) console.error('[pm] Nexus fidelity backfill: ' + fill.updated + ' updated, ' + fill.skipped + ' already current');
+      drift.push('Nexus attribute fidelity: ' + fill.considered + ' records carry their full original payload');
       if (nexus.errors.length) drift.push(...nexus.errors);
       if (legacyPm.errors.length) drift.push(...legacyPm.errors);
       drift.push(`legacy PM history preserved as archived source: ${legacyPm.preserved} tasks, ${legacyPm.history_rows ?? 0} status entries`);
@@ -645,6 +672,8 @@ function hydrate(row, pending = 0) {
     depends_on: JSON.parse(row.depends_on),
   };
   task.allowed_next = allowedNext(task);
+  // The multi-agent assignment the first import flattened to its first element.
+  task.workers = workersOf(row);
   // Both axes travel together, and board_column is DERIVED on read. A derived
   // value that is also stored is a value that can disagree with itself.
   task.provenance = row.provenance ?? PROVENANCE.LIVE;
