@@ -436,7 +436,7 @@ describe('Phase 7 — evidence drill-down is usable', () => {
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
       const html = render('#studio/hoadha/integrity', surface);
-      expect(html).toContain('/api/raw?path=');
+      expect(html).toContain('/api/building/raw?path=');
     }));
 });
 

@@ -129,11 +129,13 @@ describe('the Truth & Health floor renders from the real surface', () => {
   it('never prints a value that did not arrive in the payload', () => {
     // Spot-check the load-bearing numbers: each must be present in the payload
     // and in the render. This catches a hardcoded fixture creeping into markup.
+    const recordsChecked = surface.health_floor!.ledger_integrity!.current!.records_checked;
+    expect(recordsChecked, 'integrity count must be present on the payload').toBeGreaterThan(0);
     const facts = [
       surface.health_floor_summary!.dimensions_total.toString(),
       surface.health_floor_summary!.dimensions_healthy.toString(),
       surface.health_floor!.ledger_integrity!.current!.epoch_id!,
-      surface.health_floor!.ledger_integrity!.current!.records_checked.toString(),
+      Number(recordsChecked).toLocaleString('en-US'),
     ];
     for (const f of facts) {
       expect(text, `payload value not rendered: ${f}`).toContain(f);

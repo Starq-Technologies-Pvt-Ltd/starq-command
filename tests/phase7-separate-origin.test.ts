@@ -89,6 +89,12 @@ describe('Phase 7 — the Building origin is read-only structurally', () => {
     expect(origin).toMatch(/READ_ONLY/);
   });
 
+  it('serves Building evidence only through its own declared allowlist', () => {
+    expect(origin).toMatch(/url\.pathname === '\/api\/building\/raw'/);
+    expect(origin).toMatch(/BUILDING_SOURCES\.includes\(rel\)/);
+    expect(origin).toMatch(/readBuildingSource\(workspaceRoot, rel\)/);
+  });
+
   it('states in its own header that it is a separate origin', () => {
     expect(origin).toMatch(/separate/i);
     expect(origin).toMatch(/8361/);

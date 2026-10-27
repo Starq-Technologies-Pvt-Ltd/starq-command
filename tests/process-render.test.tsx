@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as React from 'react';
 import { ProcessSurface } from '@/surfaces/process';
-import { buildPhase3Surface } from '../server/data-service.mjs';
+import surface from './fixtures/cmd-stu-003-surface.json';
 
 /**
  * The Phase 4 process floor must actually RENDER.
@@ -19,7 +19,6 @@ import { buildPhase3Surface } from '../server/data-service.mjs';
  * implied.
  */
 
-const surface = await buildPhase3Surface();
 const html = renderToStaticMarkup(React.createElement(ProcessSurface, { surface }));
 const text = html
   .replace(/<[^>]+>/g, ' ')

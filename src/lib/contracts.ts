@@ -1338,7 +1338,10 @@ export interface BuildingProjection {
   authority: string; access: string; company: string; floor: string;
   capacity: { state: string; reason: string };
   projects: { id: string; name: string; classification: string; state: string; source: string }[];
-  sources: { source: string; state: string; sha256?: string; modified_at?: string; reason?: string }[];
+  sources: {
+    source: string; state: string; sha256?: string; modified_at?: string; reason?: string;
+    source_kind?: 'NEXUS_COMPANY_BOARD' | 'HOADHA_COMPANY_DOCUMENT'; source_root?: string;
+  }[];
   erp_tasks: BuildingRecord[] | null; note: string;
   historical_pm: HistoricalPmProjection;
   hoadha: {

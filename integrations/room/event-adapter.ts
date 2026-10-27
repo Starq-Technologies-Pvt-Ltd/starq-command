@@ -1,10 +1,6 @@
 /**
  * Room Typed Lifecycle Event Adapter
  * Starq Command Architecture Doctrine Section 18 & Requirement 5H
- *
- * P0 D4: PRESERVED, UNREVIEWED. Carried from live Command as protective
- * destination-guard code. Independent review is required before this counts
- * as accepted. Do not treat overlay as authorization or acceptance.
  */
 
 import * as fs from 'node:fs';

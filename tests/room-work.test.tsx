@@ -27,9 +27,16 @@ function project(records: any[]) {
 }
 function publishProjection(root: string, records: any[]) {
   const board=path.join(root,'00_STARQ_HQ/operations/starqerp-control-board');fs.mkdirSync(board,{recursive:true});
-  const activity=JSON.stringify({record_event_ids:records.map(r=>r.eventId),activity_ledger:{max_broker_sequence:records.at(-1)?.brokerSequence,sha256_prefix:crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'agent-comms/room.jsonl'))).digest('hex').slice(0,16)}});
+  const activity=JSON.stringify({record_event_ids:records.map(r=>r.eventId),activity_ledger:{max_broker_sequence:records.at(-1)?.brokerSequence,records_total:records.length,sha256_prefix:crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'agent-comms/room.jsonl'))).digest('hex').slice(0,16)}});
   fs.writeFileSync(path.join(board,'activity.json'),activity);
-  fs.writeFileSync(path.join(board,'activity_state.json'),JSON.stringify({activity_sha256:crypto.createHash('sha256').update(activity).digest('hex')}));
+  fs.writeFileSync(path.join(board,'activity_state.json'),JSON.stringify({
+    activity_sha256:crypto.createHash('sha256').update(activity).digest('hex'),
+    checkpoint:{
+      last_event_id:records.at(-1)?.eventId ?? null,
+      max_broker_sequence:records.at(-1)?.brokerSequence ?? null,
+      event_count:records.length,
+    },
+  }));
 }
 let root: string|null=null;
 afterEach(()=>{
@@ -90,7 +97,8 @@ describe('#9538 canonical Room work evidence adapter',()=>{
     expect(readRoomVisibility(root).work).toHaveLength(1);
     const later=make('Later actual report','done',r);
     fs.appendFileSync(path.join(root,'agent-comms/room.jsonl'),'\n'+JSON.stringify(later));
-    expect(readRoomVisibility(root).state).toBe('STALE');
+    expect(readRoomVisibility(root).state).toBe('LAG');
+    expect(readRoomVisibility(root).ledger_relation).toBe('PREFIX_EXTENSION');
     expect(readRoomVisibility(root).work).toHaveLength(1); // no bypass of ingestion
     publishProjection(root,[r,later]);
     expect(readRoomVisibility(root).state).toBe('OK');
@@ -106,6 +114,33 @@ describe('#9538 canonical Room work evidence adapter',()=>{
     publishProjection(root,[r]);
     fs.writeFileSync(path.join(root,'00_STARQ_HQ/operations/starqerp-control-board/activity_state.json'),'{}');
     expect(readRoomVisibility(root)).toMatchObject({work:null,state:'UNAVAILABLE',reason:'Activity output/checkpoint handoff mismatch'});
+  });
+  it('refuses PREFIX_EXTENSION for an injected pre-checkpoint record and for a same-count changed prefix',()=>{
+    const writeRoom=(lines:any[])=>fs.writeFileSync(path.join(root!,'agent-comms/room.jsonl'),lines.map(l=>JSON.stringify(l)).join('\n'));
+    const setup=(lines:any[])=>{
+      root=fs.mkdtempSync(path.join(os.tmpdir(),'command-room-work-'));
+      const r0=lines[0];
+      const files:any={'agent-comms/protocol/v1/ledger-epoch.json':JSON.stringify({current:{anchor:{eventId:r0.eventId}}}),'agent-comms/protocol/v1/projects.json':JSON.stringify(projects),'agent-comms/protocol/v1/identities.json':JSON.stringify(identities)};
+      for(const [file,body] of Object.entries(files)){fs.mkdirSync(path.dirname(path.join(root!,file)),{recursive:true});fs.writeFileSync(path.join(root!,file),body as string);}
+    };
+    // Checkpoint covers exactly [r]; the live ledger then gets an injected record before it.
+    const r=make('Title');
+    setup([r]);
+    writeRoom([r]);
+    publishProjection(root!,[r]);
+    expect(readRoomVisibility(root!).work).toHaveLength(1);
+    const injected=make('Injected pre-checkpoint',null);
+    const later=make('Later actual report','done',r);
+    writeRoom([injected,r,later]);
+    expect(readRoomVisibility(root!).work).toBeNull();
+    // Same record count, changed earlier event ID, checkpoint still last.
+    const b=make('Second record','done',r);
+    writeRoom([r,b]);
+    publishProjection(root!,[r,b]);
+    const altered=make('Altered earlier record');
+    const c=make('Appended after second','done',b);
+    writeRoom([altered,b,c]);
+    expect(readRoomVisibility(root!).work).toBeNull();
   });
   it('renders recorded evidence without displaying a report as verified completion',()=>{
     const rows=project([make('Title: Actual source title\nBlocker: Scope decision\nVerification: Reported tests','done')]).work;

@@ -62,11 +62,27 @@ function emit(result) {
   if (result.verification) line(`  verification: ${JSON.stringify(result.verification)}`);
   if (result.components) {
     for (const c of result.components) {
-      line(`  ${c.name.padEnd(12)} ${String(c.port).padEnd(6)} ${c.ownership.padEnd(13)} pid=${c.pid ?? '-'} health=${c.health ? (c.health.ok ? 'OK' : `FAIL(${c.health.detail})`) : '-'} listener=${c.listener ? (c.listener.owned ? 'owned' : c.listener.present ? `FOREIGN(${c.listener.pids})` : 'none') : 'UNKNOWN'}`);
+      const listener = !c.listener ? 'UNKNOWN'
+        : c.listener.owned ? 'owned'
+        : c.listener.present ? `FOREIGN(${c.listener.pids}${c.listener.classifications?.length ? `;${c.listener.classifications.map((x) => x.id || x.kind).join(',')}` : ''})`
+        : 'none';
+      line(`  ${c.name.padEnd(12)} ${String(c.port).padEnd(6)} ${c.ownership.padEnd(13)} pid=${c.pid ?? '-'} health=${c.health ? (c.health.ok ? 'OK' : `FAIL(${c.health.detail})`) : '-'} listener=${listener}`);
     }
     line(`  broker: ${JSON.stringify(result.broker)}`);
+    if (result.infrastructure_policy) {
+      line(`  infrastructure_policy: command_ports_remain_blocking=${result.infrastructure_policy.command_ports_remain_blocking}`);
+    }
+    if (Array.isArray(result.live_infrastructure)) {
+      if (!result.live_infrastructure.length) line('  live_infrastructure: none observed');
+      else for (const x of result.live_infrastructure) line(`  infra ${(x.id || 'unclassified').padEnd(22)} pid=${x.pid ?? '-'} ${x.kind}`);
+    }
     line(`  inspection complete: ${result.inspection.complete}${result.inspection.errors.length ? ` (${result.inspection.errors.join('; ')})` : ''}`);
     for (const p of result.problems) line(`  problem: ${p}`);
+    if (result.health_preflight) {
+      const hp = result.health_preflight;
+      line(`  health_preflight: overall=${hp.overall} idle_cooldown=${hp.idle_cooldown}`);
+      for (const p of hp.ports ?? []) line(`  preflight ${(p.name || '?').padEnd(12)} ${String(p.port).padEnd(6)} ${p.state.padEnd(8)} ${p.detail}`);
+    }
   }
 }
 
@@ -91,7 +107,7 @@ async function main() {
     }
     const r = await owner.recoverForce(); emit(r); return EXIT[r.result];
   }
-  if (command === 'status') {
+  if (command === 'status' || command === 'preflight') {
     const r = await owner.status(); emit(r);
     return r.overall === 'RUNNING' ? 0 : r.overall === 'STOPPED' ? 10 : 20;
   }
@@ -103,7 +119,7 @@ async function main() {
     const r = await getObservationOwner().status(); emit(r);
     return r.overall === 'RUNNING' ? 0 : r.overall === 'STOPPED' ? 10 : 20;
   }
-  process.stderr.write(`unknown command ${command}; use start | stop [--stop-agents] | restart | status [--json] | recover --force | observation-start | observation-status | observation-stop\n`);
+  process.stderr.write(`unknown command ${command}; use start | stop [--stop-agents] | restart | status [--json] | preflight [--json] | recover --force | observation-start | observation-status | observation-stop\n`);
   return 1;
 }
 

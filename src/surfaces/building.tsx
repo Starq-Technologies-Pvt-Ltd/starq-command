@@ -1211,7 +1211,7 @@ function RoomContent({
       return (
         <>
           <PmBoardSurface projectId="hoadha" />
-          <GoLink href="#building">Historical Nexus records (read-only, not native tasks) →</GoLink>
+          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
           <HoadhaRoom tab={route.tab} building={building} surface={surface} />
         </>
       );
@@ -1223,7 +1223,7 @@ function RoomContent({
       return (
         <>
           <PmBoardSurface projectId="erp" />
-          <GoLink href="#building">Historical Nexus records (read-only, not native tasks) →</GoLink>
+          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
           <ErpRoom tab={route.tab} building={building} surface={surface} />
         </>
       );
@@ -1366,6 +1366,9 @@ export function BuildingSurface({
       <div className="room-root" data-room="studio" data-pm-route={pmRoute.project ?? 'portfolio'}>
         {pmRoute.project ? <PmBoardSurface projectId={pmRoute.project} /> : <PmPortfolioSurface />}
         {pmRoute.project === 'command' ? <GoLink href="#studio/projects">Historical CMD-DI board (pinned, read-only) →</GoLink> : null}
+        {pmRoute.project === 'erp' || pmRoute.project === 'hoadha' ? (
+          <GoLink href="#building">Historical Nexus records (HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks) →</GoLink>
+        ) : null}
       </div>
     );
   }

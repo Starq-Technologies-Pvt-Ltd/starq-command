@@ -3,7 +3,7 @@
  * checks only; the PM service re-validates everything and is the authority.
  */
 import * as React from 'react';
-import { PM_PRIORITIES, type PmPriority, type PmTask, type PmWorkPackage } from '@/lib/pm-client';
+import { PM_PRIORITIES, type PmPriority, type PmTask } from '@/lib/pm-client';
 
 export interface TaskFormValues {
   title: string;
@@ -11,7 +11,6 @@ export interface TaskFormValues {
   priority: PmPriority;
   owner: string;
   verifier: string;
-  workPackageId: string;
   notes: string;
   dependsOn: string[];
   authSequence: string;
@@ -22,15 +21,15 @@ export interface TaskFormValues {
 export function emptyTaskForm(): TaskFormValues {
   return {
     title: '', description: '', priority: 'P2', owner: 'UNASSIGNED', verifier: 'UNASSIGNED',
-    workPackageId: '', notes: '', dependsOn: [], authSequence: '', authEventId: '', authPurpose: '',
+    notes: '', dependsOn: [], authSequence: '', authEventId: '', authPurpose: '',
   };
 }
 
 export function taskToForm(task: PmTask): TaskFormValues {
   return {
     title: task.title, description: task.description, priority: task.priority,
-    owner: task.owner, verifier: task.verifier, workPackageId: task.work_package_id ?? '',
-    notes: task.notes, dependsOn: task.depends_on, authSequence: '', authEventId: '', authPurpose: '',
+    owner: task.owner, verifier: task.verifier, notes: task.notes,
+    dependsOn: task.depends_on, authSequence: '', authEventId: '', authPurpose: '',
   };
 }
 
@@ -38,7 +37,6 @@ export function TaskForm({
   mode,
   initial,
   handles,
-  workPackages = [],
   busy,
   errors,
   onSubmit,
@@ -47,7 +45,6 @@ export function TaskForm({
   mode: 'create' | 'edit';
   initial: TaskFormValues;
   handles: string[];
-  workPackages?: Pick<PmWorkPackage, 'id' | 'title'>[];
   busy: boolean;
   errors: string[];
   onSubmit: (values: TaskFormValues) => void;
@@ -103,13 +100,6 @@ export function TaskForm({
           </select>
         </label>
       </div>
-      <label className={field}>
-        Work package (optional)
-        <select aria-label="Task work package" value={v.workPackageId} onChange={(e) => set('workPackageId', e.target.value)}>
-          <option value="">None</option>
-          {workPackages.map((wp) => <option key={wp.id} value={wp.id}>{wp.id} · {wp.title}</option>)}
-        </select>
-      </label>
       <label className={field}>
         Depends on (task ids, comma separated, same project)
         <input

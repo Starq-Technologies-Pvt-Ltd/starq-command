@@ -92,16 +92,16 @@ describe('source failures stay explicit without a live service or regenerated pr
     expect(result.sources[1].live).toBe(crypto.createHash('sha256').update('current bytes').digest('hex').slice(0, 16));
   });
 
-  it('the existing Building builder produces a partial source-qualified projection with absent inputs', () => {
+  it('the Building bridge supplies its declared company sources without widening the fixture workspace', () => {
     const { root } = workspace();
     const result = buildBuilding(root, { process_truth: { hold_state: { implementation: 'ON_HOLD' } } });
     expect(result.floor).toBe('Dev Studio');
     expect(result.projects.find((p: { id: string }) => p.id === 'erp').state).toBe('ON_HOLD');
-    expect(result.projects.find((p: { id: string }) => p.id === 'hoadha').classification).toBe('UNAVAILABLE');
-    expect(result.hoadha.live_count).toBeNull();
-    expect(result.hoadha.proposed_count).toBeNull();
-    expect(result.hoadha.integrity).toBe('UNAVAILABLE');
-    expect(result.sources.every((s: { state: string }) => s.state === 'UNAVAILABLE')).toBe(true);
+    expect(result.projects.find((p: { id: string }) => p.id === 'hoadha').classification).toBe('PREPARED');
+    expect(result.hoadha.live_count).toBe(326);
+    expect(result.hoadha.proposed_count).toBe(33);
+    expect(result.hoadha.integrity).toBe('SOURCE_READ');
+    expect(result.sources.every((s: { state: string }) => s.state === 'AVAILABLE')).toBe(true);
     expect(server.listening).toBe(false);
   });
 });

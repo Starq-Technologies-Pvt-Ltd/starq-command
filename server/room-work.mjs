@@ -4,7 +4,8 @@ import crypto from 'node:crypto';
 import { resolveReadOnlyTarget } from './path-guard.mjs';
 import { computeRecordHash } from '../../../../agent-comms/protocol/v1/hashChain.mjs';
 import { computeEventId } from '../../../../agent-comms/protocol/v1/envelope.mjs';
-import { readRoomSnapshot } from './room-snapshot.mjs';
+import { readRoomBoundSnapshot } from './room-snapshot.mjs';
+import { classifyRoomLedgerRelation } from './room-ledger-relation.mjs';
 
 const SOURCES = ['agent-comms/protocol/v1/ledger-epoch.json',
   'agent-comms/protocol/v1/projects.json', 'agent-comms/protocol/v1/identities.json',
@@ -95,18 +96,22 @@ export function projectRoomRecords(records, epoch, projects, identities, ingeste
 let cached = null;
 export function readRoomVisibility(root) {
   try {
-    const room = readRoomSnapshot(root);
+    const inputs = SOURCES.map(s => read(root, s));
+    const [epochText, projectsText, identitiesText, activityText, checkpointText] = inputs;
+    const [epoch, projects, identities, activity, checkpoint] = [epochText, projectsText, identitiesText, activityText, checkpointText].map(s => JSON.parse(s));
+    // One Room read: records, digests and the raw-prefix proof all come from the same bytes.
+    const room = readRoomBoundSnapshot(root, {
+      recordCount: activity.activity_ledger?.records_total ?? null,
+      expectedSha16: activity.activity_ledger?.sha256_prefix ?? null,
+    });
     if (room.state !== 'OK' || !room.stable || room.parseStatus !== 'OK')
       throw new Error(room.reason ?? `Room snapshot is ${room.state}/${room.parseStatus}`);
-    const inputs = SOURCES.map(s => read(root, s));
     const digest = crypto.createHash('sha256').update(JSON.stringify({
       room: { sha256: room.sha256, byteLength: room.byteLength },
       inputs,
     })).digest('hex');
     if (cached?.root === root && cached.digest === digest) return cached.value;
     const records = room.records;
-    const [epochText, projectsText, identitiesText, activityText, checkpointText] = inputs;
-    const [epoch, projects, identities, activity, checkpoint] = [epochText, projectsText, identitiesText, activityText, checkpointText].map(s => JSON.parse(s));
     if (!Array.isArray(activity.record_event_ids)) throw new Error('Activity evidence index has not been ingested');
     if (checkpoint.activity_sha256 !== crypto.createHash('sha256').update(activityText).digest('hex'))
       throw new Error('Activity output/checkpoint handoff mismatch');
@@ -115,7 +120,19 @@ export function readRoomVisibility(root) {
     value.room_tail_hash = room.tailHash;
     value.max_sequence = activity.activity_ledger?.max_broker_sequence ?? null;
     value.generated_at = activity.generated_at ?? null;
-    value.state = room.sha256Prefix === activity.activity_ledger?.sha256_prefix ? 'OK' : 'STALE';
+    const classified = classifyRoomLedgerRelation({
+      recordedHash: activity.activity_ledger?.sha256_prefix ?? null,
+      liveHash: room.sha256Prefix,
+      liveRecords: records,
+      liveTailSequence: room.tailSequence,
+      recordedCount: activity.activity_ledger?.records_total ?? checkpoint.checkpoint?.event_count ?? null,
+      recordedSeq: activity.activity_ledger?.max_broker_sequence ?? checkpoint.checkpoint?.max_broker_sequence ?? null,
+      lastEventId: checkpoint.checkpoint?.last_event_id ?? null,
+      rawPrefix: room.rawPrefix,
+    });
+    if (classified.blocking) throw new Error(classified.reason ?? 'Room/activity checkpoint integrity failed');
+    value.state = classified.lag ? 'LAG' : 'OK';
+    value.ledger_relation = classified.relation;
     for (const row of value.work) row.record.projection_state = value.state;
     for (const row of value.history) row.projection_state = value.state;
     cached = {root, digest, value};

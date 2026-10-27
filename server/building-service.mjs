@@ -42,7 +42,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveWorkspace } from './paths.mjs';
-import { buildBuilding, BUILDING_SOURCES } from './building.mjs';
+import { buildBuilding, BUILDING_SOURCES, readBuildingSource } from './building.mjs';
 import { HISTORICAL_NEXUS_WORKSPACE_ROOT } from './historical-pm-snapshot.mjs';
 
 /**
@@ -103,6 +103,11 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
+const MIME = {
+  '.json': 'application/json; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
+};
+
 export function createBuildingService() {
   return http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
@@ -126,17 +131,50 @@ export function createBuildingService() {
   if (url.pathname === '/api/building/health') {
     try {
       const p = await buildBuildingProjection();
-      return sendJson(res, 200, {
+      const integrity = p.hoadha?.integrity ?? 'UNAVAILABLE';
+      const healthy = integrity === 'SOURCE_READ';
+      return sendJson(res, healthy ? 200 : 503, {
         generated_at: p.generated_at,
         origin: p.origin,
-        integrity: p.hoadha?.integrity ?? 'UNAVAILABLE',
+        integrity,
+        healthy,
         sources_checked: p.sources?.length ?? 0,
         authority_note:
-          'DERIVED_PROJECTION. Separate read-only Building/project origin. data-service.mjs is untouched.',
+          'DERIVED_PROJECTION. Separate read-only Building/project origin. data-service.mjs is untouched. Only integrity=SOURCE_READ is healthy; UNAVAILABLE/DRIFT fail closed.',
       });
     } catch (err) {
       return sendJson(res, 500, { error: err.message, state: 'UNREADABLE' });
     }
+  }
+
+  if (url.pathname === '/api/building/raw') {
+    // Building evidence belongs to this separate origin.  The frozen data
+    // service deliberately cannot serve Nexus/Hoadha sources, so this route
+    // shares the exact closed allowlist and read boundary used by the builder.
+    const rel = url.searchParams.get('path') || '';
+    if (!BUILDING_SOURCES.includes(rel)) {
+      return sendJson(res, 403, {
+        error: 'path outside the declared Building read-only surface',
+        reads: BUILDING_SOURCES,
+      });
+    }
+    const resolved = resolveWorkspace();
+    const workspaceRoot = typeof resolved === 'string' ? resolved : resolved?.root ?? null;
+    const source = readBuildingSource(workspaceRoot, rel);
+    if (source.state !== 'AVAILABLE' || typeof source.content !== 'string') {
+      return sendJson(res, source.state === 'UNAVAILABLE' ? 404 : 422, {
+        error: source.reason ?? 'source is not readable',
+        path: rel,
+        state: source.state,
+      });
+    }
+    res.writeHead(200, {
+      'content-type': MIME[path.extname(rel)] || 'text/plain; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-starq-command-authority': 'DERIVED_PROJECTION',
+      'x-starq-command-access': 'READ_ONLY',
+    });
+    return res.end(req.method === 'HEAD' ? undefined : source.content);
   }
 
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });

@@ -337,8 +337,9 @@ function buildRosterEntry({ agent, identity, staff, session, conflictTypes, herd
     last_activity_at: agent.last_activity_at,
     // The last Room sequence this handle is recorded in. Forwarded from the
     // activity projection — never computed from `now`, and never read back out
-    // of the live ledger here, because a projection that disagrees with the
-    // ledger is already reported as STALE above.
+    // of the live ledger here. Hash disagreement is classified as projection
+    // lag (valid prefix extension) or a blocking integrity failure, never
+    // inferred into a live current-task.
     last_meaningful_seq: agent.last_broker_sequence ?? null,
     lifetime_events: agent.lifetime_events ?? 0,
 
@@ -830,7 +831,17 @@ export function buildFloor({ surface }) {
     });
   }
 
-  if (execution.state === 'STALE') {
+  if (execution.ledger?.lag === true) {
+    constraints.push({
+      kind: 'PROJECTION_LAG',
+      subject: 'activity.json',
+      detail:
+        execution.reason ??
+        'The Room ledger has a verified append-only extension beyond the activity checkpoint.',
+      canonical_source: 'agent-comms/room.jsonl vs activity.json',
+      resolution: `Visible lag only — not corruption and not a Command health blocker. Refresh remains the existing control-board producer ingest_room_activity.py --watch (exclusive writer). Command HTTP/buildSurface() never ingest. Projection generated_at: ${execution.generated_at ?? 'UNKNOWN'}.`,
+    });
+  } else if (execution.state === 'STALE') {
     constraints.push({
       kind: 'STALE_EXECUTION_PROJECTION',
       subject: 'activity.json',

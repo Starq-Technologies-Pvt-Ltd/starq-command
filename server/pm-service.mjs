@@ -13,7 +13,7 @@
  *   - strict input validation, unknown fields rejected, body size capped
  *   - optimistic concurrency (expected_updated_at) so edits are never lost
  *   - append-only history (SQLite triggers), WAL, synchronous=FULL
- *   - Room references are VERIFIED against room.jsonl, not self-asserted
+ *   - Room references are VERIFIED against readRoomSnapshot(), not self-asserted
  *   - Room posting is failure-safe: a failed post stays PENDING and visible
  *   - Room authority (Founder #9503, R1-R3): an authorization reference must be an
  *     authenticated ROOT_GENESIS Room record; acceptance and closure are proven by
@@ -35,7 +35,7 @@ import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
-import { readRoomSnapshot } from './room-snapshot.mjs';
+import { readRoomSnapshot } from '../../../../agent-comms/scripts/room.mjs';
 
 // Production is always 5176. A disposable verification instance (PM_DB_PATH set)
 // may use one unused loopback port in 5190-5199 and nothing else.
@@ -55,12 +55,6 @@ export const STATUSES = [
   'ACCEPTANCE', 'CLOSED', 'BLOCKED', 'FOUNDER_GATE',
 ];
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
-// Milestones and work packages (CMD-PROJ-1, Founder #9605) are organisational
-// grouping, not individually Room-governed work items. They do not go through
-// the task's authorization/verifier/closure gates; a task linked to a work
-// package still goes through its own full governance unchanged.
-export const MILESTONE_STATUSES = ['OPEN', 'AT_RISK', 'ACHIEVED', 'MISSED'];
-export const WORK_PACKAGE_STATUSES = ['OPEN', 'IN_PROGRESS', 'DONE'];
 const FORWARD = {
   BACKLOG: 'READY', READY: 'IN_PROGRESS', IN_PROGRESS: 'REVIEW',
   REVIEW: 'VERIFICATION', VERIFICATION: 'ACCEPTANCE', ACCEPTANCE: 'CLOSED',
@@ -162,31 +156,26 @@ if (ROOT) {
 }
 const LEDGER_PATH = () => {
   const o = process.env.PM_ROOM_LEDGER;
-  if (SCRATCH) return o ? path.resolve(o) : null;
+  if (o && SCRATCH) return path.resolve(o);
   return abs(ROOT, CANONICAL.roomLedger);
 };
 
-function readLedger() {
+function snapshotLedger() {
   if (!ROOT) throw new HttpError(503, 'UNAVAILABLE', 'Workspace unresolved.');
   if (!computeRecordHash) throw new HttpError(503, 'UNAVAILABLE', 'Room hash function unavailable; Room references cannot be authenticated.');
-  const path = LEDGER_PATH();
-  if (SCRATCH && !path)
-    throw new HttpError(503, 'UNAVAILABLE', 'Scratch Room fixture path is not configured; Room references are unavailable.');
-  if (!SCRATCH && process.env.PM_ROOM_LEDGER)
-    throw new HttpError(503, 'UNAVAILABLE', 'PM_ROOM_LEDGER is allowed only for isolated scratch runs.');
-  const snapshot = readRoomSnapshot(ROOT, { roomPath: SCRATCH ? path : null, fixturePath: SCRATCH });
-  if (SCRATCH && snapshot.state === 'EMPTY') return [];
-  if (snapshot.state !== 'OK' || !snapshot.stable || snapshot.parseStatus !== 'OK')
-    throw new HttpError(503, 'UNAVAILABLE', snapshot.reason ?? 'Room ledger unreadable; reference cannot be verified.');
-  return snapshot.records;
+  const snapshot = readRoomSnapshot({ roomPath: LEDGER_PATH() });
+  if (!snapshot.stable || snapshot.state !== 'OK') {
+    throw new HttpError(503, 'UNAVAILABLE', snapshot.reason || 'Room snapshot unavailable; reference cannot be verified.');
+  }
+  return snapshot;
 }
 
 // Authenticate one snapshot record: recomputed record hash, previous-record link, and
 // the broker's own authority decision plus the registry level of the sender.
-function describeRecord(rec, previousRecord = null) {
+function describeRecord(rec, previousHash) {
   let hashVerified = computeRecordHash(rec) === rec.recordHash;
   if (hashVerified && rec.brokerSequence > 1) {
-    hashVerified = previousRecord?.recordHash === rec.previousRecordHash;
+    hashVerified = previousHash === rec.previousRecordHash;
   }
   const sender = rec.event?.senderHandle ?? null;
   const level = sender ? (identityLevels().get(sender) ?? 'UNREGISTERED') : 'UNREGISTERED';
@@ -206,23 +195,24 @@ function describeRecord(rec, previousRecord = null) {
 }
 
 function lookupRoom(sequence) {
-  const records = readLedger();
-  const index = records.findIndex((record) => record.brokerSequence === sequence);
-  if (index < 0) return null;
-  try { return describeRecord(records[index], records[index - 1] ?? null); }
-  catch { return null; }
+  const snapshot = snapshotLedger();
+  const idx = snapshot.records.findIndex((rec) => rec.brokerSequence === sequence);
+  if (idx < 0) return null;
+  const rec = snapshot.records[idx];
+  const previousHash = idx > 0 ? snapshot.records[idx - 1].recordHash : null;
+  return describeRecord(rec, previousHash);
 }
 
 // Idempotency for Room sync: has an event already been written for this token?
 function findRoomByToken(token) {
-  const records = readLedger();
-  for (let index = records.length - 1; index >= 0; index--) {
-    const record = records[index];
-    const body = record.event?.body;
-    if (record.event?.senderHandle !== ROOM_FROM || typeof body !== 'string' ||
-        !body.split('\n').slice(0, -1).some((line) => line.includes(token))) continue;
-    try { return describeRecord(record, records[index - 1] ?? null); }
-    catch { return null; }
+  const snapshot = snapshotLedger();
+  for (let i = snapshot.records.length - 1; i >= 0; i--) {
+    const rec = snapshot.records[i];
+    const body = rec.event?.body;
+    if (typeof body !== 'string' || !body.includes(token)) continue;
+    const previousHash = i > 0 ? snapshot.records[i - 1].recordHash : null;
+    const info = describeRecord(rec, previousHash);
+    return info.senderHandle === ROOM_FROM && info.body.includes(token) ? info : null;
   }
   return null;
 }
@@ -315,49 +305,7 @@ function initSchema(handle) {
       BEGIN SELECT RAISE(ABORT, 'pm_status_log history columns are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS pm_tasks_no_delete BEFORE DELETE ON pm_tasks
       BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; close them'); END;
-    CREATE TABLE IF NOT EXISTS pm_milestones (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES pm_projects(id),
-      title TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      target_date TEXT,
-      status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','AT_RISK','ACHIEVED','MISSED')),
-      created_by TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_pm_milestones_project ON pm_milestones(project_id);
-    CREATE TABLE IF NOT EXISTS pm_work_packages (
-      id TEXT PRIMARY KEY,
-      project_id TEXT NOT NULL REFERENCES pm_projects(id),
-      milestone_id TEXT REFERENCES pm_milestones(id),
-      title TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      owner TEXT NOT NULL DEFAULT 'UNASSIGNED',
-      status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','IN_PROGRESS','DONE')),
-      created_by TEXT NOT NULL,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      closed_at TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_pm_wp_project ON pm_work_packages(project_id);
-    CREATE INDEX IF NOT EXISTS idx_pm_wp_milestone ON pm_work_packages(milestone_id);
   `);
-  // Idempotent column additions for existing databases (SQLite has no
-  // ADD COLUMN IF NOT EXISTS). Both are nullable, zero-impact on existing rows.
-  const hasColumn = (table, col) => handle.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === col);
-  // Codex #9641: the index must not live inside the column-add guard. If the
-  // ALTER succeeds but the process dies before the next line ran, a later
-  // startup sees the column already present, skips this branch entirely,
-  // and the index is permanently missing. CREATE INDEX IF NOT EXISTS is run
-  // unconditionally every startup instead - idempotent, resume-safe either
-  // way the prior run stopped.
-  if (!hasColumn('pm_tasks', 'work_package_id')) {
-    handle.exec('ALTER TABLE pm_tasks ADD COLUMN work_package_id TEXT REFERENCES pm_work_packages(id)');
-  }
-  handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_wp ON pm_tasks(work_package_id)');
-  if (!hasColumn('pm_projects', 'next_ms_seq')) handle.exec('ALTER TABLE pm_projects ADD COLUMN next_ms_seq INTEGER NOT NULL DEFAULT 1');
-  if (!hasColumn('pm_projects', 'next_wp_seq')) handle.exec('ALTER TABLE pm_projects ADD COLUMN next_wp_seq INTEGER NOT NULL DEFAULT 1');
   const has = handle.prepare('SELECT value FROM pm_meta WHERE key = ?');
   if (!has.get('schema_version')) {
     const put = handle.prepare('INSERT INTO pm_meta (key, value) VALUES (?, ?)');
@@ -600,7 +548,7 @@ async function flushRoomSync() {
 
 // ── Task operations ────────────────────────────────────────────────────────
 function createTask(body) {
-  only(body, ['project_id', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'actor', 'room_authorization_ref', 'work_package_id']);
+  only(body, ['project_id', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'actor', 'room_authorization_ref']);
   const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
   const projectId = str(body, 'project_id', { min: 2, max: 40, required: true });
   const title = str(body, 'title', { min: 3, max: 200, required: true });
@@ -617,16 +565,15 @@ function createTask(body) {
     const project = getProjectRow(projectId);
     if (!project) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${projectId}.`);
     const dependsOn = dependsField(body, projectId, null) ?? [];
-    const workPackageId = workPackageField(body, projectId, null) ?? null;
     const seq = project.next_seq;
     const id = `PM-${project.prefix}-${String(seq).padStart(3, '0')}`;
     d.prepare('UPDATE pm_projects SET next_seq = next_seq + 1 WHERE id = ?').run(projectId);
     const ts = nowIso();
     d.prepare(
-      `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, work_package_id)
-       VALUES (?, ?, ?, ?, ?, 'BACKLOG', ?, ?, ?, '[]', ?, ?, ?, ?, ?, ?)`,
-    ).run(id, projectId, title, description, priority, owner, verifier, auth ? json(auth) : null, json(dependsOn), notes, actor, ts, ts, workPackageId);
-    logEvent(d, { taskId: id, type: 'CREATED', to: 'BACKLOG', actor, detail: { title, priority, owner, verifier, room_ref: auth, work_package_id: workPackageId }, post: true });
+      `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'BACKLOG', ?, ?, ?, '[]', ?, ?, ?, ?, ?)`,
+    ).run(id, projectId, title, description, priority, owner, verifier, auth ? json(auth) : null, json(dependsOn), notes, actor, ts, ts);
+    logEvent(d, { taskId: id, type: 'CREATED', to: 'BACKLOG', actor, detail: { title, priority, owner, verifier, room_ref: auth }, post: true });
     return id;
   });
   enqueueRoomSync();
@@ -634,7 +581,7 @@ function createTask(body) {
 }
 
 function updateTask(id, body) {
-  only(body, ['expected_updated_at', 'actor', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'status', 'note', 'room_ref', 'work_package_id']);
+  only(body, ['expected_updated_at', 'actor', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'status', 'note', 'room_ref']);
   const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
   const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
   const note = str(body, 'note', { max: 1000 });
@@ -661,10 +608,6 @@ function updateTask(id, body) {
       if (v !== undefined && v !== task[k]) { next[k] = v; changed[k] = { from: task[k], to: v }; }
     }
     if (dependsOn && json(dependsOn) !== json(task.depends_on)) { next.depends_on = dependsOn; changed.depends_on = { from: task.depends_on, to: dependsOn }; }
-    const workPackageId = workPackageField(body, task.project_id, id);
-    if (workPackageId !== undefined && workPackageId !== task.work_package_id) {
-      next.work_package_id = workPackageId; changed.work_package_id = { from: task.work_package_id, to: workPackageId };
-    }
     const assignment = {};
     if (owner !== undefined && owner !== task.owner) { next.owner = owner; assignment.owner = { from: task.owner, to: owner }; }
     if (verifier !== undefined && verifier !== task.verifier) { next.verifier = verifier; assignment.verifier = { from: task.verifier, to: verifier }; }
@@ -736,10 +679,10 @@ function updateTask(id, body) {
     const ts = nowIso();
     d.prepare(
       `UPDATE pm_tasks SET title = ?, description = ?, priority = ?, status = ?, prior_status = ?, owner = ?, verifier = ?,
-         room_authorization_ref = ?, evidence_refs = ?, depends_on = ?, notes = ?, updated_at = ?, closed_at = ?, work_package_id = ? WHERE id = ?`,
+         room_authorization_ref = ?, evidence_refs = ?, depends_on = ?, notes = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
     ).run(next.title, next.description, next.priority, next.status, next.prior_status ?? null, next.owner, next.verifier,
       next.room_authorization_ref ? json(next.room_authorization_ref) : null, json(next.evidence_refs), json(next.depends_on),
-      next.notes, ts, next.closed_at ?? null, next.work_package_id ?? null, id);
+      next.notes, ts, next.closed_at ?? null, id);
     for (const e of events) logEvent(d, { taskId: id, type: e.type, from: e.from ?? null, to: e.to ?? null, actor, detail: e.detail, post: e.post });
   });
   enqueueRoomSync();
@@ -767,196 +710,6 @@ function taskDetail(id) {
   return { task: hydrate(row, pending), history, hold: effectiveHold(project) };
 }
 
-// ── Milestone operations ────────────────────────────────────────────────
-const getMilestoneRow = (id) => requireDb().prepare('SELECT * FROM pm_milestones WHERE id = ?').get(id);
-function hydrateMilestone(row) {
-  const d = requireDb();
-  const wps = d.prepare('SELECT status FROM pm_work_packages WHERE milestone_id = ?').all(row.id);
-  const counts = Object.fromEntries(WORK_PACKAGE_STATUSES.map((s) => [s, wps.filter((w) => w.status === s).length]));
-  return { ...row, work_package_counts: counts, work_package_total: wps.length };
-}
-function dateField(body, key) {
-  const v = str(body, key, { max: 10 });
-  if (v === undefined) return undefined;
-  if (v !== null && !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw bad(`${key} must be YYYY-MM-DD.`, [`${key} invalid date`]);
-  return v;
-}
-
-function createMilestone(body) {
-  only(body, ['project_id', 'title', 'description', 'target_date', 'actor']);
-  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
-  const projectId = str(body, 'project_id', { min: 2, max: 40, required: true });
-  const title = str(body, 'title', { min: 3, max: 200, required: true });
-  const description = str(body, 'description', { max: 4000 }) ?? '';
-  const targetDate = dateField(body, 'target_date') ?? null;
-
-  return tx((d) => {
-    const project = getProjectRow(projectId);
-    if (!project) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${projectId}.`);
-    const seq = project.next_ms_seq;
-    const id = `MS-${project.prefix}-${String(seq).padStart(3, '0')}`;
-    d.prepare('UPDATE pm_projects SET next_ms_seq = next_ms_seq + 1 WHERE id = ?').run(projectId);
-    const ts = nowIso();
-    d.prepare(
-      `INSERT INTO pm_milestones (id, project_id, title, description, target_date, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)`,
-    ).run(id, projectId, title, description, targetDate, actor, ts, ts);
-    return hydrateMilestone(getMilestoneRow(id));
-  });
-}
-
-function updateMilestone(id, body) {
-  only(body, ['actor', 'expected_updated_at', 'title', 'description', 'target_date', 'status']);
-  handleField(body, 'actor', { required: true, allowUnassigned: false });
-  const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
-  const title = str(body, 'title', { min: 3, max: 200 });
-  const description = str(body, 'description', { max: 4000 });
-  const targetDate = dateField(body, 'target_date');
-  if (body.status !== undefined && !MILESTONE_STATUSES.includes(body.status)) {
-    throw bad('status invalid.', [`status must be one of ${MILESTONE_STATUSES.join(', ')}`]);
-  }
-  return tx((d) => {
-    const row = getMilestoneRow(id);
-    if (!row) throw new HttpError(404, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${id}.`);
-    if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Milestone changed since you loaded it; reload before editing.', { current_updated_at: row.updated_at });
-    const next = {
-      title: title ?? row.title,
-      description: description ?? row.description,
-      target_date: targetDate === undefined ? row.target_date : targetDate,
-      status: body.status ?? row.status,
-    };
-    if (Object.entries(next).every(([k, v]) => row[k] === v)) throw bad('Nothing to change.', ['no changes supplied']);
-    const ts = nowIso();
-    d.prepare('UPDATE pm_milestones SET title = ?, description = ?, target_date = ?, status = ?, updated_at = ? WHERE id = ?')
-      .run(next.title, next.description, next.target_date, next.status, ts, id);
-    return hydrateMilestone(getMilestoneRow(id));
-  });
-}
-
-function listMilestones(projectId) {
-  const d = requireDb();
-  const rows = projectId
-    ? d.prepare('SELECT * FROM pm_milestones WHERE project_id = ? ORDER BY id').all(projectId)
-    : d.prepare('SELECT * FROM pm_milestones ORDER BY id').all();
-  return rows.map(hydrateMilestone);
-}
-
-function milestoneDetail(id) {
-  const row = getMilestoneRow(id);
-  if (!row) throw new HttpError(404, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${id}.`);
-  const workPackages = requireDb().prepare('SELECT * FROM pm_work_packages WHERE milestone_id = ? ORDER BY id').all(id).map(hydrateWorkPackage);
-  return { milestone: hydrateMilestone(row), work_packages: workPackages };
-}
-
-// ── Work package operations ───────────────────────────────────────────────
-const getWorkPackageRow = (id) => requireDb().prepare('SELECT * FROM pm_work_packages WHERE id = ?').get(id);
-function hydrateWorkPackage(row) {
-  const d = requireDb();
-  const tasks = d.prepare('SELECT status FROM pm_tasks WHERE work_package_id = ?').all(row.id);
-  const counts = Object.fromEntries(STATUSES.map((s) => [s, tasks.filter((t) => t.status === s).length]));
-  return { ...row, task_counts: counts, task_total: tasks.length };
-}
-
-function createWorkPackage(body) {
-  only(body, ['project_id', 'milestone_id', 'title', 'description', 'owner', 'actor']);
-  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
-  const projectId = str(body, 'project_id', { min: 2, max: 40, required: true });
-  const title = str(body, 'title', { min: 3, max: 200, required: true });
-  const description = str(body, 'description', { max: 4000 }) ?? '';
-  const owner = handleField(body, 'owner') ?? 'UNASSIGNED';
-  const milestoneId = body.milestone_id === undefined ? null : str(body, 'milestone_id', { min: 2, max: 40 });
-
-  return tx((d) => {
-    const project = getProjectRow(projectId);
-    if (!project) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${projectId}.`);
-    if (milestoneId) {
-      const ms = getMilestoneRow(milestoneId);
-      if (!ms) throw new HttpError(422, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${milestoneId}.`);
-      if (ms.project_id !== projectId) throw new HttpError(422, 'MILESTONE_CROSS_PROJECT', `Milestone ${milestoneId} belongs to another project.`);
-    }
-    const seq = project.next_wp_seq;
-    const id = `WP-${project.prefix}-${String(seq).padStart(3, '0')}`;
-    d.prepare('UPDATE pm_projects SET next_wp_seq = next_wp_seq + 1 WHERE id = ?').run(projectId);
-    const ts = nowIso();
-    d.prepare(
-      `INSERT INTO pm_work_packages (id, project_id, milestone_id, title, description, owner, status, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)`,
-    ).run(id, projectId, milestoneId, title, description, owner, actor, ts, ts);
-    return hydrateWorkPackage(getWorkPackageRow(id));
-  });
-}
-
-function updateWorkPackage(id, body) {
-  only(body, ['actor', 'expected_updated_at', 'title', 'description', 'owner', 'status', 'milestone_id']);
-  handleField(body, 'actor', { required: true, allowUnassigned: false });
-  const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
-  const title = str(body, 'title', { min: 3, max: 200 });
-  const description = str(body, 'description', { max: 4000 });
-  const owner = handleField(body, 'owner');
-  if (body.status !== undefined && !WORK_PACKAGE_STATUSES.includes(body.status)) {
-    throw bad('status invalid.', [`status must be one of ${WORK_PACKAGE_STATUSES.join(', ')}`]);
-  }
-  const milestoneId = body.milestone_id === undefined ? undefined : (body.milestone_id === null ? null : str(body, 'milestone_id', { min: 2, max: 40 }));
-
-  return tx((d) => {
-    const row = getWorkPackageRow(id);
-    if (!row) throw new HttpError(404, 'WORK_PACKAGE_NOT_FOUND', `Unknown work package: ${id}.`);
-    if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Work package changed since you loaded it; reload before editing.', { current_updated_at: row.updated_at });
-    if (milestoneId) {
-      const ms = getMilestoneRow(milestoneId);
-      if (!ms) throw new HttpError(422, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${milestoneId}.`);
-      if (ms.project_id !== row.project_id) throw new HttpError(422, 'MILESTONE_CROSS_PROJECT', `Milestone ${milestoneId} belongs to another project.`);
-    }
-    const next = {
-      title: title ?? row.title,
-      description: description ?? row.description,
-      owner: owner ?? row.owner,
-      status: body.status ?? row.status,
-      milestone_id: milestoneId === undefined ? row.milestone_id : milestoneId,
-    };
-    if (Object.entries(next).every(([k, v]) => row[k] === v)) throw bad('Nothing to change.', ['no changes supplied']);
-    const ts = nowIso();
-    d.prepare('UPDATE pm_work_packages SET title = ?, description = ?, owner = ?, status = ?, milestone_id = ?, updated_at = ?, closed_at = ? WHERE id = ?')
-      .run(next.title, next.description, next.owner, next.status, next.milestone_id, ts, next.status === 'DONE' ? ts : null, id);
-    return hydrateWorkPackage(getWorkPackageRow(id));
-  });
-}
-
-function listWorkPackages(projectId, milestoneId) {
-  const d = requireDb();
-  let rows;
-  // Deadpool #9616: when both filters are given they must both hold, not
-  // just whichever this picked first. A milestone_id scoped to a different
-  // project must never leak that project's work packages into the result.
-  if (projectId && milestoneId) {
-    rows = d.prepare('SELECT * FROM pm_work_packages WHERE project_id = ? AND milestone_id = ? ORDER BY id').all(projectId, milestoneId);
-  } else if (milestoneId) {
-    rows = d.prepare('SELECT * FROM pm_work_packages WHERE milestone_id = ? ORDER BY id').all(milestoneId);
-  } else if (projectId) {
-    rows = d.prepare('SELECT * FROM pm_work_packages WHERE project_id = ? ORDER BY id').all(projectId);
-  } else {
-    rows = d.prepare('SELECT * FROM pm_work_packages ORDER BY id').all();
-  }
-  return rows.map(hydrateWorkPackage);
-}
-
-function workPackageDetail(id) {
-  const row = getWorkPackageRow(id);
-  if (!row) throw new HttpError(404, 'WORK_PACKAGE_NOT_FOUND', `Unknown work package: ${id}.`);
-  const tasks = requireDb().prepare('SELECT * FROM pm_tasks WHERE work_package_id = ? ORDER BY id').all(id).map((r) => hydrate(r));
-  return { work_package: hydrateWorkPackage(row), tasks };
-}
-
-function workPackageField(body, project, selfTaskId) {
-  if (body.work_package_id === undefined) return undefined;
-  if (body.work_package_id === null) return null;
-  const wpId = str(body, 'work_package_id', { min: 2, max: 40 });
-  const wp = getWorkPackageRow(wpId);
-  if (!wp) throw new HttpError(422, 'WORK_PACKAGE_NOT_FOUND', `Work package ${wpId} does not exist.`);
-  if (wp.project_id !== project) throw new HttpError(422, 'WORK_PACKAGE_CROSS_PROJECT', `Work package ${wpId} belongs to another project.`);
-  return wpId;
-}
-
 function listProjects() {
   return requireDb().prepare('SELECT * FROM pm_projects ORDER BY rowid').all().map((p) => ({ ...p, hold: effectiveHold(p) }));
 }
@@ -973,20 +726,14 @@ function listTasks(projectId) {
 function portfolio() {
   const projects = listProjects();
   const tasks = listTasks(null);
-  const milestones = listMilestones(null);
-  const workPackages = listWorkPackages(null, null);
   const syncRow = requireDb().prepare("SELECT COUNT(*) AS n FROM pm_status_log WHERE room_sync = 'PENDING'").get();
   return {
     generated_at: nowIso(),
     pending_room_sync: Number(syncRow.n),
     statuses: STATUSES,
-    milestone_statuses: MILESTONE_STATUSES,
-    work_package_statuses: WORK_PACKAGE_STATUSES,
     projects: projects.map((p) => {
       const mine = tasks.filter((t) => t.project_id === p.id);
       const counts = Object.fromEntries(STATUSES.map((s) => [s, mine.filter((t) => t.status === s).length]));
-      const myMilestones = milestones.filter((m) => m.project_id === p.id);
-      const myWorkPackages = workPackages.filter((w) => w.project_id === p.id);
       return {
         id: p.id, name: p.name, prefix: p.prefix, hold: p.hold, source_gap: p.source_gap,
         total: mine.length, counts,
@@ -994,8 +741,6 @@ function portfolio() {
         founder_gate: counts.FOUNDER_GATE, blocked: counts.BLOCKED,
         pending_room_sync: mine.reduce((n, t) => n + t.pending_room_sync, 0),
         unassigned: mine.filter((t) => t.status !== 'CLOSED' && t.owner === 'UNASSIGNED').length,
-        milestones: { total: myMilestones.length, open: myMilestones.filter((m) => m.status !== 'ACHIEVED' && m.status !== 'MISSED').length },
-        work_packages: { total: myWorkPackages.length, open: myWorkPackages.filter((w) => w.status !== 'DONE').length },
       };
     }),
   };
@@ -1013,8 +758,6 @@ function health() {
     tasks: q('SELECT COUNT(*) AS n FROM pm_tasks'),
     history_rows: q('SELECT COUNT(*) AS n FROM pm_status_log'),
     pending_room_sync: q("SELECT COUNT(*) AS n FROM pm_status_log WHERE room_sync = 'PENDING'"),
-    milestones: q('SELECT COUNT(*) AS n FROM pm_milestones'),
-    work_packages: q('SELECT COUNT(*) AS n FROM pm_work_packages'),
   };
 }
 
@@ -1090,7 +833,7 @@ async function handle(req, res) {
 
     if (req.method === 'GET' && p === '/api/pm/health') return send(res, 200, health(), origin);
     if (req.method === 'GET' && p === '/api/pm/meta') {
-      return send(res, 200, { statuses: STATUSES, priorities: PRIORITIES, forward: FORWARD, handles: [...knownHandles()].sort(), milestone_statuses: MILESTONE_STATUSES, work_package_statuses: WORK_PACKAGE_STATUSES }, origin);
+      return send(res, 200, { statuses: STATUSES, priorities: PRIORITIES, forward: FORWARD, handles: [...knownHandles()].sort() }, origin);
     }
     if (req.method === 'GET' && p === '/api/pm/projects') return send(res, 200, { projects: listProjects() }, origin);
     if (req.method === 'GET' && p === '/api/pm/portfolio') return send(res, 200, portfolio(), origin);
@@ -1106,40 +849,6 @@ async function handle(req, res) {
     m = /^\/api\/pm\/tasks\/(PM-[A-Z]{2,4}-\d{3,})\/room-link$/.exec(p);
     if (m && req.method === 'POST') return send(res, 200, linkRoom(m[1], await readBody(req)), origin);
     if (req.method === 'POST' && p === '/api/pm/tasks') return send(res, 201, createTask(await readBody(req)), origin);
-
-    if (req.method === 'GET' && p === '/api/pm/milestones') {
-      const pid = url.searchParams.get('project_id');
-      if (pid && !getProjectRow(pid)) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${pid}.`);
-      return send(res, 200, { project_id: pid, milestones: listMilestones(pid || null) }, origin);
-    }
-    if (req.method === 'POST' && p === '/api/pm/milestones') return send(res, 201, createMilestone(await readBody(req)), origin);
-    m = /^\/api\/pm\/milestones\/(MS-[A-Z]{2,4}-\d{3,})$/.exec(p);
-    if (m && req.method === 'GET') return send(res, 200, milestoneDetail(m[1]), origin);
-    if (m && req.method === 'PATCH') return send(res, 200, updateMilestone(m[1], await readBody(req)), origin);
-
-    if (req.method === 'GET' && p === '/api/pm/work-packages') {
-      const pid = url.searchParams.get('project_id');
-      const mid = url.searchParams.get('milestone_id');
-      if (pid && !getProjectRow(pid)) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${pid}.`);
-      let milestoneRow = null;
-      if (mid) {
-        milestoneRow = getMilestoneRow(mid);
-        if (!milestoneRow) throw new HttpError(404, 'MILESTONE_NOT_FOUND', `Unknown milestone: ${mid}.`);
-      }
-      // Deadpool #9616: a milestone_id scoped to a different project is a
-      // mismatched filter, not an empty-but-valid one — reject it explicitly
-      // rather than silently filtering down to nothing (or, before the fix,
-      // leaking the other project's rows).
-      if (pid && milestoneRow && milestoneRow.project_id !== pid) {
-        throw new HttpError(422, 'MILESTONE_CROSS_PROJECT', `Milestone ${mid} belongs to project ${milestoneRow.project_id}, not ${pid}.`);
-      }
-      return send(res, 200, { project_id: pid, milestone_id: mid, work_packages: listWorkPackages(pid || null, mid || null) }, origin);
-    }
-    if (req.method === 'POST' && p === '/api/pm/work-packages') return send(res, 201, createWorkPackage(await readBody(req)), origin);
-    m = /^\/api\/pm\/work-packages\/(WP-[A-Z]{2,4}-\d{3,})$/.exec(p);
-    if (m && req.method === 'GET') return send(res, 200, workPackageDetail(m[1]), origin);
-    if (m && req.method === 'PATCH') return send(res, 200, updateWorkPackage(m[1], await readBody(req)), origin);
-
     if (req.method === 'POST' && p === '/api/pm/room-sync/retry') {
       await readBody(req);
       requireDb();

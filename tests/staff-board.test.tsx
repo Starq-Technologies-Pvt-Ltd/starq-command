@@ -333,9 +333,12 @@ describe('SEQ 8475 C — suppression is curation, never deletion', () => {
     }
     // And the rendered page must say so.
     expect(text).toMatch(/FOUNDER \/ MISSION CONTROL/);
-    // `ali` is the observed Founder handle on the live ledger; assert the
-    // specific regression directly so a refactor cannot hide it.
-    expect(suppressedByHandle.get('ali')?.reason ?? '').toMatch(/FOUNDER \/ MISSION CONTROL/);
+    // `mustarq` is the canonical Founder handle (ali retired 2026-10-05);
+    // assert the specific regression directly so a refactor cannot hide it.
+    expect(suppressedByHandle.get('mustarq')?.reason ?? '').toMatch(/FOUNDER \/ MISSION CONTROL/);
+    const ali = registry.identities.find((i: { canonicalHandle?: string }) => i.canonicalHandle === 'ali');
+    expect(ali?.status).toBe('retired');
+    expect(ali?.legacyAliasOf).toBe('mustarq');
   });
 
   it('keeps a declared seat on the board even when the ledger has never seen it', () => {

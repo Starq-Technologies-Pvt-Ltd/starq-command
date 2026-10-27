@@ -7,17 +7,11 @@ node_modules/
 # moment source changes, which is worse than no bundle in history.
 dist/
 *.tsbuildinfo
-coverage/
-.vitest/
-test-results/
-playwright-report/
-.cache/
-tmp/
-temp/
 
 # Local environment overrides
-.env*
-!.env.example
+.env
+.env.local
+.env.*.local
 
 # Editor / OS
 .DS_Store
@@ -26,12 +20,47 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 
-# Command lifecycle state and logs.
-.command-runtime*/
-*.log
-npm-debug.log*
+# Command lifecycle state and child logs.
+.command-runtime/
 
 # Local control-plane runtime databases
 data/*.db*
-*.sqlite
-*.sqlite-*
+
+# Added for the single-authoritative-repo consolidation (Founder #11859 / Room #11862):
+
+# Additional build outputs beyond dist/
+dist-observation/
+dist-observation-hardening-*/
+
+# Command runtime observation state (sibling of .command-runtime/)
+.command-runtime-observation/
+
+# Nested agent-comms placeholder — the canonical comms root is D:\StarqTech\agent-comms,
+# not a copy inside this product directory.
+/agent-comms/
+
+# Generated/empty local cache
+cache/
+
+# Pre-10 Oct baseline snapshot files — generated at a point in time, not source.
+.baseline-extension-*.json
+.source-baseline-*.json
+
+# Live board snapshots (generated); the board/*.json state files themselves stay tracked.
+board/snapshots/
+
+# Evidence/audit-trail artifacts (test logs, hashes, generated reports) — operationally
+# valuable but not source; kept on disk, not version-controlled.
+evidence/
+
+# Takeover preservation (2026-10-27)
+.git.unborn-backup-*/
+nul
+oct/
+observation/
+continuity/
+continuity-support/
+*.zip
+._*
+
+scripts/.command-runtime-test/

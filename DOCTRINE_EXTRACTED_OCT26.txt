@@ -1,0 +1,920 @@
+
+Starq Command: Canonical Control-Plane Architecture and Build Doctrine
+1. Executive Purpose and System Boundaries
+Starq Command functions as the internal operating control plane for Starq’s engineering organization. It is designed to enable a single human Founder to supervise, coordinate, and govern a heterogeneous fleet of artificial intelligence engineering seats operating across multiple commercial products, foundation model providers, local host runtimes, source code repositories, and independent verification stages. Command does not replace existing lower-level development utilities, local integrated development environments (IDEs), distributed version control systems (Git), continuous integration and continuous deployment (CI/CD) pipelines, active runtime brokers (Herdr), or project-specific Single Sources of Truth (SSOTs). Instead, Command operates strictly above these components as an authoritative governance cockpit.
+The primary objective of this architecture package is to formalize and upgrade the existing Command and Herdr implementation into a durable v1 control plane, execute rigorous independent acceptance testing, and immediately place the codebase into a maintenance-only freeze. This lifecycle boundary ensures engineering bandwidth returns entirely to core commercial product delivery across StarqERP, Starq POS, Hoadha, and the broader commercial application ecosystem.
+1.1 Historical Context and System Separation
+The operational posture of Starq Command is rooted in two foundational realities:
+First, Starq operated a heterogeneous, multi-provider agent fleet prior to the introduction of Herdr. The organizational model already incorporated named organizational seats (such as Elder, Vision, Codex, Antigravity, Cursor, Deadpool, Pi, OpenCode, and Goose), distinct underlying vendor APIs, manual task distribution, Founder-directed routing, Room-based coordination, persistent project SSOT specifications, builder-verifier organizational separation, and quota-aware seat allocation. Herdr did not introduce the concept of the fleet. Rather, Herdr was engineered to resolve missing low-level operational capabilities: host process lifecycle visibility, deterministic session ownership, bounded process execution boundaries, launch eligibility enforcement, operating system process identity tracking, and pseudo-terminal (PTY) supervision.
+Second, Starq Command existed as a management interface prior to native Herdr integration. Command was initially conceived as the strategic cockpit, whereas Herdr emerged as the local execution floor. Consequently, their integration must preserve strict architectural separation rather than collapsing into a monolithic daemon.
+
+
+
+
+
+
+
+
+System Layer
+Primary Responsibility
+Mutation Authority
+Persistence Model
+Failure Behavior
+Starq Command
+Control Plane & Governance Cockpit
+Task state, allocation, routing, lease grants, verification verdicts
+Relational store (SQLite v1 WAL), append-only state journals
+Fails safe; halts task dispatch; preserves existing leases
+Herdr
+Execution Floor & Process Runtime Broker
+Process lifecycles, PTY allocations, OS process groups, local sessions
+In-memory session table, local JSON-lines execution logs
+Fails closed; terminates or pauses untracked child processes
+Room
+Operational Communication Ledger
+Human-readable operational messages, typed lifecycle events
+Append-only file-backed ledger, structured event logs
+Fails safe; operates offline; queues events locally on write failure
+Project SSOT
+Durable Strategic & Architectural Truth
+Architectural standards, product requirements, freeze boundaries
+Version-controlled Markdown repositories (Git SSOT)
+Read-only at runtime; mutations require Founder approval
+These system boundaries maintain distinct isolation characteristics:
+Command possesses sole mutation authority over organizational task metadata, verification gating, and capability routing. It consumes execution telemetry from Herdr and operational event records from Room. Command never directly executes arbitrary host shell scripts or spawns unsandboxed background worker daemons outside established provider harnesses1.
+Herdr possesses exclusive authority over local host process execution, PTY allocation, OS process suspension, and execution-floor telemetry capture. Herdr exposes strictly bounded, launch-eligible actions to Command via authenticated loopback transports. Herdr does not maintain task management state, long-term roadmap tracking, or product acceptance criteria.
+Room serves as the shared organizational message broker and immutable audit ledger. Room retains conversational context, human-readable operational announcements, and machine-readable event envelopes. It functions independently of Command's relational database, ensuring that an unexpected database crash within Command does not compromise the organizational historical log.
+Project SSOT documents represent durable technical authority. Command and its managed agents read from the SSOT to establish task scopes, boundaries, and acceptance thresholds. No automated seat or harness holds mutation authority over a project SSOT without explicit, digitally recorded Founder authorization.
+2. Starq Management Model and Entity Taxonomy
+The governance of Starq’s engineering fleet requires clear structural boundaries between organizational authority, persistent responsibilities, commercial vendors, transient execution runtimes, and units of work. The operational hierarchy cascades through eight formal tiers:
+Founder: The root human authority within Starq's lawful corporate governance, holding non-delegable control over capital, production deployment, and constitutional rules.
+Command (Control Plane): The centralized orchestration engine that translates Founder intent into statefully tracked tasks, enforcing leases and verification gates.
+Seat: A persistent functional responsibility assigned to a specific domain (such as core building, verification, or security auditing).
+Provider / Model: The foundational external intelligence infrastructure and reasoning engines contracted to execute analytical work.
+Harness: The client binary or CLI tool facilitating local filesystem and tool interaction.
+Session: The ephemeral runtime environment managed on the execution floor by Herdr.
+Task: The atomic, verifiable unit of engineering work defined by a machine-readable contract.
+Subagents: Tactical child processes spawned within a harness session for temporary, parallelized sub-tasks.
+2.1 Entity Taxonomies and Operational Definitions
+The operating model enforces precise boundaries between organizational identity and execution mechanisms:
+Founder: The final human operating authority within Starq’s corporate structure. The Founder retains non-delegable authority over capital allocation, production deployments, cryptographic root keys, strategic SSOT modifications, architectural freeze overrides, and binding dispute resolutions between seats.
+Seat: A persistent organizational role holding continuous domain responsibilities within Starq. Named seats represent functional posts (for instance, Antigravity as Primary Core Builder, Vision as Independent Verification Authority, Elder as Strategic Architectural Counsel). A seat persists indefinitely across shifts, software upgrades, model migrations, and provider outages. A seat is explicitly distinct from the underlying foundation model powering it.
+Provider: A commercial or open-source infrastructure entity supplying foundation model access (such as Anthropic, OpenAI, Google, or local inference runtimes). Providers are external vendors subject to transient latency, rate-limiting, terms of service revisions, and infrastructure outages.
+Model: A specific versioned reasoning engine hosted by a provider (for example, claude-3-5-sonnet-20241022 or gpt-4o-2024-08-06). Models are swappable analytical engines assigned to seats based on operational requirements.
+Harness: The client binary, CLI tool, or interactive environment through which a model accesses local tools and file systems (including Claude Code, Codex CLI, Antigravity CLI, Cursor, and OpenCode). The harness enforces local protocol boundaries, manages user prompt contexts, and interfaces directly with the terminal or PTY floor1.
+Session: A transient, bounded runtime execution context initialized within a harness to perform work. A session begins at process invocation, accumulates conversational and token context, and terminates upon task completion, fatal failure, or explicit suspension. Sessions are ephemeral and do not outlive host restarts.
+Subagent: A temporary, tactical child process or specialized reasoning thread spawned dynamically inside a provider harness. Subagents lack persistent organizational identity, cannot own durable tasks, and report strictly to their parent seat session.
+Task: An atomic, statefully tracked unit of engineering work defined by a machine-readable Task Contract. A task possesses a permanent identifier, clear file boundary constraints, an allocated builder seat, an assigned verifier seat, and deterministic acceptance criteria.
+Artifact: A machine-readable, cryptographically verified record produced upon task completion. Artifacts capture the precise baseline Git commit SHA, candidate commit SHA, modified files, diff statistics, executed commands, test outputs, exit codes, and operational telemetry.
+Verification: An independent, adversarial technical evaluation of a candidate SHA executed by an authorized verifier seat in a clean workspace, validating strict adherence to the Task Contract without reliance on builder claims.
+3. Multi-Provider Fleet Doctrine
+Starq explicitly rejects architectural lock-in to any single artificial intelligence vendor. The engineering fleet is deliberately designed to operate across multiple competing foundation model providers simultaneously.
+3.1 Strategic Rationale for Provider Diversity
+Operating across distinct provider platforms mitigates several single-vendor failure modes:
+Quota Resilience: Provider-specific hourly, daily, or weekly rate limits cannot halt Starq’s overall engineering throughput. Exhaustion of one provider's token allocation triggers deliberate task redirection to seats backed by alternate infrastructure.
+Capability Diversity: Foundation models exhibit divergent proficiencies. Certain architectures excel at large-scale refactoring and deep code synthesis, others at rigorous formal logic, semantic auditing, or fast tool-calling loops. Maintaining a diverse fleet aligns task requirements with model advantages.
+Outage Protection: Complete cloud service disruptions, regional networking degradations, or vendor service-level agreement (SLA) failures at one provider do not halt ongoing product development.
+Verification Independence: An architectural defect or systematic reasoning blind spot within a given model family will frequently recur if that same model family is tasked with verifying its own output. Employing a structurally distinct model family for verification provides meaningful adversarial rigor.
+Vendor Independence: Maintaining dynamic interoperability prevents architectural capture by any single artificial intelligence laboratory.
+3.2 Stable Assignment Versus Automated Per-Token Hopping
+Starq distinguishes between deliberate fleet diversity and automated, dynamic model hopping:
+Automated, runtime model hopping—wherein individual prompt completions, conversational turns, or sub-steps within an active code-mutation task are routed across disparate providers via probabilistic middleware—is prohibited. Dynamic routing obscures context history, breaks prompt-cache efficiency, creates non-deterministic debugging traces, complicates intellectual property provenance, and destroys local environment consistency.
+Starq operates on a model of stable seat assignment coupled with deliberate, explicit fallback reassignments. A seat is assigned a designated provider, model, and harness for sustained durations. When a task is dispatched to a seat, that seat retains operational ownership across the builder lifecycle.
+If a quota exhaustion event, prolonged outage, or capability failure necessitates reassigning a task to a different seat operating on an alternate provider, this transition must occur cleanly at a task boundary. The transition requires the emission of a typed reassignment event to Room, the release and re-granting of workspace locks, and the capture of all intermediate progress within an explicit Git commit. Undocumented runtime provider failover during an uncommitted file mutation cycle is forbidden.
+4. Tactical Subagent Governance and Execution Doctrine
+Modern agent harnesses frequently provide capabilities to spawn autonomous subagents. Starq Command strictly governs the invocation, operational scope, and execution boundaries of these ephemeral child processes.
+4.1 Tactical Acceleration Versus Organizational Delegation
+Subagents represent tactical accelerators rather than organizational entities. They are transient execution mechanisms invoked by an authorized seat to handle isolated workloads. They hold no organizational rank, cannot accept tasks directly from Command, cannot verify tasks for final acceptance, and cannot interact directly with Room outside the supervision of their parent seat.
+Hierarchically, the parent seat session initiates the subagent, defines its bounded scope, collects the subagent's return output, verifies the tactical contribution, and retains exclusive responsibility for committing modifications to the repository worktree.
+4.2 Explicit Criteria for Subagent Invocation
+A seat may spawn subagents only when a task satisfies one or more of the following operational conditions:
+The task requires parallel exploration or analysis across independent directories, documentation sets, or external specifications that would saturate the primary context window.
+The task involves isolated analytical inspection, such as static security scanning, style conformance auditing, or dependency graph generation, where context isolation prevents prompt contamination.
+The task requires an adversarial cross-examination of a proposed implementation strategy prior to writing file mutations to disk.
+The task modifies isolated, non-overlapping components where parallel scratch directories can be managed safely under parent process supervision.
+Subagents are prohibited under any of the following operational constraints:
+The task is small, cohesive, or touches fewer than three contiguous files.
+The workspace environment cannot provide isolated directory boundaries, introducing race conditions on shared files.
+The parent seat is operating under restricted provider API quotas, where the multiplicative token consumption of parallel execution risks immediate quota exhaustion.
+The task coordination overhead (prompt construction, output parsing, schema reconciliation) exceeds the direct implementation effort.
+The provenance of generated code would become obscured by unlogged subagent generations.
+4.3 Provenance and Execution Constraints
+All subagent operations must execute within the file boundary constraints established by the parent task’s contract. Subagents must never spawn secondary unmonitored background daemons that survive the parent session.
+When a parent seat completes a task that utilized subagents, the resulting Builder Completion Artifact must record the total subagent count, the tactical scope assigned to each child, their cumulative token and context consumption, and an explicit verification that all child processes terminated prior to candidate SHA generation.
+5. Canonical Vision of Starq Command
+Starq Command is the Founder-facing operational control plane for Starq’s digital engineering organization. It serves as an authoritative cockpit, providing continuous, high-fidelity visibility and deterministic control over all engineering activities executed across the company's autonomous fleet.
+Command makes the engineering organization legible. It eliminates operational opacity by aggregating distributed, multi-repository, multi-provider, and multi-machine activities into a unified, coherent operating model. From a single interface, the Founder can instantly assess:
+The exact set of active commercial and internal software products currently under construction or maintenance.
+Every registered, active, blocked, or queued engineering task across the enterprise.
+The specific seat assigned to each task, along with its active provider, foundation model, CLI harness, and host execution environment.
+Real-time quota capacity, remaining rolling-window token balances, rate-limit proximity, and projected reset horizons across all integrated model providers.
+The exact host workspace, Git branch, and isolated worktree allocated to every executing task.
+The real-time status of code mutations, including active diff statistics, files touched, test execution progress, and exit codes.
+Machine-readable proof artifacts generated upon task completion, including baseline commit SHAs, candidate commit SHAs, and reproduction logs.
+The independent verification status of every completed task, identifying the assigned verifier seat, the clean verification environment used, tests executed, and formal verdicts rendered.
+Operational bottlenecks, stuck execution loops, stale workspace leases, and unhandled runtime exceptions.
+System events requiring explicit Founder intervention, balanced against routine automated transitions that require no manual oversight.
+Command does not compete with project repositories, Git workflows, or runtime terminal supervisors. It binds these elements into an auditable control structure, ensuring that engineering velocity is matched with rigorous verification, strict security boundaries, and total corporate governance.
+6. Target v1 Architecture and Service Boundaries
+The v1 architecture of Starq Command establishes strict separation between strategic governance, durable persistence, execution monitoring, and local host runtimes.
+The control plane hierarchy routes downward from the Founder Cockpit through the Starq Command Server, which hosts the core sub-services: Task Controller, Routing Engine, Evidence and Verification Service, Capacity Monitor, Stuck Detector, and Worktree Lease Manager. These services interface downward with four persistent adapters: the Relational Task Store, the Hash-Addressed Artifact Store, the Room Event Adapter, and the Herdr Transport Client. The transport client bridges across an authenticated loopback connection to Herdr on the execution floor, which directly supervises the host processes, PTY allocations, and provider harnesses.
+6.1 Architectural Subsystem Specifications
+The subsystem boundaries and operational constraints are defined as follows:
+Task Control Plane: Holds durable task state machines, validates state transitions, manages task dependencies, and enforces lease expirations. The Task Control Plane is the sole system component authorized to alter a task's state.
+Workspace and Lease Manager: Governs Git worktree allocations, validates branch naming conventions, manages exclusive filesystem locks, monitors lease heartbeats, and handles the recovery of abandoned workspaces.
+Evidence and Verification Engine: Ingests, validates, and archives Builder Completion Artifacts and Verifier Artifacts. Guarantees that verifiers evaluate exact candidate commit SHAs within fresh, isolated worktrees.
+Stuck and Failure Detector: Evaluates operational telemetry emitted by Herdr and provider harnesses against configurable heuristics to detect process hangs, command repetition loops, runaway resource consumption, and unhandled errors.
+Capacity and Quota Service: Tracks real-time token consumption, rolling-window rate limits, and provider account status to inform decision-support routing and prevent fleet-wide quota exhaustion.
+Herdr Transport Layer: An abstracted communication interface decoupling Command from Herdr's local communication mechanism. In v1, this operates over authenticated loopback HTTP/JSON-RPC; its interface preserves future adaptability for remote worker daemons without requiring changes to Command's core business logic.
+Room Adapter: Ingests and publishes structured event envelopes to Room’s append-only operational log, maintaining bidirectional synchronization between Command's database and the human-readable ledger.
+Component Interface
+Input
+Output
+Trust Level
+Failure Behavior
+Command -> Herdr
+Structured bounded actions, session creation requests, suspension commands
+Process IDs, session handles, PTY streams, execution exit codes
+Trusted Loopback (mutual auth tokens)
+Fail closed; mark session as unreachable; pause dependent tasks
+Herdr -> Command
+Runtime telemetry, process state changes, resource usage metrics
+HTTP 200 receipt confirmation
+Local execution floor
+Telemetry buffered locally in JSONL; retried upon Command reconnect
+Command -> Room
+Typed event envelopes, status updates, Founder rulings
+Append confirmation, event sequence IDs
+Internal High Trust
+Local write retry; fall back to disk buffer if ledger locked
+Harness -> Command
+Builder Completion Artifacts, verification reports, heartbeat pings
+Ingestion validation, state transition approval
+Bounded Semi-Trusted (unverified until audited)
+Rejection of malformed artifacts; task remains in executing/verifying
+7. Durable Task Control Plane and State Machine
+The v1 Task Control Plane replaces ad-hoc status tracking with a strictly validated, durable finite state machine. Tasks progress through a deterministic lifecycle, preventing race conditions, dual assignments, and unverified merges.
+7.1 Canonical Task Lifecycle State Machine
+A task must transition through formal operational stages:
+Creation & Queuing: A task originates in CREATED upon validation of its Task Contract, moving to QUEUED once dependency checks pass.
+Allocation & Execution: The task transitions to ALLOCATED when assigned to an eligible seat, and enters EXECUTING once an isolated Git worktree is provisioned and a lock lease acquired.
+Intermediate Interrupts: During execution, the task may transition to BLOCKED (re-entering EXECUTING upon unblocking), FAILED (due to terminal process crashes), or CANCELLED (via Founder directive).
+Builder Finalization: When implementation ends, the seat emits a verified candidate SHA and Builder Completion Artifact, transitioning the task to BUILDER_COMPLETE.
+Verification Phase: Command immediately transitions the task to VERIFYING, allocating an independent verifier seat in a detached, clean worktree.
+Resolution: The verifier issues a formal verdict. A PASS transitions the task to ACCEPTED (authorizing trunk merge). A FAIL transitions the task to REJECTED, routing it back to ALLOCATED or EXECUTING for corrective iteration.
+
+
+7.2 Legal State Transition Matrix
+Every state change within the control plane must match an authorized path in the transition matrix. Unauthorized transitions trigger runtime rejections and emit security-audit alerts.
+From State
+To State
+Initiator Authority
+Mandatory Conditions & Validation Rules
+CREATED
+QUEUED
+Founder / Control Plane
+Task Contract validated against schema; all prerequisite tasks in ACCEPTED state.
+QUEUED
+ALLOCATED
+Routing Engine / Founder
+Target seat is active, healthy, and possesses required capabilities; workspace available.
+ALLOCATED
+EXECUTING
+Herdr / Assigned Seat
+Isolated Git worktree provisioned; exclusive lease acquired; base SHA recorded.
+EXECUTING
+BLOCKED
+Assigned Seat / Detector
+Explicit blocker recorded in Room; lease paused; no uncommitted file mutations remaining.
+BLOCKED
+EXECUTING
+Founder / Control Plane
+Blocker resolution verified; lease refreshed; worktree integrity validated.
+EXECUTING
+BUILDER_COMPLETE
+Builder Seat
+Builder Completion Artifact generated, schema-validated, and candidate SHA committed to Git.
+BUILDER_COMPLETE
+VERIFYING
+Control Plane
+Verifier seat assigned; isolated verification worktree provisioned on exact candidate SHA.
+VERIFYING
+ACCEPTED
+Verifier Seat
+Verifier Artifact ingested with verdict PASS; all required tests verified on candidate SHA.
+VERIFYING
+REJECTED
+Verifier Seat
+Verifier Artifact ingested with verdict FAIL; regression or contract violation documented.
+REJECTED
+ALLOCATED
+Control Plane / Founder
+Rejection findings appended to task history; routed to builder for corrective iteration.
+EXECUTING
+FAILED
+Control Plane / Herdr
+Irrecoverable runtime error, unhandled crash, or terminal stuck state encountered.
+Any non-terminal
+CANCELLED
+Founder
+Manual Founder intervention; active worktrees safely unmounted and preserved for audit.
+Any transition not explicitly listed in the table above is illegal and must be rejected by the control plane. For example, direct transitions from EXECUTING to ACCEPTED bypass independent verification and are structurally forbidden. Similarly, a transition from BUILDER_COMPLETE directly to ACCEPTED without an intermediate VERIFYING phase will throw a validation fault.
+7.3 Task Storage and Relational Schema
+For the v1 implementation, task state is persisted using an embedded SQLite database configured in Write-Ahead Logging (WAL) mode (PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;). SQLite provides atomic transactions, high read concurrency, and operational durability without introducing external network service dependencies.
+The relational schema implements strict foreign keys, check constraints, and unique indices:
+
+
+
+SQL
+CREATE TABLE tasks (    task_id TEXT PRIMARY KEY,    title TEXT NOT NULL,    project_id TEXT NOT NULL,    repository_url TEXT NOT NULL,    task_type TEXT NOT NULL CHECK(task_type IN ('FEATURE', 'BUGFIX', 'REFACTOR', 'SECURITY', 'INFRA', 'AUDIT')),    priority TEXT NOT NULL CHECK(priority IN ('P0_CRITICAL', 'P1_HIGH', 'P2_MEDIUM', 'P3_LOW')),    parent_task_id TEXT REFERENCES tasks(task_id),    builder_seat TEXT NOT NULL,    verifier_seat TEXT NOT NULL,    state TEXT NOT NULL CHECK(state IN (        'CREATED', 'QUEUED', 'ALLOCATED', 'EXECUTING',         'BLOCKED', 'BUILDER_COMPLETE', 'VERIFYING',         'REJECTED', 'ACCEPTED', 'FAILED', 'CANCELLED'    )),    workspace_path TEXT,    branch_name TEXT,    base_sha TEXT,    candidate_sha TEXT,    lease_owner TEXT,    lease_expires_at TEXT,    retry_count INTEGER NOT NULL DEFAULT 0,    max_retries INTEGER NOT NULL DEFAULT 3,    risk_class TEXT NOT NULL CHECK(risk_class IN ('LOW', 'MEDIUM', 'HIGH', 'CRITICAL_FOUNDER_GATED')),    founder_approval_required BOOLEAN NOT NULL DEFAULT 0,    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),    completed_at TEXT);CREATE TABLE task_dependencies (    task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,    depends_on_task_id TEXT NOT NULL REFERENCES tasks(task_id),    PRIMARY KEY (task_id, depends_on_task_id));CREATE TABLE task_artifacts (    artifact_id TEXT PRIMARY KEY,    task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,    artifact_type TEXT NOT NULL CHECK(artifact_type IN ('BUILDER_COMPLETION', 'VERIFIER_VERDICT', 'DIAGNOSTIC')),    producing_seat TEXT NOT NULL,    target_sha TEXT NOT NULL,    storage_path TEXT NOT NULL,    content_hash_sha256 TEXT NOT NULL,    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')));CREATE INDEX idx_tasks_state ON tasks(state);CREATE INDEX idx_tasks_project ON tasks(project_id);CREATE INDEX idx_tasks_builder ON tasks(builder_seat);CREATE INDEX idx_tasks_verifier ON tasks(verifier_seat);CREATE INDEX idx_tasks_lease ON tasks(lease_expires_at);
+8. Workspace Isolation and Git Worktree Specification
+To maintain code integrity and support concurrent development, Starq enforces a strict filesystem isolation rule:
+Every concurrent code-mutating task requires an isolated, dedicated Git worktree.
+Shared checkouts, concurrent operations within a single working directory, and mutations directly on primary branches are strictly prohibited. Read-only inspections may target shared reference checkouts, but any task modifying code must operate within an isolated worktree.
+The repository filesystem architecture enforces separation between primary storage and active worktrees:
+Primary Git Repository: Located at /srv/repos/<project>/.git/
+Builder Workspace: Provisioned at /srv/repos/<project>/.worktrees/<task-id>-<slug>/, checked out on branch task/<task-id>-<slug>, holding an exclusive .worktree-lease file.
+Verifier Workspace: Provisioned at /srv/repos/<project>/.worktrees/verify-<task-id>-<slug>/, checked out in clean DETACHED HEAD state targeting the exact candidate SHA.
+8.1 Worktree Provisioning and Branch Naming
+Worktrees must be provisioned systematically according to deterministic conventions:
+Filesystem Location: All task worktrees reside within a designated directory inside or alongside the repository root: .worktrees/<task-id>-<sanitized-slug>.
+Branch Conventions: Branches created for code-mutating tasks follow the pattern: task/<task-id>-<sanitized-slug>. Long-lived seat branches are prohibited.
+Base Commit Pinning: When a worktree is created, it branches from a verified base SHA specified in the Task Contract. The creation command executes as:git worktree add -b task/<task-id>-<slug> .worktrees/<task-id>-<slug> <base-sha>
+Verification Worktree Isolation: When a task reaches BUILDER_COMPLETE, the verifier does not inspect the builder's active worktree. The verifier provisions a distinct, clean worktree detached at the candidate SHA:git worktree add --detach .worktrees/verify-<task-id>-<slug> <candidate-sha> This ensures that uncommitted artifacts, untracked intermediate files, or environment configurations from the builder cannot alter verification results.
+8.2 Lock Leases, Heartbeating, and Stale Detection
+Worktree access is guarded by mutual-exclusion leases managed by Command:
+Lease Acquisition: Upon transitioning to EXECUTING, the seat acquires a time-bounded lease. Command writes a .worktree-lease metadata file at the root of the worktree, containing the task ID, owning seat ID, lease token, and expiration timestamp.
+Lease Duration and Heartbeating: Default leases are granted for 3,600 seconds (1 hour), with an allowable maximum of 14,400 seconds (4 hours). The seat or its monitoring harness must emit a heartbeat to Command at least once every 300 seconds. Command extends the lease upon receiving valid heartbeats.
+Stale Lease Detection: If a lease expires without a heartbeat, Command flags the task as SUSPECTED_STUCK. Command does not immediately purge the directory. It queries Herdr to determine whether the registered OS process group is active. If Herdr confirms the process has terminated, Command revokes the lease.
+8.3 Non-Destructive Workspace Recovery and Cleanup
+Under no circumstances may automated processes execute destructive Git operations—such as git reset --hard, git clean -fdx, or recursive directory deletions—against an uncommitted or recovering workspace.
+Abandoned Workspaces: If a builder crashes or is terminated, Command marks the workspace as abandoned.
+Preservation Stash: Before removing an abandoned worktree, Command instructs Herdr to capture any untracked or uncommitted changes onto an orphan recovery branch:git --work-tree=<path> add -A && git --work-tree=<path> commit -m "recovery: auto-stash abandoned state for <task-id>"
+Pruning: Only after untracked work is preserved into Git object storage does Command unmount and delete the worktree via git worktree remove --force <path>.
+Post-Acceptance Pruning: Once a task transitions to ACCEPTED and its branch is merged into the integration trunk, Command removes the builder and verifier worktrees, deletes the local task branch, and runs git worktree prune.
+9. Structured Task Contract Specification
+Every task submitted to Starq Command must be governed by an immutable, machine-readable Task Contract. This contract defines the task's boundaries, constraints, allowed tools, required tests, and formal acceptance criteria.
+9.1 Task Contract JSON Schema
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/task-contract.json",  "title": "StarqTaskContract",  "type": "object",  "required": [    "task_id",    "project_id",    "repository_url",    "base_sha",    "objective",    "boundary_rules",    "acceptance_criteria",    "verification_requirements",    "risk_level"  ],  "properties": {    "task_id": {      "type": "string",      "pattern": "^T-[0-9]{4}-[0-9]{4,}$"    },    "project_id": {      "type": "string",      "enum": ["STARQ_ERP", "STARQ_POS", "HOADHA", "COMMERCE_INTEL", "STARQ_AI", "STARQ_PAY", "STARQ_LOGISTICS", "STARQ_ACADEMY", "CORE_INFRA"]    },    "repository_url": {      "type": "string",      "format": "uri"    },    "base_sha": {      "type": "string",      "pattern": "^[0-9a-f]{40}$"    },    "objective": {      "type": "string",      "minLength": 20    },    "boundary_rules": {      "type": "object",      "required": ["allowed_paths", "forbidden_paths", "prohibited_actions"],      "properties": {        "allowed_paths": {          "type": "array",          "items": { "type": "string" },          "minItems": 1        },        "forbidden_paths": {          "type": "array",          "items": { "type": "string" }        },        "prohibited_actions": {          "type": "array",          "items": { "type": "string" }        },        "allowed_network_access": {          "type": "boolean",          "default": false        }      }    },    "acceptance_criteria": {      "type": "array",      "items": { "type": "string" },      "minItems": 1    },    "verification_requirements": {      "type": "object",      "required": ["required_test_commands", "minimum_independence_level"],      "properties": {        "required_test_commands": {          "type": "array",          "items": { "type": "string" },          "minItems": 1        },        "minimum_independence_level": {          "type": "string",          "enum": ["BUILDER_SELF_TEST", "INDEPENDENT_INTERNAL_WEAK", "INDEPENDENT_INTERNAL_STRONG", "EXTERNAL_VALIDATION"]        },        "required_coverage_percent": {          "type": "number",          "minimum": 0.0,          "maximum": 100.0        }      }    },    "risk_level": {      "type": "string",      "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL_FOUNDER_GATED"]    },    "timeout_seconds": {      "type": "integer",      "minimum": 300,      "maximum": 86400,      "default": 3600    },    "founder_approval_required": {      "type": "boolean",      "default": false    }  },  "additionalProperties": false}
+9.2 Task Contract TypeScript Interface
+
+
+
+TypeScript
+export type StarqProject =   | 'STARQ_ERP'   | 'STARQ_POS'   | 'HOADHA'   | 'COMMERCE_INTEL'   | 'STARQ_AI'   | 'STARQ_PAY'   | 'STARQ_LOGISTICS'   | 'STARQ_ACADEMY'   | 'CORE_INFRA';export type TaskRiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL_FOUNDER_GATED';export type IndependenceLevel =   | 'BUILDER_SELF_TEST'   | 'INDEPENDENT_INTERNAL_WEAK'   | 'INDEPENDENT_INTERNAL_STRONG'   | 'EXTERNAL_VALIDATION';export interface TaskBoundaryRules {  allowed_paths: string[];  forbidden_paths: string[];  prohibited_actions: string[];  allowed_network_access?: boolean;}export interface VerificationRequirements {  required_test_commands: string[];  minimum_independence_level: IndependenceLevel;  required_coverage_percent?: number;}export interface TaskContract {  task_id: string;  project_id: StarqProject;  repository_url: string;  base_sha: string;  objective: string;  boundary_rules: TaskBoundaryRules;  acceptance_criteria: string[];  verification_requirements: VerificationRequirements;  risk_level: TaskRiskLevel;  timeout_seconds: number;  founder_approval_required: boolean;}
+9.3 Task Contract Payload Instance
+
+
+
+JSON
+{  "task_id": "T-2026-1042",  "project_id": "STARQ_ERP",  "repository_url": "git@github.com:starq/starq-erp.git",  "base_sha": "a1c72f88390b2713e2803b9f4277b9df03da9112",  "objective": "Implement idempotent processing for fiscal receipt generation in the billing reconciliation pipeline.",  "boundary_rules": {    "allowed_paths": [      "src/billing/reconciliation/*",      "tests/billing/reconciliation/*"    ],    "forbidden_paths": [      "src/auth/*",      "config/secrets/*",      "migrations/0001_initial.sql"    ],    "prohibited_actions": [      "DROP TABLE",      "ALTER TABLE users",      "npm publish",      "curl -X POST http://external-api"    ],    "allowed_network_access": false  },  "acceptance_criteria": [    "Reconciliation events with identical invoice IDs must not produce duplicate receipt records.",    "Database transactions must roll back cleanly on transient ledger failures.",    "Unit test coverage for fiscal pipeline must exceed 90%."  ],  "verification_requirements": {    "required_test_commands": [      "npm run test:billing",      "npm run lint"    ],    "minimum_independence_level": "INDEPENDENT_INTERNAL_STRONG",    "required_coverage_percent": 90.0  },  "risk_level": "HIGH",  "timeout_seconds": 3600,  "founder_approval_required": false}
+
+
+
+
+10. Builder Completion Artifact Specification
+Upon finalizing an implementation, the assigned builder seat cannot unilaterally declare success or perform a trunk merge. It must emit a machine-readable Builder Completion Artifact. This artifact serves as the builder's evidentiary submittal.
+10.1 Builder Completion Artifact JSON Schema
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/builder-completion-artifact.json",  "title": "StarqBuilderCompletionArtifact",  "type": "object",  "required": [    "task_id",    "builder_seat",    "provider_runtime",    "base_sha",    "candidate_sha",    "workspace_id",    "files_changed",    "diff_stat",    "implementation_summary",    "execution_telemetry",    "self_test_results",    "subagent_usage",    "known_limitations",    "completed_at"  ],  "properties": {    "task_id": { "type": "string" },    "builder_seat": { "type": "string" },    "provider_runtime": {      "type": "object",      "required": ["provider", "model", "harness"],      "properties": {        "provider": { "type": "string" },        "model": { "type": "string" },        "harness": { "type": "string" },        "harness_version": { "type": "string" }      }    },    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },    "candidate_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },    "workspace_id": { "type": "string" },    "files_changed": {      "type": "array",      "items": { "type": "string" }    },    "diff_stat": {      "type": "object",      "required": ["insertions", "deletions", "files_count"],      "properties": {        "insertions": { "type": "integer", "minimum": 0 },        "deletions": { "type": "integer", "minimum": 0 },        "files_count": { "type": "integer", "minimum": 1 }      }    },    "implementation_summary": { "type": "string", "minLength": 20 },    "execution_telemetry": {      "type": "object",      "required": ["total_duration_seconds", "commands_executed"],      "properties": {        "total_duration_seconds": { "type": "number" },        "commands_executed": {          "type": "array",          "items": {            "type": "object",            "required": ["command", "exit_code", "duration_ms"],            "properties": {              "command": { "type": "string" },              "exit_code": { "type": "integer" },              "duration_ms": { "type": "integer" }            }          }        }      }    },    "self_test_results": {      "type": "array",      "items": {        "type": "object",        "required": ["test_suite", "passed", "failed", "exit_code"],        "properties": {          "test_suite": { "type": "string" },          "passed": { "type": "integer" },          "failed": { "type": "integer" },          "exit_code": { "type": "integer" },          "output_snippet": { "type": "string" }        }      }    },    "subagent_usage": {      "type": "object",      "required": ["subagents_spawned", "total_child_tokens"],      "properties": {        "subagents_spawned": { "type": "integer", "minimum": 0 },        "total_child_tokens": { "type": "integer", "minimum": 0 },        "subagent_tasks": {          "type": "array",          "items": { "type": "string" }        }      }    },    "known_limitations": {      "type": "array",      "items": { "type": "string" }    },    "completed_at": { "type": "string", "format": "date-time" }  },  "additionalProperties": false}
+10.2 Builder Completion Artifact TypeScript Interface
+
+
+
+TypeScript
+export interface ProviderRuntimeMetadata {  provider: string;  model: string;  harness: string;  harness_version?: string;}export interface DiffStat {  insertions: number;  deletions: number;  files_count: number;}export interface ExecutedCommandLog {  command: string;  exit_code: number;  duration_ms: number;}export interface SelfTestResult {  test_suite: string;  passed: number;  failed: number;  exit_code: number;  output_snippet?: string;}export interface SubagentUsageRecord {  subagents_spawned: number;  total_child_tokens: number;  subagent_tasks: string[];}export interface BuilderCompletionArtifact {  task_id: string;  builder_seat: string;  provider_runtime: ProviderRuntimeMetadata;  base_sha: string;  candidate_sha: string;  workspace_id: string;  files_changed: string[];  diff_stat: DiffStat;  implementation_summary: string;  execution_telemetry: {    total_duration_seconds: number;    commands_executed: ExecutedCommandLog[];  };  self_test_results: SelfTestResult[];  subagent_usage: SubagentUsageRecord;  known_limitations: string[];  completed_at: string;}
+10.3 Builder Completion Artifact Payload Instance
+
+
+
+JSON
+{  "task_id": "T-2026-1042",  "builder_seat": "Antigravity",  "provider_runtime": {    "provider": "Anthropic",    "model": "claude-3-5-sonnet-20241022",    "harness": "Claude Code CLI",    "harness_version": "1.4.2"  },  "base_sha": "a1c72f88390b2713e2803b9f4277b9df03da9112",  "candidate_sha": "f9d81b4914c8034e357e62a1975cd41416e788bc",  "workspace_id": ".worktrees/T-2026-1042-fiscal-receipts",  "files_changed": [    "src/billing/reconciliation/receipt_processor.ts",    "src/billing/reconciliation/idempotency_store.ts",    "tests/billing/reconciliation/receipt_processor.test.ts"  ],  "diff_stat": {    "insertions": 142,    "deletions": 18,    "files_count": 3  },  "implementation_summary": "Added distributed Redis locking keying on invoice_id and introduced unique composite index across tenant_id and receipt_number to prevent duplicate receipt generation.",  "execution_telemetry": {    "total_duration_seconds": 412.5,    "commands_executed": [      {        "command": "npm run build",        "exit_code": 0,        "duration_ms": 14200      },      {        "command": "npm run test:billing",        "exit_code": 0,        "duration_ms": 22100      }    ]  },  "self_test_results": [    {      "test_suite": "Fiscal Receipt Idempotency Tests",      "passed": 14,      "failed": 0,      "exit_code": 0,      "output_snippet": "PASS tests/billing/reconciliation/receipt_processor.test.ts"    }  ],  "subagent_usage": {    "subagents_spawned": 1,    "total_child_tokens": 8400,    "subagent_tasks": [      "Static inspection of Redis retry edge-cases in reconciliation pipeline"    ]  },  "known_limitations": [    "Idempotency cache keys expire after 72 hours; historical reconciliation beyond this window requires database ledger verification."  ],  "completed_at": "2026-10-02T16:24:11.450Z"}
+11. Verifier Contract, Artifact, and Verdict Specification
+The verification stage provides an adversarial barrier between code construction and trunk integration. A verifier seat never trusts builder narratives, execution logs, or local workspaces. It independently checks out the candidate commit SHA in an isolated verification worktree, executes mandated test commands, audits boundary conditions, and returns a formal verdict.
+The operational flow enforces an audit checkpoint: the verifier audits the candidate SHA in an isolated worktree. If the audit yields PASS, merge authority is granted and the task enters ACCEPTED. If the audit yields FAIL, the candidate SHA is blocked from trunk, the task transitions to REJECTED, and the findings are routed back to the builder seat for remediation.
+11.1 Verifier Artifact JSON Schema
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/verifier-artifact.json",  "title": "StarqVerifierArtifact",  "type": "object",  "required": [    "task_id",    "verifier_seat",    "provider_runtime",    "evaluated_sha",    "verification_workspace",    "independence_tier",    "test_executions",    "boundary_audit",    "verdict",    "findings",    "remaining_risk",    "verified_at"  ],  "properties": {    "task_id": { "type": "string" },    "verifier_seat": { "type": "string" },    "provider_runtime": {      "type": "object",      "required": ["provider", "model", "harness"],      "properties": {        "provider": { "type": "string" },        "model": { "type": "string" },        "harness": { "type": "string" }      }    },    "evaluated_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },    "verification_workspace": { "type": "string" },    "independence_tier": {      "type": "string",      "enum": ["BUILDER_SELF_TEST", "INDEPENDENT_INTERNAL_WEAK", "INDEPENDENT_INTERNAL_STRONG", "EXTERNAL_VALIDATION"]    },    "test_executions": {      "type": "array",      "items": {        "type": "object",        "required": ["command", "exit_code", "passed", "failed", "coverage_achieved"],        "properties": {          "command": { "type": "string" },          "exit_code": { "type": "integer" },          "passed": { "type": "integer" },          "failed": { "type": "integer" },          "coverage_achieved": { "type": "number" },          "raw_output": { "type": "string" }        }      },      "minItems": 1    },    "boundary_audit": {      "type": "object",      "required": ["files_checked_within_boundary", "unauthorized_mutations_detected"],      "properties": {        "files_checked_within_boundary": { "type": "boolean" },        "unauthorized_mutations_detected": { "type": "boolean" },        "violating_files": {          "type": "array",          "items": { "type": "string" }        }      }    },    "verdict": {      "type": "string",      "enum": ["PASS", "FAIL", "CONDITIONAL"]    },    "findings": {      "type": "array",      "items": {        "type": "object",        "required": ["severity", "category", "description"],        "properties": {          "severity": { "type": "string", "enum": ["INFO", "WARNING", "BLOCKING"] },          "category": { "type": "string" },          "description": { "type": "string" }        }      }    },    "remaining_risk": { "type": "string" },    "verified_at": { "type": "string", "format": "date-time" }  },  "additionalProperties": false}
+11.2 Verifier Verdict Definitions and Authority Actions
+The verifier must render one of three valid verdicts:
+PASS: The candidate SHA satisfies all acceptance criteria in the Task Contract. Independent execution of required test suites passed with exit code 0. Boundary audits confirm zero out-of-bounds file mutations or prohibited command executions. Code coverage meets or exceeds configured minimums. The Task Control Plane automatically authorizes trunk merge and transitions the task to ACCEPTED.
+FAIL: The candidate SHA fails to satisfy acceptance criteria, triggers test failures, violates boundary path rules, introduces regressions, or exhibits syntax/type errors. The task is transitioned to REJECTED, and the verifier's findings are appended to the task ledger. The workspace lock is returned to the builder for corrective action.
+CONDITIONAL: Core functionality and tests pass, but minor non-breaking discrepancies or documentation gaps are identified. A CONDITIONAL verdict does not permit automatic merge. The task transitions to BLOCKED, requiring Founder review to accept the condition or instruct a corrective builder pass.
+12. Multi-Tiered Verification Independence Model
+To ensure verification integrity, Starq establishes a formal classification for evaluation independence. Verification tiers define the objective adversarial separation between the entity writing code and the entity validating it.
+Independence Tier
+Execution Boundary
+Model / Provider Boundary
+Operational Validity
+Gating Authority
+Tier 1: Builder Self-Test
+Builder Worktree
+Identical Session & Model
+Internal evidence only; invalid for task completion
+Prohibited from authorizing merge
+Tier 2: Independent Internal (Weak)
+Clean Detached Worktree
+Same Model Family, Clean Fresh Session
+Valid for Low-Risk Tasks (documentation, non-critical styling)
+Automatic Control Plane Gating
+Tier 3: Independent Internal (Strong)
+Clean Detached Worktree
+Structurally Distinct Provider Family & Runtime
+Mandatory for Medium and High-Risk Core Logic Tasks
+Automatic Control Plane Gating
+Tier 4: External Validation
+Clean Staging / Sandboxed Prod
+External Human / Auditor / External Engine / Platform
+Mandatory for Critical Founder-Gated, Financial & Auth Kernels
+Explicit Founder Sign-Off Required
+12.1 Detailed Independence Classifications
+The system categorizes verification operations across four distinct tiers:
+Builder Self-Test: Test executions and assertions performed directly by the builder seat within its active workspace. While self-tests must be recorded in the Builder Completion Artifact to document internal due diligence, they carry no independent verification weight. A builder self-test cannot authorize a task transition to ACCEPTED.
+Weak Internal Independence: Verification executed in a fresh, isolated worktree by a separate verifier session using the same foundation model family as the builder (for instance, an Antigravity builder backed by Claude 3.5 Sonnet verified by a Vision seat also backed by Claude 3.5 Sonnet). This tier verifies that the code builds cleanly and passes tests in an isolated environment, but remains vulnerable to correlated reasoning biases across identical model architectures. Permitted only for Low-Risk tasks.
+Stronger Internal Independence: Verification executed in a fresh, isolated worktree by a structurally distinct provider, foundation model, and runtime harness (for example, a builder using Anthropic Claude 3.5 Sonnet verified by a seat using OpenAI GPT-4o or a local DeepSeek-Coder instance). This tier provides strong adversarial checking against shared hallucinations, syntax misconceptions, and blind spots. Mandatory for all Medium and High-Risk tasks.
+External Validation: Verification performed outside Starq’s internal AI agent fleet. External validation involves real-world execution environments, human customer acceptance testing, external financial audits, professional penetration testing, hardware point-of-sale terminal verification, regulatory compliance validation, or direct Founder inspection. Mandatory for all financial ledger modifications, cryptographic security updates, and critical system changes.
+13. Stuck and Execution Failure Detection Subsystem
+Autonomous execution runtimes can encounter unhandled failure modes: deadlocks, infinite tool loops, repeated compilation failures, process hangs, and context saturation. Starq Command implements an active, stateful stuck detector.
+13.1 Stuck Detection State Lifecycle
+The stuck detection lifecycle operates through progressive operational stages:
+RUNNING: Normal execution where process heartbeats, CPU cycles, and tool interactions occur within expected parameters.
+SUSPECTED_STUCK: Initial detection when heuristic thresholds are exceeded (for instance, identical error repetitions or filesystem inactivity).
+STUCK: Confirmed hung state after repeated heuristic failures without intervening task progress.
+PAUSED: Automated platform-appropriate process suspension executed via Herdr, holding process memory intact.
+Resolution paths from PAUSED: The process may be RESUMED following Founder review, ESCALATED to reassign intermediate progress to an alternate seat, or TERMINATED to release resources and fail the task cleanly.
+13.2 Detection Signals and Heuristic Indicators
+The stuck detector continuously evaluates execution telemetry streams against configurable thresholds:
+Command Repetition Loop: The seat executes the identical shell or tool command three or more consecutive times with identical parameters and receives identical non-zero exit codes.
+Error Invariance: Compiling or testing produces identical error output across successive turns without modifying intervening source code.
+Filesystem Inactivity: A code-mutating task in the EXECUTING state produces zero file write operations, Git index modifications, or directory timestamp updates for longer than 900 seconds (15 minutes).
+Terminal Stream Cessation: An active PTY process allocated by Herdr emits zero bytes to stdout/stderr over a configurable observation window (default: 600 seconds), while consuming either 0% or 100% host CPU.
+Tool-Call Thrashing: The session generates continuous API tool-call requests without producing code changes, progressing the task state, or terminating the conversational turn.
+Token Burn Runaway: Cumulative token consumption for a single task exceeds 250% of the historical median for that task type without generating a candidate commit SHA.
+13.3 Process Suspension and Escalation Protocol
+The detection subsystem prioritizes non-destructive intervention:
+Pause Before Kill: When an execution process hangs, Command pauses the process rather than terminating it, preserving memory state and diagnostic traces for inspection.
+When a task transitions from SUSPECTED_STUCK to STUCK, Command issues a platform-appropriate process suspension request to Herdr:
+On Linux and macOS hosts, Herdr dispatches SIGSTOP to the target process group, halting CPU cycles while preserving RAM state, open file handles, and PTY buffers.
+On Windows hosts, Herdr suspends all threads within the target process hierarchy via platform-appropriate system calls.
+Command records the state as PAUSED, generates an operational event to Room, and alerts the Founder cockpit.
+From the cockpit, the Founder or an authorized operator can inspect the session diff, examine the terminal buffer, and select one of three actions:
+Resume: Issues platform-appropriate process resumption (such as SIGCONT) to allow the process to continue.
+Escalate: Detaches the workspace, preserves intermediate files to a recovery branch, terminates the session, and reallocates the task to an alternate seat.
+Terminate: Issues termination signals, revokes the workspace lease, marks the task as FAILED, and releases runtime resources.
+14. Quota and Fleet Capacity Management
+Dynamic multi-provider fleet operations require real-time capacity tracking to prevent sudden throughput drops caused by provider rate-limiting.
+14.1 Capacity Accounting Model
+Starq Command tracks capacity across four distinct dimensions:
+Rolling Window Consumption: Tracking tokens consumed across 1-minute, 1-hour, and 24-hour sliding windows against vendor-enforced Requests-Per-Minute (RPM) and Tokens-Per-Minute (TPM) limits.
+Periodic Account Quotas: Tracking cumulative spending against fixed weekly and monthly account expenditure ceilings.
+Active Context Saturation: Monitoring the token size of active conversations within each seat harness relative to model context windows.
+Reset Horizons: Projecting the time remaining until rate-limit counters reset, enabling intelligent task scheduling.
+14.2 Implementation Status Discipline
+To prevent future planned capabilities from being mistaken for active production features, Command enforces an architectural status discipline. Every component and feature must carry exactly one unambiguous status:
+IMPLEMENTED: Actively executing in production code with operational tests.
+PARTIAL: Partially functional; underlying hooks exist but user-facing interfaces or edge-case handling remain incomplete.
+REQUIRED BEFORE FREEZE: Mandatory capability that must be built, verified, and accepted prior to initiating the maintenance freeze.
+PLANNED: Architecturally specified for post-v1 evolution; no production code written.
+FUTURE: Conceptual extension point reserved for long-term scalability.
+DEFERRED: Evaluated and intentionally postponed.
+PROHIBITED: Explicitly disallowed by corporate architecture doctrine.
+UNRESOLVED: Open architectural question requiring Founder determination.
+Capacity Metric / Capability
+Tracking Mechanism
+Alerting Thresholds
+System Status
+Provider Token Balances
+Direct API telemetry scraping / response header parsing (x-ratelimit-*)
+Warning: < 20% remaining; Critical: < 5% remaining
+REQUIRED BEFORE FREEZE
+Harness Context Saturation
+CLI session log parsing, active token counting
+Warning: > 70% context filled; Critical: > 85% context filled
+REQUIRED BEFORE FREEZE
+Seat Fallback Suggestions
+Routing engine heuristic evaluation
+Active upon primary seat exhaustion
+PARTIAL
+Predictive Token Cost Projection
+Historical regression based on task category and diff size
+Forecast > budget limit
+PLANNED
+Cross-Machine Fleet Balancing
+Distributed telemetry ingestion over network brokers
+Machine load > 85%
+FUTURE
+
+
+
+15. Seat Capability Profile System
+Command maintains a structured registry defining the technical capabilities, operational permissions, and resource constraints of each registered seat. Seats are bound by capability contracts rather than arbitrary model names.
+15.1 Seat Capability JSON Schema
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/seat-capability-profile.json",  "title": "StarqSeatCapabilityProfile",  "type": "object",  "required": [    "seat_id",    "role_description",    "provider",    "active_model",    "harness",    "supported_task_types",    "can_mutate_code",    "can_verify",    "max_context_window",    "allowed_tool_classes",    "prohibited_task_classes"  ],  "properties": {    "seat_id": { "type": "string" },    "role_description": { "type": "string" },    "provider": { "type": "string" },    "active_model": { "type": "string" },    "harness": { "type": "string" },    "supported_task_types": {      "type": "array",      "items": { "type": "string" }    },    "can_mutate_code": { "type": "boolean" },    "can_verify": { "type": "boolean" },    "can_spawn_subagents": { "type": "boolean", "default": false },    "max_context_window": { "type": "integer" },    "allowed_tool_classes": {      "type": "array",      "items": { "type": "string" }    },    "prohibited_task_classes": {      "type": "array",      "items": { "type": "string" }    },    "launch_mode": {      "type": "string",      "enum": ["INTERACTIVE_PTY", "HEADLESS_CLI", "DAEMON"]    },    "fallback_seats": {      "type": "array",      "items": { "type": "string" }    }  },  "additionalProperties": false}
+15.2 Seat Registry Definitions
+The enterprise fleet registry defines seats across their assigned operational domains:
+Seat Identifier
+Primary Role
+Active Provider / Model
+Code Mutation
+Verification Eligible
+Tool Classes
+Antigravity
+Primary Core Builder
+Anthropic / Claude 3.5 Sonnet
+Yes
+Yes (Low Risk Only)
+FS, Git, Bash, Test, Subagent
+Vision
+Independent Verifier
+OpenAI / GPT-4o
+No (Verification Worktrees Only)
+Yes (All Risk Tiers)
+FS, Git, Bash, Test, Audit
+Codex
+Architecture & Refactor
+OpenAI / o1-preview
+Yes
+Yes
+FS, Git, SyntaxTree, Test
+Elder
+Strategic Architecture
+Anthropic / Claude 3.5 Sonnet
+No (Advisory / SSOT Only)
+Yes (Architectural SSOT)
+FS, Git, Docs, Ledger
+Deadpool
+Adversarial Security
+Local / DeepSeek-Coder
+Yes (Fuzzing / Exploit Proofs)
+Yes (Security Audits)
+FS, Git, Fuzz, NetworkSandboxed
+Pi
+Algorithmic Specialist
+Google / Gemini 1.5 Pro
+Yes
+Yes
+FS, Git, Math, Profiler
+16. Decision-Support Task Routing Engine
+Task assignment in Starq Command operates on a decision-support model rather than autonomous, opaque dispatch. The routing engine evaluates task requirements against fleet availability, scoring and recommending optimal seat allocations while preserving final override authority for the Founder.
+16.1 Decision-Support Routing Mechanism
+When an inbound Task Contract is submitted, the engine executes a multi-stage evaluation pipeline:
+Hard Constraints Filter: Validates candidate seats against boundary paths, prohibited task classes, and code mutation rights.
+Capability Matching: Verifies that candidate seats support the required language tooling, test runners, and context windows.
+Independence Check: Validates that the nominated verifier seat belongs to a separate model family from the builder seat for medium- and high-risk tasks.
+Quota Availability: Evaluates active provider RPM, TPM, and billing limits to prevent selecting exhausted providers.
+Workload Balancing: Assesses active lease counts to avoid oversaturating active seat sessions.
+The engine calculates an assignment suitability score  for candidate seat  on task :
+
+Where:
+ represents the binary capability match (zero if the seat lacks required tools or is barred from mutating code).
+ represents remaining rolling quota capacity for the seat's underlying provider.
+ represents current seat workload saturation (active leases divided by concurrent capacity limit).
+ represents historical task-affinity and success metrics for that category of work.
+ represent normalized operational weights ( respectively).
+If task risk is classified as CRITICAL_FOUNDER_GATED, automated dispatch is withheld. The routing recommendation is surfaced in the cockpit alongside suitability scores, awaiting manual Founder sign-off.
+17. Command User Interface Information Architecture
+The Command interface is designed as an operational flight cockpit for the Founder. The layout provides immediate clarity across all levels of the organization, prioritizing system state and actionable exceptions over decorative visual elements.
+The UI layout is divided into four synchronized operational viewports:
+Viewport 1 (Critical Gates): Displays pending approvals, blocked tasks, and active stuck alerts requiring immediate Founder intervention.
+Viewport 2 (Fleet Status Matrix): Real-time matrix of seats, current task bindings, provider status, and context saturation levels.
+Viewport 3 (Lifecycle Pipeline): Visual swimlane of tasks across Queued, Executing, Builder Complete, and Verifying states.
+Viewport 4 (Operational Stream): Live chronological log of Room events, builder submittals, and verifier verdicts.
+17.1 Screen-by-Screen Information Specifications
+The interface is structured into seven primary functional views:
+Overview Cockpit: The executive operational dashboard. Displays active projects, real-time throughput metrics, blocked tasks requiring resolution, gates awaiting Founder sign-off, provider quota status gauges, and critical alerts.
+Fleet Matrix: Real-time operational status of all registered seats. Displays active providers, assigned models, current task bindings, CPU and memory utilization, context window saturation gauges, active lease durations, and runtime health indicators.
+Task Control Board: Lifecycle management view organized by state (QUEUED, ALLOCATED, EXECUTING, BLOCKED, BUILDER_COMPLETE, VERIFYING, ACCEPTED, REJECTED). Allows filtering by project, risk class, and assigned seat.
+Evidence and Verification Vault: Audit repository for Builder Completion Artifacts and Verifier Artifacts. Provides diff views, test logs, coverage reports, SHA provenance trees, and side-by-side builder/verifier comparisons.
+Herdr Floor Monitor: Direct operational interface with the Herdr runtime broker. Displays active host processes, OS process group trees, PTY terminals, session lease files, loopback connection status, and bounded command interfaces.
+Room Stream: Live, structured operational ledger stream combining human-readable messages with typed system events. Supports sequence filtering, thread tracking, and event payload inspection.
+Alerts and Incident Console: Dedicated view for operational exceptions: stuck agent loops, process hangs, dirty worktree flags, stale lease expirations, verification rejections, and provider rate-limit alerts.
+18. Room Protocol Evolution: Typed Event Envelopes
+Room serves as Starq’s operational communication ledger. It retains a human-readable conversational format while embedding machine-readable typed event envelopes. This hybrid model allows human operators to read operational history in plain text, while Command and Herdr parse and process structured system events automatically.
+18.1 Typed Event Envelope JSON Schema
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/room-typed-event.json",  "title": "StarqRoomTypedEventEnvelope",  "type": "object",  "required": [    "event_id",    "sequence_number",    "event_type",    "sender",    "task_id",    "timestamp",    "human_message",    "payload"  ],  "properties": {    "event_id": { "type": "string" },    "sequence_number": { "type": "integer", "minimum": 1 },    "event_type": {      "type": "string",      "enum": [        "TASK_CREATED",        "TASK_ASSIGNED",        "TASK_STARTED",        "BUILDER_COMPLETE",        "TASK_BLOCKED",        "VERIFICATION_STARTED",        "VERIFICATION_FAILED",        "VERIFICATION_ACCEPTED",        "FOUNDER_RULING",        "SECURITY_ALERT",        "QUOTA_ALERT",        "SESSION_STUCK"      ]    },    "sender": {      "type": "object",      "required": ["seat_id", "entity_type"],      "properties": {        "seat_id": { "type": "string" },        "entity_type": { "type": "string", "enum": ["FOUNDER", "SEAT", "CONTROL_PLANE", "HERDR_RUNTIME"] }      }    },    "task_id": { "type": "string" },    "timestamp": { "type": "string", "format": "date-time" },    "human_message": { "type": "string", "minLength": 1 },    "payload": {      "type": "object"    }  },  "additionalProperties": false}
+18.2 Room Typed Event TypeScript Interface
+
+
+
+TypeScript
+export type RoomEventType =   | 'TASK_CREATED'  | 'TASK_ASSIGNED'  | 'TASK_STARTED'  | 'BUILDER_COMPLETE'  | 'TASK_BLOCKED'  | 'VERIFICATION_STARTED'  | 'VERIFICATION_FAILED'  | 'VERIFICATION_ACCEPTED'  | 'FOUNDER_RULING'  | 'SECURITY_ALERT'  | 'QUOTA_ALERT'  | 'SESSION_STUCK';export interface RoomEventSender {  seat_id: string;  entity_type: 'FOUNDER' | 'SEAT' | 'CONTROL_PLANE' | 'HERDR_RUNTIME';}export interface RoomTypedEventEnvelope<T = Record<string, unknown>> {  event_id: string;  sequence_number: number;  event_type: RoomEventType;  sender: RoomEventSender;  task_id: string;  timestamp: string;  human_message: string;  payload: T;}
+18.3 Canonical Room Event Line Instance
+In the Room log file (room-events.jsonl), each record is formatted as an append-only JSON line containing both the human-readable string and the structured payload:
+
+
+
+JSON
+{"event_id":"EV-2026-90412","sequence_number":1048,"event_type":"BUILDER_COMPLETE","sender":{"seat_id":"Antigravity","entity_type":"SEAT"},"task_id":"T-2026-1042","timestamp":"2026-10-02T16:24:11.450Z","human_message":"Antigravity has completed task T-2026-1042 (Fiscal Receipt Idempotency). Candidate SHA: f9d81b4914c8034e357e62a1975cd41416e788bc. Ready for independent verification.","payload":{"base_sha":"a1c72f88390b2713e2803b9f4277b9df03da9112","candidate_sha":"f9d81b4914c8034e357e62a1975cd41416e788bc","files_count":3,"insertions":142,"deletions":18,"artifact_ref":"art-build-T-1042-f9d81b4"}}
+19. Room Compaction and Provenance Retention Architecture
+As long-running operations accumulate thousands of conversational turns and lifecycle records, ledger files can exceed practical context window limits for active agent sessions. Room handles this with a compaction strategy that preserves complete operational provenance.
+The historical storage architecture maintains a strict dual-tier model:
+Primary Tier: Raw append-only historical log (room-events.jsonl), which is never truncated, modified, or overwritten.
+Secondary Tier: Periodic snapshot files generated every 1,000 sequence events (e.g., snap-seq-001000-002000.json), storing cryptographically validated state summaries.
+Injection Engine: When new sessions initialize, the engine injects the project SSOT, the latest compacted snapshot, and the uncompacted event tail, avoiding token saturation while preserving full context continuity.
+The compaction engine separates raw historical records from derived query representations:
+Raw Immutable Log: The primary journal (room-events.jsonl) is strictly append-only. Raw records are never deleted, overwritten, or modified. This journal serves as the definitive audit ledger.
+Sequence-Bounded Snapshots: A background compactor runs at periodic sequence intervals (for example, every 1,000 events) to produce a structured snapshot. Snapshots contain:
+The exact inclusive sequence number range (start_sequence, end_sequence).
+Current task statuses, including all ACCEPTED and active tasks.
+A cryptographic SHA-256 hash covering the sequence of compacted raw records.
+An indexed summary of major engineering decisions and Founder rulings.
+Context Injection Optimization: When a seat session initializes and requests Room context, Command does not supply the full raw history. The injection engine compiles an optimized context payload containing:
+The project's durable SSOT architectural specification.
+The most recent compacted state snapshot.
+The uncompacted event tail (events occurring after the snapshot's end_sequence).
+Audit Verification: If an audit or debugging trace requires historical analysis, Command can replay the entire raw journal from sequence 1 to verify any intermediate snapshot.
+20. Herdr Transport Abstraction Layer
+Herdr manages the execution floor on the local host. To prevent tight coupling between Command’s core logic and specific local communication mechanisms, Command defines an abstract transport interface.
+20.1 Abstract Transport Interface
+
+
+
+TypeScript
+export interface ProcessLaunchSpec {  seat_id: string;  task_id: string;  command: string;  args: string[];  working_directory: string;  environment_variables: Record<string, string>;  pty_required: boolean;}export interface SessionHandle {  session_id: string;  seat_id: string;  task_id: string;  os_pid: number;  created_at: string;}export interface SessionRuntimeHealth {  session_id: string;  os_pid: number;  cpu_percent: number;  memory_rss_bytes: number;  is_running: boolean;  is_suspended: boolean;  pty_buffer_bytes_unread: number;}export interface HerdrTransport {  getHealth(): Promise<{ status: 'HEALTHY' | 'DEGRADED' | 'UNREACHABLE'; version: string }>;  getFleetState(): Promise<SessionRuntimeHealth[]>;  createSession(spec: ProcessLaunchSpec): Promise<SessionHandle>;  dispatchBoundedAction(sessionId: string, action: string, payload: Record<string, unknown>): Promise<{ exit_code: number; output: string }>;  suspendSession(sessionId: string): Promise<boolean>;  resumeSession(sessionId: string): Promise<boolean>;  terminateSession(sessionId: string, gracePeriodMs: number): Promise<boolean>;  readSessionStream(sessionId: string, tailBytes: number): Promise<string>;}
+In the v1 deployment, HerdrTransport is implemented over an authenticated loopback REST/HTTP client binding strictly to 127.0.0.1. The architecture supports swapping this adapter for a secure Unix domain socket, Windows named pipe, or an encrypted remote worker client without altering Command's core task management logic.
+21. Fail-Closed Security Model and Boundary Invariants
+Herdr and Command implement a fail-closed security perimeter. They enforce strict access boundaries to ensure that automated agents, browser interfaces, and network services operate within least-privilege constraints.
+21.1 Core Security Invariants
+The security model enforces eight core operational controls:
+Loopback Boundary Enforcement: Herdr and Command services bind exclusively to loopback network interfaces (127.0.0.1 and ::1). Binding to public host interfaces (0.0.0.0) is structurally prohibited and rejected at startup.
+HTTP Host Header Validation: All incoming HTTP requests to Command and Herdr validate the HTTP Host header against an allowlist containing only localhost and 127.0.0.1:<PORT>. Requests with missing or mismatched Host headers are rejected with HTTP 403.
+Origin Header and CORS Whitelisting: The HTTP API checks incoming Origin headers on all mutating endpoints (POST, PUT, DELETE). Cross-origin requests from arbitrary web origins are blocked to prevent Cross-Site Request Forgery (CSRF).
+Cryptographic CSRF Tokens and Session Binding: Browser-to-Command operations require a cryptographically random, per-session anti-CSRF token passed in custom request headers (X-Starq-CSRF-Token).
+Launch Eligibility Gating: Herdr does not maintain a generic shell execution endpoint. Herdr executes commands exclusively from an authorized allowlist of binaries and CLI harnesses defined in host configuration profiles. Commands attempting to invoke unlisted binaries or raw shell interpreters are rejected.
+No Direct Browser-to-Shell Gateway: The Command web UI cannot send arbitrary shell commands directly to the host operating system. The UI communicates strictly through structured task lifecycle requests and bounded administrative endpoints.
+Immutable Audit Logging: Every process invocation, suspension, termination, worktree allocation, and task transition is written to an append-only, tamper-evident security audit log on disk.
+Fail-Closed Lease Expiration: If Command loses communication with Herdr or crashes, active workspace leases expire automatically. Herdr will not grant new execution requests until secure communication with Command is re-established.
+22. Cost, Context Window, and Token Telemetry Management
+Context window exhaustion degrades agent performance and incurs significant token expenses. Rather than enforcing arbitrary, hardcoded rules, Command implements configurable warning tiers.
+22.1 Context and Cost Warning Tiers
+Telemetry inputs are evaluated continuously against defined operating thresholds:
+Warning Tier
+Context Saturation
+Marginal Turn Cost
+System Assessment
+Recommended Action
+Tier 1: NORMAL
+< 60% of Max Context
+Baseline ($0.01 - $0.05)
+Optimal reasoning capability; prompt cache performing efficiently.
+Continue active task execution without intervention.
+Tier 2: HIGH_CONTEXT
+60% - 75% of Max Context
+Elevated ($0.08 - $0.15)
+Working context accumulating noise; minor cache eviction latency.
+Complete immediate sub-task; avoid extraneous file reads.
+Tier 3: COSTLY
+75% - 85% of Max Context
+High ($0.15 - $0.35)
+Reasoning degradation possible; cache misses incurring cost spikes.
+Emit compaction snapshot; summarize context or hand off.
+Tier 4: EXHAUSTION_RISK
+> 85% of Max Context
+Critical (> $0.40 / turn)
+Imminent context overflow; high hallucination and crash risk.
+Immediately pause execution; commit work; rotate to fresh session.
+22.2 Context Optimization and Handoff Mechanics
+When a seat reaches the COSTLY or EXHAUSTION_RISK thresholds, the system manages the transition through structured protocols:
+In-Session Compaction: If supported by the harness, the seat runs a context compaction routine, writing a structured summary of progress and next steps while releasing unneeded file buffers from context.
+Clean Session Rotation: If context saturation persists, the seat writes an intermediate Git commit containing all passing changes. Command then terminates the saturated session, launches a fresh session within the same worktree, and injects the baseline Task Contract along with the progress summary.
+Seat-to-Seat Handoff: If context limits prevent the assigned builder from completing the task, the task is marked as BLOCKED. Command records intermediate progress, frees the active session, and recommends handoff to an available seat with clean context capacity.
+23. Subagent Resource Accounting and Provenance Tracking
+When a primary seat spawns tactical subagents, their resource utilization and code modifications must remain attributable to the parent seat. Subagents never operate as untracked background processes.
+23.1 Subagent Accounting Requirements
+Accounting systems track subagent execution through explicit attribution constraints:
+Hierarchical Attribution: Every subagent process is mapped to its parent seat ID, parent session ID, and parent task ID.
+Aggregated Resource Tracking: Tokens consumed, wall-clock compute duration, memory allocations, and API charges incurred by subagents are aggregated into the parent task’s accounting ledger.
+Filesystem Mutation Restrictions: Subagents are restricted from writing directly to primary worktree branches. Subagents operate in read-only analysis modes or write to dedicated scratch subdirectories (.scratch/subagent-<id>/). The parent seat reviews, stages, and commits all final code changes.
+Provenance Verification: The Builder Completion Artifact must record all subagent interactions, detailing their assigned tasks, durations, and outputs to maintain code provenance.
+24. Maintenance Freeze Doctrine and Reopening Criteria
+Following the completion of Wave 4 and successful independent acceptance verification by Vision, Starq Command enters a strict Maintenance Freeze.
+24.1 Rationale and Objectives of the Maintenance Freeze
+Command is internal infrastructure designed to support the construction and delivery of Starq’s commercial software portfolio. Continued development on Command beyond v1 operational stability diverts engineering focus from commercial product milestones: StarqERP, Starq POS, Hoadha, and upcoming market launches.
+Once Command achieves v1 acceptance, the codebase is placed into maintenance mode. Feature additions, architectural refactorings, and UI enhancements are prohibited until commercial milestones are achieved.
+24.2 Explicit Reopening Criteria
+The maintenance freeze can be unlocked only under six specific operational conditions:
+Verified Production Defect: A reproducible defect within Command or Herdr that compromises task state durability, causes code loss, or corrupts Git workspaces.
+Security Vulnerability: A confirmed vulnerability compromising the loopback boundary, host authentication, secret masking, or process isolation.
+Provider API Breakage: Upstream vendor changes (such as deprecation of underlying model APIs or breaking modifications to harness CLI protocols) that prevent seats from executing tasks.
+Critical Operational Bottleneck: A demonstrated, systemic bottleneck within Command’s control plane that materially degrades product delivery across active product repositories.
+Mandatory Integration Requirement: A newly introduced, revenue-critical product requiring novel operational hooks that cannot be accommodated by existing v1 interfaces.
+Explicit Founder Executive Ruling: The Founder issues a signed, written directive instructing the engineering fleet to reopen Command for specified upgrades.
+External artificial intelligence market announcements, rival developer tooling releases, or cosmetic enhancement proposals do not constitute valid grounds for reopening Command.
+25. Architectural Extension Points and Non-Authorized Capabilities
+To ensure the v1 codebase remains maintainable, post-v1 capabilities are explicitly identified and cataloged as non-authorized. These architectural extension points are preserved for future releases, but engineering teams are barred from implementing them during current build waves.
+The v1 operational boundary is strictly constrained:
+Bound to single host system via local loopback (127.0.0.1).
+Embedded SQLite database utilizing local WAL mode.
+Local Git worktrees provisioned on the host filesystem.
+File-backed Room JSONL ledger with local snapshots.
+Any extension beyond these single-host local boundaries—including remote gRPC worker daemons, distributed multi-host Herdr brokers, cloud container dispatchers, autonomous browser UI runners, and external payment pipelines—is explicitly marked non-authorized.
+25.1 Catalog of Future Extension Points
+Future extensions are categorized and classified as non-authorized for v1:
+FUTURE / NOT AUTHORIZED: Distributed Multi-Host Worker Fleet. Extending Herdr to manage execution floors across secondary build servers or remote cloud instances. v1 is restricted exclusively to single-host loopback operation.
+FUTURE / NOT AUTHORIZED: Autonomous Web Browser Interaction Framework. Embedding headless browser automation daemons directly inside Command for visual UI regression testing.
+FUTURE / NOT AUTHORIZED: Semantic Vector Memory Systems. Adding persistent vector embedding pipelines to index Room conversational history. v1 relies strictly on append-only text and structured snapshots.
+FUTURE / NOT AUTHORIZED: Automated Trunk Merge Pipeline. Permitting Command to push accepted candidate SHAs directly to production branches without Founder review.
+FUTURE / NOT AUTHORIZED: Dynamic External Billing and Quota Purchasing. Integrating automated payment gateways to purchase additional vendor API credits when quotas run low.
+26. Strategic Product Portfolio Alignment and Operating Philosophy
+Starq Command exists to serve Starq’s broader business strategy. Its value is measured entirely by its effectiveness in helping the team build, verify, and maintain Starq's commercial application portfolio.
+26.1 Supported Commercial Product Family
+Command coordinates engineering across Starq’s target applications:
+StarqERP: Multi-tenant enterprise resource planning system covering inventory control, manufacturing pipelines, double-entry general ledgers, and human resources.
+Starq POS: Resilient point-of-sale software engineered for retail and hospitality environments, featuring offline-first operation, hardware peripheral integrations, and automated reconciliation.
+Hoadha: Commerce discovery, local supply chain mapping, and consumer marketplace infrastructure.
+Starq Commerce Intelligence: Analytics platform providing inventory forecasting, price optimization, and supplier performance intelligence.
+StarqAI: Enterprise artificial intelligence services and domain-adapted reasoning tools for business clients.
+StarqPay: Payment processing, merchant settlement, escrow management, and automated fiscal compliance.
+Starq Logistics: Fleet routing, warehouse dispatch, package tracking, and last-mile fulfillment infrastructure.
+Starq Academy: Technical training, professional onboarding, and enterprise certification systems.
+26.2 Operating Philosophy
+Engineering operations across all Starq products adhere to an overarching product principle:
+Deep internal complexity, simple external experience.
+End users of Starq products should never encounter the internal mechanisms of our systems—state machines, model harnesses, agent fleets, verification pipelines, or distributed ledgers. Users should experience dependable, responsive software: search queries return immediate results, transactions complete reliably, financial ledgers balance accurately, and systems run smoothly. Starq Command provides the rigorous internal engineering discipline required to deliver that external simplicity.
+27. Implementation Roadmap: Waves 1 Through 4
+Implementation of Starq Command v1 is structured across four progressive development waves. Antigravity serves as the primary builder seat, and Vision acts as the independent verification authority.
+The implementation cascades linearly:
+Wave 1 establishes core foundations (SQLite state machine, worktree isolation, stuck detector).
+Wave 2 integrates cockpit views, the Herdr client, and the Room event adapter.
+Wave 3 implements capacity tracking, quota alerts, and non-destructive recovery.
+Wave 4 executes end-to-end regression suites, Vision independent acceptance, and maintenance freeze gating.
+27.1 Wave Breakdown and Implementation Objectives
+The development roadmap defines deliverables, test gates, and migration steps for each phase:
+Wave 1: Freeze Foundations
+Objective: Build the durable relational task database, implement the finite state machine, establish isolated Git worktree management, and implement the core schemas.
+Key Modules: src/control-plane/task-store.ts, src/control-plane/state-machine.ts, src/workspace/worktree-manager.ts, src/workspace/lease-service.ts, src/schemas/*.
+Exit Criteria: 100% unit test coverage for state machine transitions, validating that all invalid transitions are rejected. Worktree provisioning and clean teardown verified on local Git repositories.
+Wave 2: Command Integration
+Objective: Integrate Command’s management interface with the underlying services. Build the task board, evidence viewer, fleet matrix, and live Room stream. Connect the Herdr loopback client.
+Key Modules: src/ui/dashboard/*, src/transport/herdr-client.ts, src/room/event-adapter.ts, src/evidence/evidence-service.ts.
+Exit Criteria: End-to-end task dispatch from the UI down to Herdr process launch, verified via loopback transport with typed event emission to Room.
+Wave 3: Capacity and Reliability
+Objective: Implement quota tracking, stuck execution detection, automated process suspension, and non-destructive workspace recovery.
+Key Modules: src/capacity/quota-tracker.ts, src/detector/stuck-detector.ts, src/workspace/recovery-service.ts, src/alerts/alert-dispatcher.ts.
+Exit Criteria: Simulated process hangs and command loops successfully detected and paused via Herdr within 60 seconds without data loss. Quota alerts verified against mock provider limits.
+Wave 4: Final Acceptance and Maintenance Freeze
+Objective: Execute comprehensive end-to-end regression suites, simulate host crashes, validate verifier independence tiers, complete Vision independent acceptance audit, and freeze the codebase.
+Key Modules: tests/e2e/*, tests/verification/*, scripts/freeze-verification.sh.
+Exit Criteria: Zero blocking defects; formal verification verdict of PASS rendered by Vision; repository tagged v1.0.0-frozen and placed in maintenance mode.
+28. Status Discipline and Source Verification Ledger
+Every capability across the Command and Herdr ecosystem is tracked in the architectural status register:
+System Domain
+Specific Functional Capability
+Implementation Status
+Authoritative SSOT Document
+Control Plane
+Durable Task State Machine (SQLite WAL)
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_TASK_CONTROL_PLANE_SPEC.md
+Control Plane
+State Machine Transition Validation Engine
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_TASK_CONTROL_PLANE_SPEC.md
+Workspace
+Dedicated Git Worktree Isolation Manager
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_WORKSPACE_ISOLATION_SPEC.md
+Workspace
+Time-Bounded Worktree Leases & Heartbeats
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_WORKSPACE_ISOLATION_SPEC.md
+Workspace
+Non-Destructive Abandoned Workspace Recovery
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_WORKSPACE_ISOLATION_SPEC.md
+Evidence
+Builder Completion Artifact Schema Ingestion
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_EVIDENCE_AND_VERIFICATION_SPEC.md
+Evidence
+Verifier Artifact Schema & Verdict Gating
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_EVIDENCE_AND_VERIFICATION_SPEC.md
+Evidence
+Multi-Tiered Verification Independence Checks
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_EVIDENCE_AND_VERIFICATION_SPEC.md
+Runtime Floor
+Loopback Host Boundary Security (127.0.0.1)
+IMPLEMENTED
+STARQ_COMMAND_SECURITY_AND_AUTHORITY_DOCTRINE.md
+Runtime Floor
+Host / Origin Header Check & Anti-CSRF Token
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_SECURITY_AND_AUTHORITY_DOCTRINE.md
+Runtime Floor
+Abstract Herdr Transport Client Interface
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_TRANSPORT_ABSTRACTION_SPEC.md
+Supervision
+Stuck Execution Detection Engine
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_TASK_CONTROL_PLANE_SPEC.md
+Supervision
+Non-Destructive Process Suspension (Pause/Kill)
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_HERDR_BOUNDARY_SPEC.md
+Capacity
+Provider Rate-Limit Response Header Parsing
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_OPERATING_DOCTRINE.md
+Capacity
+Predictive Token Cost Projection Algorithms
+PLANNED
+STARQ_COMMAND_FUTURE_EXTENSION_POINTS.md
+Room Ledger
+Append-Only JSONL Structured Event Logging
+IMPLEMENTED
+STARQ_COMMAND_ROOM_EVENT_PROTOCOL_V1.md
+Room Ledger
+Periodic Compaction Snapshots with SHA Proofs
+REQUIRED BEFORE FREEZE
+STARQ_COMMAND_ROOM_EVENT_PROTOCOL_V1.md
+Infrastructure
+Multi-Host Distributed Execution Floor
+FUTURE
+STARQ_COMMAND_FUTURE_EXTENSION_POINTS.md
+29. Machine-Readable Appendices and Implementation Contracts
+To support development by Antigravity and verification by Vision, the system contracts are defined below as concrete schemas and type interfaces.
+29.1 Workspace Lease Schema and TypeScript Interface
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/workspace-lease.json",  "title": "StarqWorkspaceLease",  "type": "object",  "required": [    "lease_id",    "task_id",    "seat_id",    "worktree_path",    "branch_name",    "base_sha",    "granted_at",    "expires_at",    "heartbeat_interval_seconds"  ],  "properties": {    "lease_id": { "type": "string" },    "task_id": { "type": "string" },    "seat_id": { "type": "string" },    "worktree_path": { "type": "string" },    "branch_name": { "type": "string" },    "base_sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },    "granted_at": { "type": "string", "format": "date-time" },    "expires_at": { "type": "string", "format": "date-time" },    "last_heartbeat_at": { "type": "string", "format": "date-time" },    "heartbeat_interval_seconds": { "type": "integer", "default": 300 }  },  "additionalProperties": false}
+
+
+
+TypeScript
+export interface WorkspaceLease {  lease_id: string;  task_id: string;  seat_id: string;  worktree_path: string;  branch_name: string;  base_sha: string;  granted_at: string;  expires_at: string;  last_heartbeat_at?: string;  heartbeat_interval_seconds: number;}
+29.2 Quota and Capacity Record Schema and TypeScript Interface
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/quota-capacity-record.json",  "title": "StarqQuotaCapacityRecord",  "type": "object",  "required": [    "provider",    "account_identifier",    "timestamp",    "rolling_window_usage",    "quota_limits",    "status"  ],  "properties": {    "provider": { "type": "string" },    "account_identifier": { "type": "string" },    "timestamp": { "type": "string", "format": "date-time" },    "rolling_window_usage": {      "type": "object",      "required": ["tokens_consumed_last_minute", "tokens_consumed_last_hour", "requests_last_minute"],      "properties": {        "tokens_consumed_last_minute": { "type": "integer" },        "tokens_consumed_last_hour": { "type": "integer" },        "requests_last_minute": { "type": "integer" }      }    },    "quota_limits": {      "type": "object",      "required": ["tpm_limit", "rpm_limit", "monthly_budget_usd"],      "properties": {        "tpm_limit": { "type": "integer" },        "rpm_limit": { "type": "integer" },        "monthly_budget_usd": { "type": "number" },        "monthly_spend_usd": { "type": "number" }      }    },    "reset_horizons": {      "type": "object",      "properties": {        "tokens_reset_at": { "type": "string", "format": "date-time" },        "requests_reset_at": { "type": "string", "format": "date-time" }      }    },    "status": {      "type": "string",      "enum": ["NOMINAL", "NEAR_LIMIT", "RATE_LIMITED", "EXHAUSTED"]    }  },  "additionalProperties": false}
+
+
+
+TypeScript
+export interface QuotaCapacityRecord {  provider: string;  account_identifier: string;  timestamp: string;  rolling_window_usage: {    tokens_consumed_last_minute: number;    tokens_consumed_last_hour: number;    requests_last_minute: number;  };  quota_limits: {    tpm_limit: number;    rpm_limit: number;    monthly_budget_usd: number;    monthly_spend_usd?: number;  };  reset_horizons?: {    tokens_reset_at?: string;    requests_reset_at?: string;  };  status: 'NOMINAL' | 'NEAR_LIMIT' | 'RATE_LIMITED' | 'EXHAUSTED';}
+29.3 Stuck Detection Event Schema and TypeScript Interface
+
+
+
+JSON
+{  "$schema": "http://json-schema.org/draft-07/schema#",  "$id": "https://specs.starq.net/schemas/v1/stuck-detection-event.json",  "title": "StarqStuckDetectionEvent",  "type": "object",  "required": [    "detection_id",    "task_id",    "seat_id",    "session_id",    "detected_at",    "trigger_signal",    "consecutive_occurrences",    "action_taken"  ],  "properties": {    "detection_id": { "type": "string" },    "task_id": { "type": "string" },    "seat_id": { "type": "string" },    "session_id": { "type": "string" },    "detected_at": { "type": "string", "format": "date-time" },    "trigger_signal": {      "type": "string",      "enum": [        "REPEATED_COMMAND_LOOP",        "INVARIANT_ERROR_OUTPUT",        "FILESYSTEM_INACTIVITY",        "TERMINAL_STREAM_CESSATION",        "TOOL_CALL_THRASHING",        "TOKEN_BURN_RUNAWAY"      ]    },    "consecutive_occurrences": { "type": "integer", "minimum": 1 },    "diagnostic_context": {      "type": "object",      "properties": {        "command": { "type": "string" },        "exit_code": { "type": "integer" },        "last_output_snippet": { "type": "string" },        "seconds_inactive": { "type": "number" }      }    },    "action_taken": {      "type": "string",      "enum": ["ALERTED", "PROCESS_PAUSED", "SESSION_ESCALATED", "SESSION_TERMINATED"]    }  },  "additionalProperties": false}
+
+
+
+TypeScript
+export type StuckTriggerSignal =   | 'REPEATED_COMMAND_LOOP'  | 'INVARIANT_ERROR_OUTPUT'  | 'FILESYSTEM_INACTIVITY'  | 'TERMINAL_STREAM_CESSATION'  | 'TOOL_CALL_THRASHING'  | 'TOKEN_BURN_RUNAWAY';export interface StuckDetectionEvent {  detection_id: string;  task_id: string;  seat_id: string;  session_id: string;  detected_at: string;  trigger_signal: StuckTriggerSignal;  consecutive_occurrences: number;  diagnostic_context?: {    command?: string;    exit_code?: number;    last_output_snippet?: string;    seconds_inactive?: number;  };  action_taken: 'ALERTED' | 'PROCESS_PAUSED' | 'SESSION_ESCALATED' | 'SESSION_TERMINATED';}
+30. Antigravity Build Handoff Specification (AG_BUILD_HANDOFF.md)
+This section serves as the direct operational handoff document for Antigravity (AG). Antigravity must execute the implementation according to these specifications without reinterpreting corporate doctrine or modifying architecture definitions.
+30.1 Implementation Authority and Constraints
+Antigravity is authorized to construct the components specified in Waves 1 through 3. Antigravity must adhere strictly to these operational boundaries:
+No Doctrinal Modifications: Antigravity builds to the specifications detailed herein. If implementation reveals edge-case ambiguities or structural contradictions, Antigravity must pause execution and request a formal ruling from the Founder.
+Preserve Architectural Separation: Command must not be merged with Herdr into a single monolithic binary. Command operates the control plane; Herdr supervises the local execution floor.
+Fail-Closed Security: Preserve the loopback network boundary (127.0.0.1). Do not introduce endpoints that execute unsandboxed shell commands from browser inputs.
+Non-Destructive Workspaces: Never implement automated commands that execute git reset --hard or uncommitted file purges against untracked workspaces. All workspace recovery operations must preserve uncommitted changes onto recovery branches before removing worktrees.
+Stop Conditions: Antigravity must halt implementation and alert the Founder upon encountering:
+Any failure in the core state machine that permits a task to transition directly from EXECUTING to ACCEPTED without verification.
+Any unhandled host-level permission issue preventing deterministic creation of isolated Git worktrees.
+Any data-loss event within the Room event journal or SQLite state store during simulated crash recovery.
+30.2 Sequential Execution Order for Waves 1 Through 3
+Antigravity must implement the codebase in strict linear order:
+SQLite Schema and WAL Database Initialization (src/control-plane/task-store.ts).
+Task Lifecycle State Machine Transition Engine (src/control-plane/state-machine.ts).
+Git Worktree Manager and Lease Service (src/workspace/worktree-manager.ts).
+JSON Schemas and TypeScript Validation Services (src/schemas/*).
+Stuck Detector and Process Suspension Hooks (src/detector/stuck-detector.ts).
+Abstract Herdr Transport Client Implementation (src/transport/herdr-client.ts).
+Room Event Adapter and Periodic Snapshot Compactor (src/room/event-adapter.ts).
+Founder Cockpit Views and Lifecycle Dashboards (src/ui/*).
+Upon completing Step 8, Antigravity must run the full test suite, verify clean test output across all test gates, and hand off the build to Vision for independent acceptance testing.
+31. Vision Independent Acceptance Package and Test Matrix
+Vision serves as Starq’s independent verification authority. Following Antigravity's completion of build waves, Vision executes an adversarial acceptance test suite to validate system readiness before the codebase enters maintenance freeze.
+The acceptance package tests five core domain groups:
+State Machine Integrity (transition legality and boundary enforcement).
+Worktree Isolation (directory separation and lease management).
+Crash Recovery (uncommitted preservation and WAL durability).
+Verification Gating (candidate SHA evaluation and independence enforcement).
+Security Boundary Compliance (loopback interface binding and CSRF protections).
+31.1 Independent Verification Test Matrix
+Test Identifier
+Test Category
+Target Component
+Adversarial Test Scenario & Assertion
+Expected Result
+T-VAL-01
+State Machine
+state-machine.ts
+Attempt an illegal transition from EXECUTING directly to ACCEPTED without an intermediate BUILDER_COMPLETE or VERIFYING state.
+State machine rejects transition with IllegalTransitionError; task remains in EXECUTING; audit alert emitted.
+T-VAL-02
+State Machine
+state-machine.ts
+Attempt an unauthorized transition from VERIFYING to ACCEPTED initiated by the builder seat instead of the verifier.
+State machine rejects transition with UnauthorizedInitiatorError; task remains in VERIFYING.
+T-VAL-03
+Task Contract
+task-store.ts
+Ingest a Task Contract referencing a non-existent base commit SHA or violating JSON schema validation.
+Rejection at intake; task remains unpersisted; error returned to caller.
+T-VAL-04
+Worktree Isolation
+worktree-manager.ts
+Spawn two concurrent code-mutating tasks targeting the same repository; attempt to assign them to a shared directory.
+Worktree manager forces creation of separate .worktrees/<id> paths; validates independent Git indexes.
+T-VAL-05
+Lease Service
+lease-service.ts
+Simulate builder process hang; allow lease TTL (3,600s) to expire without heartbeat ping.
+Stuck detector transitions task to SUSPECTED_STUCK; workspace lease locked; non-destructive preservation triggered.
+T-VAL-06
+Recovery Engine
+recovery-service.ts
+Simulate dirty workspace crash containing uncommitted edits; trigger automated recovery.
+System stashes changes to orphan recovery branch; unmounts worktree; leaves zero uncommitted data loss.
+T-VAL-07
+Crash Durability
+task-store.ts
+Terminate Command server via ungraceful process kill during an active database transaction; restart server.
+SQLite WAL recovers transaction cleanly; zero database corruption detected; task states consistent.
+T-VAL-08
+Runtime Broker
+herdr-client.ts
+Terminate Herdr daemon during an active task session; restart Herdr; issue heartbeat from Command.
+Transport client reconnects over loopback; re-links running OS process groups; restores PTY buffers.
+T-VAL-09
+Provenance Audit
+event-adapter.ts
+Ingest 2,500 continuous Room events; trigger compaction snapshot; replay history from sequence 1.
+Compactor outputs valid milestone snapshot; cryptographic SHA-256 matches replay trace.
+T-VAL-10
+Verification Gate
+evidence-service.ts
+Builder seat emits completion artifact with candidate SHA failing tests; verifier issues verdict FAIL.
+Task transitions to REJECTED; candidate SHA blocked from trunk merge; findings routed to builder.
+T-VAL-11
+Independence Check
+evidence-service.ts
+Submit verification artifact where builder seat and verifier seat are backed by identical model on high-risk task.
+Control plane flags independence violation; refuses transition to ACCEPTED; requests strong verifier.
+T-VAL-12
+Verifier Isolation
+worktree-manager.ts
+Verifier seat evaluates candidate SHA in dirty builder worktree instead of fresh detached worktree.
+System rejects verification attempt; requires fresh checkout of candidate SHA via --detach.
+T-VAL-13
+Security Boundary
+server.ts
+Dispatch HTTP request to Command API with mismatched Host: evil.com header or invalid CSRF token.
+HTTP 403 Forbidden returned; request dropped; security alert logged.
+T-VAL-14
+Execution Boundary
+herdr runtime
+Attempt to launch unsanctioned binary (/bin/nc, /bin/rm -rf /) through Herdr session endpoint.
+Herdr launch eligibility rejects request; binary not in allowlist; process execution blocked.
+T-VAL-15
+Network Boundary
+server.ts
+Attempt to bind Command server or Herdr listener to public interface 0.0.0.0.
+Startup script aborts with configuration error; enforces loopback binding (127.0.0.1).
+31.2 Final Verification Verdict
+Upon executing all tests in the acceptance matrix, Vision renders a final formal verdict:
+Audit Parameter
+Verification Record
+Audit Evaluation Target
+Starq Command Core & Herdr Runtime Floor v1.0.0
+Target Commit SHA
+Determined upon completion of Wave 4 implementation
+Total Test Scenarios
+15 of 15 Scenarios Formally Evaluated
+Critical Faults Identified
+0 Blocking Faults
+Formal Audit Verdict
+STARQ COMMAND V1 — FREEZE READY
+Authorized Verification Signature
+Seat: Vision / Independent Verification Authority
+Once the STARQ COMMAND V1 — FREEZE READY verdict is rendered and signed by Vision, Starq Command is officially placed into maintenance mode. The engineering fleet will immediately redirect focus to the commercial delivery of StarqERP, Starq POS, Hoadha, and the broader commercial application ecosystem.
+Works cited
+unknown_url

@@ -38,7 +38,7 @@ function baseConfig(root) {
 }
 
 /** A simulated machine. */
-function world({ mutateConfig = null, env = {} } = {}) {
+function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'starq-owner-'));
   const cfgDoc = baseConfig(dir);
   if (mutateConfig) mutateConfig(cfgDoc);
@@ -51,8 +51,12 @@ function world({ mutateConfig = null, env = {} } = {}) {
   const behaviour = {};          // name -> 'exit' | 'stubborn'
   const health = {};             // name -> {ok, detail}
   const files = { [path.join(dir, 'manifest.json')]: JSON.stringify({ workspace_root: dir, agents: [{ id: 'a', startup_policy: 'FLOOR_LAUNCH' }] }) };
-  const calls = { spawn: [], shutdown: [], forceKill: [], broker: [] };
-  const brokerSim = { token: 'TOKEN', admission: 'OPEN', running: [], stopAgents: 'ok' };
+  const calls = { spawn: [], shutdown: [], forceKill: [], broker: [], gracefulStopContained: [], historicalCloseoutHandoff: [] };
+  const brokerSim = {
+    token: 'TOKEN', admission: 'OPEN', running: [], stopAgents: 'ok', openTerminals: 0,
+    pendingLaunches: 0, unresolvedLaunches: 0, orphanedSessions: 0, historicalUnverified: 0,
+    registryRecords: [],
+  };
   let nextPid = 1000;
   let clock = Date.parse('2026-10-03T10:00:00Z');
   let inspectFails = false;
@@ -80,6 +84,7 @@ function world({ mutateConfig = null, env = {} } = {}) {
       for (const pid of pids) m.set(pid, procs.has(pid) ? { pid, ...procs.get(pid) } : { pid, found: false });
       return m;
     },
+    inspectInfrastructure: async () => [],
     listListeners: async () => { if (listenersFail) throw new InspectionError('netstat failed'); return listeners.map((l) => ({ ...l })); },
     spawnChild: (exe, args, opts) => {
       const pid = ++nextPid;
@@ -102,7 +107,7 @@ function world({ mutateConfig = null, env = {} } = {}) {
       procs.set(pid, { found: true, name: 'node.exe', exe, created: iso() });
       pipes.set(pid, { instance: opts.env.STARQ_LC_INSTANCE, name });
       listeners.push({ port: Number(opts.env.STARQ_LC_PORT), pid });
-      return { pid, unref() {} };
+      return { pid, containment: name === 'herdrBroker' ? { kind: 'TEST_JOB' } : null, unref() {} };
     },
     proveInstance: async (child) => {
       const p = pipes.get(child.pid);
@@ -113,6 +118,16 @@ function world({ mutateConfig = null, env = {} } = {}) {
       if ((behaviour[child.name] ?? 'exit') === 'exit') kill(child.pid);
       return { ok: true, detail: 'ack' };
     },
+    gracefulStopContained: async (child, graceMs) => {
+      calls.gracefulStopContained.push({ name: child.name, graceMs, forced: false });
+      if ((behaviour[child.name] ?? 'exit') === 'exit') kill(child.pid);
+      const closed = !procs.has(child.pid);
+      return { owned: true, closed, active: closed ? 0 : 1, outcome: closed ? 'GONE' : 'STILL_RUNNING', forced: false };
+    },
+    historicalCloseoutHandoff: async (evidence) => {
+      calls.historicalCloseoutHandoff.push(evidence);
+      return historicalCloseoutHandoff ?? { applied: false, reason: 'no authorized exception fixture' };
+    },
     checkHealth: async (host, c) => health[c.name] ?? { ok: true, detail: 'ok' },
     readFile: (f) => {
       if (f.endsWith('tok.txt')) { if (!brokerSim.token) throw new Error('ENOENT'); return brokerSim.token; }
@@ -122,15 +137,26 @@ function world({ mutateConfig = null, env = {} } = {}) {
     brokerRequest: async (host, port, method, p, token) => {
       calls.broker.push(`${method} ${p}`);
       if (token !== brokerSim.token) return { status: 401, body: { code: 'LIFECYCLE_TOKEN_INVALID' } };
-      const view = () => ({ admission: brokerSim.admission, running: brokerSim.running, open_terminals: 0, drained: brokerSim.running.length === 0 });
+      const view = () => ({
+        admission: brokerSim.admission,
+        running: brokerSim.running,
+        open_terminals: brokerSim.openTerminals,
+        pending_launches: brokerSim.pendingLaunches,
+        unresolved_launches: brokerSim.unresolvedLaunches,
+        orphaned_sessions: brokerSim.orphanedSessions,
+        historical_closeout_unverified: brokerSim.historicalUnverified,
+        drained: brokerSim.running.length === 0 && brokerSim.openTerminals === 0 && brokerSim.pendingLaunches === 0
+          && brokerSim.unresolvedLaunches === 0 && brokerSim.orphanedSessions === 0 && brokerSim.historicalUnverified === 0,
+      });
       if (p === '/api/lifecycle') return { status: 200, body: view() };
       if (p === '/api/lifecycle/drain') { brokerSim.admission = 'DRAINING'; return { status: 200, body: view() }; }
+      if (p === '/api/agents') return { status: 200, body: { registry_records: brokerSim.registryRecords } };
       if (p === '/api/lifecycle/stop-agents' || p === '/api/lifecycle/force-stop-agents') {
         if (brokerSim.stopAgents === 'ok') brokerSim.running = [];
         return { status: 200, body: { complete: brokerSim.running.length === 0, after: view() } };
       }
       if (p === '/api/lifecycle/shutdown') {
-        if (brokerSim.admission !== 'DRAINING' || brokerSim.running.length) return { status: 409, body: { code: 'NOT_DRAINED' } };
+        if (brokerSim.admission !== 'DRAINING' || !view().drained) return { status: 409, body: { code: 'NOT_DRAINED' } };
         calls.shutdown.push('herdrBroker');
         const b = [...pipes].find(([, v]) => v.name === 'herdrBroker');
         if (b && (behaviour.herdrBroker ?? 'exit') === 'exit') kill(b[0]);
@@ -474,6 +500,66 @@ test('STOP sequence: drain -> agents -> verify drained -> ui, herdr, herdrBroker
   } finally { w.cleanup(); }
 });
 
+test('STOP: exact quiescent #15821 exception uses only the non-forced contained broker handoff', async () => {
+  const handoff = {
+    applied: true,
+    reason: 'exact six UNKNOWN historical rows',
+    decision: { roomSequence: 15821, eventId: 'founder-event', recordHash: 'founder-record' },
+    session_ids: ['legacy-1', 'legacy-2', 'legacy-3', 'legacy-4', 'legacy-5', 'legacy-6'],
+    historical_closeout: 'UNKNOWN',
+    broker_boot_id: 'old-broker-boot',
+  };
+  const w = world({ historicalCloseoutHandoff: handoff });
+  try {
+    await w.owner.start();
+    w.brokerSim.historicalUnverified = 6;
+    const r = await w.owner.stop();
+    assert.equal(r.result, RESULT.STOPPED);
+    assert.equal(w.calls.historicalCloseoutHandoff.length, 2, 'validate at drain and immediately before the broker signal');
+    assert.deepEqual(w.calls.gracefulStopContained, [{ name: 'herdrBroker', graceMs: 40, forced: false }]);
+    assert.deepEqual(w.calls.forceKill, []);
+    assert.deepEqual(w.calls.shutdown, ['ui', 'herdr', 'pm', 'building', 'data'], 'dependent services stop first; independent services wait until broker closeout');
+    const state = readState(w.statePath).state;
+    assert.ok(state.events.some((e) => e.event === 'stop.historical_closeout_exception_verified'));
+    assert.ok(state.events.some((e) => e.event === 'child.historical_closeout_exception_graceful_handoff'));
+    const handoffEvent = state.events.find((e) => e.event === 'child.historical_closeout_exception_graceful_handoff');
+    assert.equal(handoffEvent.historical_closeout, 'UNKNOWN');
+    assert.equal(handoffEvent.forced, false);
+    assert.equal(handoffEvent.command_child_job_closed, true);
+  } finally { w.cleanup(); }
+});
+
+test('STOP: exception handoff refuses when any other broker blocker remains, before stopping Command services', async () => {
+  const w = world({ historicalCloseoutHandoff: { applied: false, reason: 'pending launch remains' } });
+  try {
+    await w.owner.start();
+    w.brokerSim.historicalUnverified = 6;
+    w.brokerSim.pendingLaunches = 1;
+    const r = await w.owner.stop();
+    assert.equal(r.result, RESULT.STOP_INCOMPLETE);
+    assert.equal(r.phase, 'drain-verify');
+    assert.deepEqual(w.calls.shutdown, [], 'no Command service is stopped');
+    assert.deepEqual(w.calls.gracefulStopContained, []);
+    assert.deepEqual(w.calls.forceKill, []);
+  } finally { w.cleanup(); }
+});
+
+test('STOP: failed non-forced broker handoff does not escalate or stop independent services', async () => {
+  const w = world({ historicalCloseoutHandoff: { applied: true, decision: { roomSequence: 15821 }, session_ids: ['six'], broker_boot_id: 'old' } });
+  try {
+    await w.owner.start();
+    w.brokerSim.historicalUnverified = 6;
+    w.behaviour.herdrBroker = 'stubborn';
+    const r = await w.owner.stop();
+    assert.equal(r.result, RESULT.STOP_INCOMPLETE);
+    assert.equal(r.phase, 'control-plane');
+    assert.deepEqual(w.calls.shutdown, ['ui', 'herdr']);
+    assert.deepEqual(w.calls.gracefulStopContained.map((call) => [call.name, call.forced]), [['herdrBroker', false]]);
+    assert.deepEqual(w.calls.forceKill, []);
+    assert.ok(w.procs.size > 0, 'broker and independent Command services remain owned');
+  } finally { w.cleanup(); }
+});
+
 test('STOP: agents that do not exit gracefully halt shutdown; the broker stays up and DRAINING', async () => {
   const w = world();
   try {
@@ -541,9 +627,34 @@ test('STATUS: RUNNING only with full ownership, contract health, owned listeners
 test('STATUS: stopped with a foreign listener on a control-plane port is CONFLICT, not STOPPED', async () => {
   const w = world();
   try {
-    assert.equal((await w.owner.status()).overall, 'STOPPED');
+    const stopped = await w.owner.status();
+    assert.equal(stopped.overall, 'STOPPED');
+    assert.equal(stopped.health_preflight.overall, 'STOPPED');
+    assert.equal(stopped.health_preflight.idle_cooldown, true);
+    assert.ok(stopped.health_preflight.ports.every((p) => p.state === 'STOPPED'));
     w.listeners.push({ port: 5173, pid: 4444 });
-    assert.equal((await w.owner.status()).overall, 'CONFLICT');
+    const conflict = await w.owner.status();
+    assert.equal(conflict.overall, 'CONFLICT');
+    assert.equal(conflict.health_preflight.overall, 'DEGRADED');
+    assert.equal(conflict.health_preflight.idle_cooldown, false);
+    assert.equal(conflict.health_preflight.ports.find((p) => p.name === 'ui').state, 'DEGRADED');
+  } finally { w.cleanup(); }
+});
+
+test('STATUS: live listener PIDs are classified; declared infrastructure still blocks Command ports', async () => {
+  const w = world();
+  try {
+    const script = path.join(w.dir, 'agent-comms', 'scripts', 'room-watch-codex.mjs');
+    w.procs.set(4444, {
+      found: true, name: 'node.exe', exe: NODE, created: w.iso(),
+      cmd: `"${NODE}" "${script}" `,
+    });
+    w.listeners.push({ port: 5173, pid: 4444 });
+    const s = await w.owner.status();
+    assert.equal(s.overall, 'CONFLICT');
+    const ui = s.components.find((c) => c.name === 'ui');
+    assert.equal(ui.listener.classifications[0].id, 'room-watcher');
+    assert.ok(s.problems.some((p) => /non-owned/.test(p)));
   } finally { w.cleanup(); }
 });
 
@@ -610,6 +721,98 @@ test('STATUS: an uncommissioned standalone Herdr owner protocol never executes t
     const s = await owner.status();
     assert.equal(s.overall, 'RUNNING'); assert.equal(s.normal_profile.ready, false);
     assert.equal(s.normal_profile.standalone_herdr.observed.state, 'NOT_PROBED'); assert.deepEqual(probed, []);
+  } finally { w.cleanup(); }
+});
+
+test('START: delayed listener row for the launched pid becomes READY', async () => {
+  const w = world();
+  try {
+    let dataPid = null;
+    let dataPortPolls = 0;
+    const owner = createOwner({
+      configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false },
+      deps: {
+        ...w.deps,
+        pollMs: 0,
+        spawnChild: async (exe, args, opts) => {
+          const child = await w.deps.spawnChild(exe, args, opts);
+          if (opts.env.STARQ_LC_NAME === 'data') dataPid = child.pid;
+          return child;
+        },
+        listListeners: async () => {
+          const rows = await w.deps.listListeners();
+          if (dataPid == null) return rows;
+          dataPortPolls += 1;
+          if (dataPortPolls < 3) return rows.filter((r) => r.port !== PORTS.data);
+          return rows;
+        },
+      },
+    });
+    const r = await owner.start();
+    assert.equal(r.result, RESULT.READY);
+    assert.ok(dataPortPolls >= 3);
+    const st = readState(w.statePath).state;
+    assert.equal(st.children.find((c) => c.name === 'data').status, 'READY');
+  } finally { w.cleanup(); }
+});
+
+test('START: empty listener rows through the health deadline fail closed and roll back', async () => {
+  const w = world();
+  try {
+    let dataPid = null;
+    const owner = createOwner({
+      configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false },
+      deps: {
+        ...w.deps,
+        pollMs: 0,
+        spawnChild: async (exe, args, opts) => {
+          const child = await w.deps.spawnChild(exe, args, opts);
+          if (opts.env.STARQ_LC_NAME === 'data') dataPid = child.pid;
+          return child;
+        },
+        listListeners: async () => {
+          const rows = await w.deps.listListeners();
+          if (dataPid == null) return rows;
+          return rows.filter((r) => r.port !== PORTS.data);
+        },
+      },
+    });
+    const r = await owner.start();
+    assert.equal(r.result, RESULT.START_FAILED);
+    assert.equal(r.failure.component, 'data');
+    assert.match(r.failure.error, /port 5177 listener is not owned by pid \d+ \(none\)/);
+    assert.deepEqual(w.calls.forceKill, []);
+    const st = readState(w.statePath).state;
+    assert.equal(st.state, 'START_FAILED');
+    assert.ok(st.children.every((c) => c.status === 'EXITED'));
+  } finally { w.cleanup(); }
+});
+
+test('START: a foreign PID on the configured port is a hard failure', async () => {
+  const w = world();
+  try {
+    const owner = createOwner({
+      configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false },
+      deps: {
+        ...w.deps,
+        spawnChild: async (exe, args, opts) => {
+          const child = await w.deps.spawnChild(exe, args, opts);
+          if (opts.env.STARQ_LC_NAME === 'data') {
+            for (const row of w.listeners) {
+              if (row.port === PORTS.data && row.pid === child.pid) row.pid = 4242;
+            }
+          }
+          return child;
+        },
+      },
+    });
+    const r = await owner.start();
+    assert.equal(r.result, RESULT.START_FAILED);
+    assert.equal(r.failure.component, 'data');
+    assert.match(r.failure.error, /port 5177 listener is not owned by pid \d+ \(\?:5177<-pid 4242\)/);
+    assert.deepEqual(w.calls.forceKill, []);
+    const st = readState(w.statePath).state;
+    assert.equal(st.state, 'START_FAILED');
   } finally { w.cleanup(); }
 });
 

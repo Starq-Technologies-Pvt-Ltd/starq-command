@@ -43,6 +43,7 @@
         "path": "/api/building/health",
         "status": 200,
         "content_type": "application/json",
+        "json_equals": { "integrity": "SOURCE_READ" },
         "json_has": ["generated_at", "origin", "integrity"]
       }
     },

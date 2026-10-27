@@ -3,8 +3,14 @@
  * component's contract (lifecycle.config.json) asserts content type and body.
  * A 404, an HTML error page where JSON is expected, or a JSON body missing the
  * contracted fields is UNHEALTHY with the reason recorded.
+ *
+ * Building integrity is fail-closed: only SOURCE_READ is an acceptable
+ * healthy projection. UNAVAILABLE, DRIFT, missing/malformed fields, or a
+ * non-200 contract status are unhealthy (preflight DEGRADED when owned).
  */
 import http from 'node:http';
+
+export const ACCEPTABLE_BUILDING_INTEGRITY = 'SOURCE_READ';
 
 export function httpGet(host, port, pathname, { timeoutMs = 3000 } = {}) {
   return new Promise((resolve, reject) => {

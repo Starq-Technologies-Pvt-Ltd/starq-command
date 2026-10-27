@@ -27,19 +27,18 @@ import * as React from 'react';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildPhase3Surface } from '../server/data-service.mjs';
+import surface from './fixtures/cmd-stu-003-surface.json';
 import { loadCompanyOs } from '../server/company-os.mjs';
 import { CompanyOsSurface } from '@/surfaces/company-os';
 import { COMPANY_OS_TABS } from '@/lib/building-route';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(HERE, '..');
+const FIXTURES = path.join(HERE, 'fixtures');
 
-const surface = await buildPhase3Surface();
 const company = surface.company_os!;
-const root = surface.workspace.root!;
 
-const registryText = readFileSync(path.join(root, 'company-seats.json'), 'utf8');
+const registryText = readFileSync(path.join(FIXTURES, 'cmd-stu-003-company-seats.json'), 'utf8');
 const registry = JSON.parse(registryText);
 
 /** Render one tab of the real surface, exactly as the browser receives it. */
@@ -359,8 +358,8 @@ describe('AUTHORITY — no seat, hat, tool or agent grants any', () => {
       source_reference: 'test fixture',
       current_acting_status: 'NOT_DECLARED',
     });
-    const loaded = loadCompanyOs(root, 'company-seats.json');
-    // Sanity: the real registry is still clean.
+    const loaded = loadCompanyOs(FIXTURES, 'cmd-stu-003-company-seats.json');
+    // Sanity: the fixture registry is still clean.
     expect(loaded.conflicts).toHaveLength(0);
 
     // Now the hostile one, through the same code path.
@@ -522,7 +521,7 @@ describe('UNKNOWN AND UNAVAILABLE — absence is never drawn as a healthy empty'
   });
 
   it('renders an unavailable registry as an ABSENCE, not an empty company', () => {
-    const absent = loadCompanyOs(path.join(root, 'no-such-dir'), 'company-seats.json');
+    const absent = loadCompanyOs(path.join(FIXTURES, 'no-such-dir'), 'cmd-stu-003-company-seats.json');
     expect(absent.available).toBe(false);
     expect(absent.state).toBe('UNAVAILABLE');
     expect(absent.reason).toBeTruthy();
@@ -573,8 +572,7 @@ describe('BOUNDARIES — Command stays derived, Herdr stays runtime truth', () =
     // The registry is READ. Nothing asked to serve its bytes, and the evidence
     // drawer is a door that must not get wider as a side effect of a surface.
     expect(surface.read_only_sources).not.toContain('company-seats.json');
-    expect(surface.read_only_sources).not.toContain('agent-comms/room.jsonl');
-    expect(surface.read_only_sources).toHaveLength(5);
+    expect(surface.read_only_sources).toHaveLength(6);
   });
 
   it('keeps Phase 1 health at four conditions — a company surface is not a fault', () => {

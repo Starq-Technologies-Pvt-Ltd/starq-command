@@ -8,7 +8,7 @@ import {
 } from './historical-pm-snapshot.mjs';
 
 export const HOADHA_ROOT = '03_PROJECTS/hoadha/HOADHA_DEV_STUDIO';
-export const BUILDING_SOURCES = [
+export const HOADHA_DOCUMENT_SOURCES = [
   `${HOADHA_ROOT}/roadmap.machine.json`,
   ...[
     'TASK_RECONCILIATION.md',
@@ -18,14 +18,100 @@ export const BUILDING_SOURCES = [
     'DEV_STUDIO_HANDOVER.md',
     'COMMERCIAL_DISCOVERY_LOOPS.md',
   ].map((f) => `${HOADHA_ROOT}/${f}`),
-  ...['hoadha', 'hoadha-social', 'hoadha-concierge', 'starq-erp'].map(
-    (p) => `starqNexus/data/${p}-tasks.json`,
-  ),
+];
+// Nexus remains preserved in its original workspace.  Command consumes these
+// four files as an explicit, read-only company-board projection; it does not
+// redirect the Command workspace (and therefore Room/identity/PM paths) to
+// the historical root.
+export const NEXUS_TASK_SOURCES = [
+  'starqNexus/data/hoadha-tasks.json',
+  'starqNexus/data/hoadha-social-tasks.json',
+  'starqNexus/data/hoadha-concierge-tasks.json',
+  'starqNexus/data/starq-erp-tasks.json',
+];
+export const NEXUS_COMPANY_BOARD_ROOT = 'D:\\!starq\\starqNexus\\data';
+export const HOADHA_COMPANY_DOCUMENT_ROOT = 'D:\\!starq\\03_PROJECTS\\hoadha\\HOADHA_DEV_STUDIO';
+export const BUILDING_SOURCES = [
+  ...HOADHA_DOCUMENT_SOURCES,
+  ...NEXUS_TASK_SOURCES,
 ];
 const EXPECTED = [243, 56, 27];
+
+function isContained(child, parent) {
+  if (child === parent) return true;
+  return child.startsWith(parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`);
+}
+
+function readNexusTaskSource(workspaceRoot, source) {
+  const filename = path.basename(source);
+  if (!NEXUS_TASK_SOURCES.includes(source) || filename !== path.basename(source)) {
+    throw new Error('Source outside the declared Nexus board surface');
+  }
+
+  // Test fixtures and a future company-side migration may place a preserved
+  // copy beneath the Command root.  Production falls back only to the named,
+  // historical Nexus data directory -- never to STARQ_WORKSPACE.
+  const localRoot = workspaceRoot && path.resolve(workspaceRoot, 'starqNexus', 'data');
+  const sourceRoot = localRoot && fs.existsSync(localRoot) ? localRoot : NEXUS_COMPANY_BOARD_ROOT;
+  const rootReal = fs.realpathSync(sourceRoot);
+  const target = path.resolve(rootReal, filename);
+  if (!isContained(target, rootReal)) throw new Error('Nexus task source escapes its declared root');
+
+  const targetReal = fs.realpathSync(target);
+  if (!isContained(targetReal, rootReal)) {
+    throw new Error('Nexus task source escapes its declared root via a link');
+  }
+  const stat = fs.statSync(targetReal);
+  if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Source exceeds read boundary');
+  const text = fs.readFileSync(targetReal, 'utf8');
+  return {
+    source,
+    source_kind: 'NEXUS_COMPANY_BOARD',
+    source_root: rootReal,
+    state: 'AVAILABLE',
+    sha256: crypto.createHash('sha256').update(text).digest('hex'),
+    modified_at: stat.mtime.toISOString(),
+    content: text,
+    data: JSON.parse(text),
+  };
+}
+
+function readHoadhaDocumentSource(workspaceRoot, source) {
+  const filename = path.basename(source);
+  if (!HOADHA_DOCUMENT_SOURCES.includes(source) || source !== `${HOADHA_ROOT}/${filename}`) {
+    throw new Error('Source outside the declared Hoadha document surface');
+  }
+  const localRoot = workspaceRoot && path.resolve(workspaceRoot, HOADHA_ROOT);
+  const sourceRoot =
+    localRoot && fs.existsSync(localRoot) ? localRoot : HOADHA_COMPANY_DOCUMENT_ROOT;
+  const rootReal = fs.realpathSync(sourceRoot);
+  const target = path.resolve(rootReal, filename);
+  if (!isContained(target, rootReal)) throw new Error('Hoadha document escapes its declared root');
+
+  const targetReal = fs.realpathSync(target);
+  if (!isContained(targetReal, rootReal)) {
+    throw new Error('Hoadha document escapes its declared root via a link');
+  }
+  const stat = fs.statSync(targetReal);
+  if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('Source exceeds read boundary');
+  const text = fs.readFileSync(targetReal, 'utf8');
+  return {
+    source,
+    source_kind: 'HOADHA_COMPANY_DOCUMENT',
+    source_root: rootReal,
+    state: 'AVAILABLE',
+    sha256: crypto.createHash('sha256').update(text).digest('hex'),
+    modified_at: stat.mtime.toISOString(),
+    content: text,
+    data: source.endsWith('.json') ? JSON.parse(text) : text,
+  };
+}
+
 export function readBuildingSource(root, source) {
   try {
     if (!root) throw new Error('Workspace unresolved');
+    if (NEXUS_TASK_SOURCES.includes(source)) return readNexusTaskSource(root, source);
+    if (HOADHA_DOCUMENT_SOURCES.includes(source)) return readHoadhaDocumentSource(root, source);
     const guard = resolveReadOnlyTarget({
       workspaceRoot: root,
       requested: source,
@@ -42,6 +128,7 @@ export function readBuildingSource(root, source) {
       state: 'AVAILABLE',
       sha256: crypto.createHash('sha256').update(text).digest('hex'),
       modified_at: stat.mtime.toISOString(),
+      content: text,
       data,
     };
   } catch (error) {
@@ -204,7 +291,7 @@ export function buildBuilding(root, surface, options = {}) {
       board_snapshot: roadmap?.board_snapshot ?? null,
     },
     erp_tasks: rows(get('/starq-erp-tasks.json'), 'starqERP'),
-    sources: loaded.map(({ data, ...metadata }) => metadata),
+    sources: loaded.map(({ data, content, ...metadata }) => metadata),
     note: 'Source hashes prove the files read, not production deployment or independent acceptance. Command summarizes → Room proves.',
     historical_pm: options.historicalWorkspaceRoot
       ? loadHistoricalPmSnapshot({ workspaceRoot: options.historicalWorkspaceRoot })

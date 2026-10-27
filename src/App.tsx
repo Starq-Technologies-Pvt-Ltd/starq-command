@@ -2,6 +2,7 @@ import * as React from 'react';
 import { BuildingSurface } from '@/surfaces/building';
 import { PmBoardSurface } from '@/surfaces/pm-board';
 import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
+import { SevenNeedOverview } from '@/surfaces/seven-need-overview';
 import { parseBuildingRoute, routeHash, type BuildingRoute } from '@/lib/building-route';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Rail, RoomSwitcher, TopBar, type ViewId } from '@/components/shell';
@@ -267,6 +268,11 @@ export default function App() {
                 detail={error}
                 onRetry={() => void refresh()}
               />
+              {route.view === 'overview' ? (
+                <div className="px-4 pb-4" data-seven-need-without-core-projection="">
+                  <SevenNeedOverview surface={null} />
+                </div>
+              ) : null}
               {pmFallbackRoute ? (
                 <div className="px-4 pb-4" data-pm-without-core-projection="">
                   {pmFallbackRoute.kind === 'portfolio' ? (

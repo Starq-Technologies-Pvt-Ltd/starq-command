@@ -7,12 +7,10 @@
  * holds) is enforced by the service; this surface only reports what it says.
  */
 import * as React from 'react';
-import { Chip, GoLink, KV, Panel, SourceGap } from '@/components/console';
+import { Chip, KV, Panel, SourceGap } from '@/components/console';
 import { PmNav } from '@/surfaces/pm-portfolio';
 import { TaskForm, emptyTaskForm, taskToForm, type TaskFormValues } from '@/components/task-form';
-import { MilestonesPanel } from '@/components/milestones-panel';
 import {
-  PM_PRIORITIES,
   PM_STATUSES,
   pmCreateTask,
   pmIsScratch,
@@ -24,14 +22,12 @@ import {
   pmTask,
   pmTasks,
   pmUpdateTask,
-  pmWorkPackages,
   type PmHistoryRow,
   type PmProject,
   type PmResult,
   type PmStatus,
   type PmTask,
   type PmTaskDetail,
-  type PmWorkPackage,
 } from '@/lib/pm-client';
 
 function requestedTaskId(): string | null {
@@ -53,64 +49,6 @@ function storeActor(value: string) {
 
 function failureLines(res: Extract<PmResult<unknown>, { ok: false }>): string[] {
   return [`${res.code}: ${res.message}`, ...(res.errors ?? [])];
-}
-
-/** Count loaded task rows that carry a Room authorization or evidence ref. Missing fields are UNKNOWN, not zero. */
-export function boardRefCounts(rows: readonly PmTask[]): { authorization: string; evidence: string } {
-  let authorizationCount = 0;
-  let evidenceCount = 0;
-  let authorizationUnknown = false;
-  let evidenceUnknown = false;
-  for (const row of rows) {
-    if (!Object.prototype.hasOwnProperty.call(row, 'room_authorization_ref') || row.room_authorization_ref === undefined) {
-      authorizationUnknown = true;
-    } else if (row.room_authorization_ref) {
-      authorizationCount += 1;
-    }
-    if (!Object.prototype.hasOwnProperty.call(row, 'evidence_refs') || !Array.isArray(row.evidence_refs)) {
-      evidenceUnknown = true;
-    } else if (row.evidence_refs.length > 0) {
-      evidenceCount += 1;
-    }
-  }
-  return {
-    authorization: authorizationUnknown ? 'UNKNOWN' : String(authorizationCount),
-    evidence: evidenceUnknown ? 'UNKNOWN' : String(evidenceCount),
-  };
-}
-
-/** Count loaded task rows per declared status lane. Missing status data is UNKNOWN, never 0. */
-export function boardLaneCounts(rows: readonly PmTask[]): Record<PmStatus, string> {
-  const statusMissing = rows.some((row) => {
-    if (!Object.prototype.hasOwnProperty.call(row, 'status')) return true;
-    const status = row.status as unknown;
-    return status == null || status === '' || status === 'UNKNOWN';
-  });
-  const counts = {} as Record<PmStatus, string>;
-  for (const status of PM_STATUSES) {
-    counts[status] = statusMissing
-      ? 'UNKNOWN'
-      : String(rows.filter((row) => row.status === status).length);
-  }
-  return counts;
-}
-
-const PRIORITY_RANK = new Map(PM_PRIORITIES.map((priority, index) => [priority, index]));
-
-function displayedPriority(value: unknown): string {
-  return typeof value === 'string' && PRIORITY_RANK.has(value as typeof PM_PRIORITIES[number])
-    ? value
-    : 'UNKNOWN';
-}
-
-/** Order loaded lane rows by P0–P3, missing priority last, then by id. */
-export function sortLaneRows(rows: readonly PmTask[]): PmTask[] {
-  return [...rows].sort((a, b) => {
-    const aRank = PRIORITY_RANK.get(a.priority as typeof PM_PRIORITIES[number]) ?? PM_PRIORITIES.length;
-    const bRank = PRIORITY_RANK.get(b.priority as typeof PM_PRIORITIES[number]) ?? PM_PRIORITIES.length;
-    if (aRank !== bRank) return aRank - bRank;
-    return String(a.id).localeCompare(String(b.id));
-  });
 }
 
 function SyncChip({ row }: { row: PmHistoryRow }) {
@@ -220,11 +158,23 @@ function TaskDetailPanel({
   );
 }
 
-export function PmBoardSurface({ projectId }: { projectId: string }) {
+type CanonicalBoardContext = {
+  label: string;
+  count: number | null;
+  state: string;
+  href: string;
+};
+
+export function PmBoardSurface({
+  projectId,
+  canonicalBoard,
+}: {
+  projectId: string;
+  canonicalBoard?: CanonicalBoardContext;
+}) {
   const [project, setProject] = React.useState<PmProject | null>(null);
   const [tasks, setTasks] = React.useState<PmTask[] | null>(null);
   const [handles, setHandles] = React.useState<string[]>([]);
-  const [workPackages, setWorkPackages] = React.useState<PmWorkPackage[]>([]);
   const [problem, setProblem] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<PmTaskDetail | null>(null);
@@ -238,24 +188,13 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
   const setActor = (value: string) => { setActorState(value); storeActor(value); };
 
-  const failLoad = (message: string) => {
-    setProblem(message);
-    setTasks(null);
-    setProject(null);
-    setWorkPackages([]);
-    setSelectedId(null);
-    setDetail(null);
-    setMode('none');
-  };
-
   const load = React.useCallback(async (keepSelected?: string | null) => {
-    const [m, p, t, wp] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId), pmWorkPackages(projectId)]);
-    if (!m.ok) { failLoad(m.message); return; }
-    if (!p.ok) { failLoad(p.message); return; }
-    if (!t.ok) { failLoad(t.message); return; }
+    const [m, p, t] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId)]);
+    if (!m.ok) { setProblem(m.message); return; }
+    if (!p.ok) { setProblem(p.message); return; }
+    if (!t.ok) { setProblem(t.message); return; }
     setProblem(null);
     setHandles(m.data.handles);
-    setWorkPackages(wp.ok ? wp.data.work_packages : []);
     setProject(p.data.projects.find((x) => x.id === projectId) ?? null);
     setTasks(t.data.tasks);
     const id = keepSelected && t.data.tasks.some((task) => task.id === keepSelected) ? keepSelected : null;
@@ -310,7 +249,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       project_id: projectId, actor, title: v.title, description: v.description, priority: v.priority,
       owner: v.owner, verifier: v.verifier, notes: v.notes, depends_on: v.dependsOn,
     };
-    if (v.workPackageId) body.work_package_id = v.workPackageId;
     if (v.authSequence) body.room_authorization_ref = { sequence: Number(v.authSequence), eventId: v.authEventId, purpose: v.authPurpose };
     await finish(await pmCreateTask(body), 'Task created and saved. Room post queued.');
   };
@@ -327,8 +265,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     if (v.verifier !== t.verifier) body.verifier = v.verifier;
     if (v.notes !== t.notes) body.notes = v.notes;
     if (JSON.stringify(v.dependsOn) !== JSON.stringify(t.depends_on)) body.depends_on = v.dependsOn;
-    const previousWp = t.work_package_id ?? '';
-    if (v.workPackageId !== previousWp) body.work_package_id = v.workPackageId || null;
     await finish(await pmUpdateTask(t.id, body), 'Changes saved.');
   };
 
@@ -377,8 +313,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const visible = tasks.filter((t) => !q || `${t.id} ${t.title} ${t.owner} ${t.verifier} ${t.priority}`.toLowerCase().includes(q));
   const pending = tasks.reduce((n, t) => n + t.pending_room_sync, 0);
   const held = project.hold.state === 'ON_HOLD' || project.hold.state === 'UNKNOWN';
-  const refs = boardRefCounts(tasks);
-  const lanes = boardLaneCounts(tasks);
 
   return (
     <section className="command-stack" aria-label={`${project.name} project board`} data-pm="board" data-project={projectId}>
@@ -393,36 +327,28 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
         )}
       >
         <PmNav current={projectId as 'command' | 'erp' | 'hoadha'} />
-        <p className="mx-3 mb-2 text-xs" data-board-backlink>
-          <GoLink href="#studio/projects">Back to portfolio</GoLink>
-        </p>
-        <p
-          className="mx-3 mb-2 text-xs"
-          data-board-evidence
-          data-board-auth-count={refs.authorization}
-          data-board-evidence-count={refs.evidence}
-          role="status"
-        >
-          Room authorization refs: {refs.authorization} · Evidence refs: {refs.evidence}
-        </p>
-        <p
-          className="mx-3 mb-2 text-xs"
-          data-board-lane-counts
-          role="status"
-        >
-          {PM_STATUSES.map((status) => (
-            <span key={status} data-lane-count={status} className="mr-3 inline-block">
-              {lane(status)}: {lanes[status]}
-            </span>
-          ))}
-        </p>
         {held ? (
           <div role="note" className="mx-3 mb-2 rounded border border-border p-2 text-xs">
             <Chip value={project.hold.state} />{' '}
             Tasks can be planned (backlog, ready, blocked, Founder gate) but cannot progress past READY until the Founder lifts the hold. Source: {project.hold.source}.
           </div>
         ) : null}
-        {project.source_gap && tasks.length === 0 ? (
+        {canonicalBoard && tasks.length === 0 ? (
+          <div className="mx-3 mb-2" role="note" data-canonical-board-bridge={projectId}>
+            <Panel title="Canonical board continuity" count={canonicalBoard.state}>
+              <div className="body text-2xs text-muted-foreground">
+                <p>
+                  {canonicalBoard.label}: {canonicalBoard.count ?? 'UNKNOWN'} record(s) are available through
+                  {' '}<a className="underline" href={canonicalBoard.href}>the read-only project projection</a>.
+                </p>
+                <p className="mt-1">
+                  This human-operated PM board has no Command-native tasks yet. Canonical Nexus records
+                  were not copied or converted into mutable PM tasks.
+                </p>
+              </div>
+            </Panel>
+          </div>
+        ) : project.source_gap && tasks.length === 0 ? (
           <div className="mx-3 mb-2"><SourceGap reason={`${project.name}: no tasks recorded yet — source gap declared.`} detail={project.source_gap} /></div>
         ) : null}
         {pending > 0 ? (
@@ -452,32 +378,31 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
         {mode === 'create' ? (
           <div className="border-b border-border">
-            <TaskForm mode="create" initial={emptyTaskForm()} handles={handles} workPackages={workPackages} busy={busy} errors={errors} onSubmit={(v) => void create(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
+            <TaskForm mode="create" initial={emptyTaskForm()} handles={handles} busy={busy} errors={errors} onSubmit={(v) => void create(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
           </div>
         ) : null}
 
         <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3 2xl:grid-cols-5">
           {PM_STATUSES.map((s) => {
-            const col = sortLaneRows(visible.filter((t) => t.status === s));
+            const col = visible.filter((t) => t.status === s);
             return (
               <section key={s} className="min-w-0 rounded border border-border bg-background/40" aria-label={`${lane(s)} lane`} data-lane={s}>
                 <header className="flex items-center justify-between border-b border-border bg-card px-2.5 py-2">
                   <h3 className="font-mono text-[10px] font-semibold tracking-wide">{lane(s)}</h3>
-                  <span className="chip" data-tone="muted" data-lane-count={s}>{lanes[s]}</span>
+                  <span className="chip" data-tone="muted">{col.length}</span>
                 </header>
                 <ul className="grid max-h-[50vh] content-start gap-1.5 overflow-y-auto p-1.5">
                   {col.map((t) => (
-                    <li key={t.id} data-task={t.id} data-priority={displayedPriority(t.priority)}>
+                    <li key={t.id}>
                       <button
                         type="button"
-                        data-task={t.id}
                         aria-pressed={selectedId === t.id}
                         onClick={() => void select(t.id)}
                         className={`w-full rounded border p-2 text-left ${selectedId === t.id ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]' : 'border-border bg-card'}`}
                       >
                         <span className="flex items-start justify-between gap-1">
                           <span className="font-mono text-[10px] text-[hsl(var(--room))]">{t.id}</span>
-                          <span className="text-[9px] text-muted-foreground">{displayedPriority(t.priority)}</span>
+                          <span className="text-[9px] text-muted-foreground">{t.priority}</span>
                         </span>
                         <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
                         <span className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
@@ -494,12 +419,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
         </div>
       </Panel>
 
-      <MilestonesPanel projectId={projectId} actor={actor} />
-
       {detail && selectedId ? (
         mode === 'edit' ? (
           <Panel title={`Edit ${detail.task.id}`}>
-            <TaskForm mode="edit" initial={taskToForm(detail.task)} handles={handles} workPackages={workPackages} busy={busy} errors={errors} onSubmit={(v) => void edit(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
+            <TaskForm mode="edit" initial={taskToForm(detail.task)} handles={handles} busy={busy} errors={errors} onSubmit={(v) => void edit(v)} onCancel={() => { setMode('none'); setErrors([]); }} />
           </Panel>
         ) : (
           <>

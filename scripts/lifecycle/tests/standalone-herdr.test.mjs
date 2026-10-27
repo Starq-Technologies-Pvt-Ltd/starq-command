@@ -32,7 +32,9 @@ const record = (over = {}) => ({
   schema: 'starq.standalone-herdr.owner/v1', decided_by: 'Founder', decision_id: 'MOCK_ONLY', decided_at: '2026-10-03T00:00:00Z',
   owner_protocol: 'OPERATOR_INTERACTIVE', command_actuation: 'NONE', executable: ENTRY.executable, storage_root: ENTRY.storage_root,
   executable_sha256: hex(BIN), builder: 'builder', verifier: 'independent', verified_at: '2026-10-03T01:00:00Z',
-  evidence: [{ path: 'D:\\fake\\evidence.json', sha256: hex(EVIDENCE) }], ...over,
+  evidence: [{ path: 'D:\\fake\\evidence.json', sha256: hex(EVIDENCE) }],
+  independent_verification: { verifier: 'independent', builder: 'builder', executable_hash_recomputed: hex(BIN) },
+  ...over,
 });
 const read = (p) => (p === ENTRY.executable ? BIN : p === 'D:\\fake\\evidence.json' ? EVIDENCE : (() => { throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' }); })());
 
@@ -64,6 +66,18 @@ test('G-PROFILE: missing record, self-verification, actuation, path mismatch, ha
     { executable: 'C:\\other\\herdr.exe' }, { storage_root: 'C:\\other' }, { executable_sha256: hex(Buffer.from('drift')) },
     { evidence: [] }, { evidence: [{ path: 'D:\\fake\\evidence.json', sha256: hex(Buffer.from('drift')) }] }, { schema: 'v0' },
   ]) assert.equal(evaluateStandaloneHerdrOwner(record(bad), ENTRY, { read }).resolved, false, JSON.stringify(bad));
+});
+
+test('G-PROFILE: pending pin verification or a verification hash bound to a previous pin refuses', () => {
+  assert.match(evaluateStandaloneHerdrOwner(record({
+    pin_update: { to_sha256: hex(BIN), pending_independent_verification: '@vision' },
+  }), ENTRY, { read }).detail, /pending independent verification/);
+  assert.match(evaluateStandaloneHerdrOwner(record({
+    pin_update: { to_sha256: hex(Buffer.from('other-pin')) },
+  }), ENTRY, { read }).detail, /not bound to executable_sha256/);
+  assert.match(evaluateStandaloneHerdrOwner(record({
+    independent_verification: { verifier: 'independent', builder: 'builder', executable_hash_recomputed: hex(Buffer.from('old-0.9.3')) },
+  }), ENTRY, { read }).detail, /not bound to the current executable pin/);
 });
 
 test('G-PROFILE: an absent record in the real workspace is unresolved, never assumed', () => {

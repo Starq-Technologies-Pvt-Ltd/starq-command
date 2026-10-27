@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import * as React from 'react';
 import { AttentionSurface } from '@/surfaces/attention';
 import { buildPhase3Surface } from '../server/data-service.mjs';
+import { buildFloor } from '../server/floor.mjs';
 import { readFileSync } from 'node:fs';
 import type { CommandSurface } from '@/lib/contracts';
 
@@ -278,14 +279,33 @@ describe('PROOF 7 — declared blockers render from declared fields only', () =>
   });
 
   it('renders no stage note and no SERP ref — the Phase 4 floor is not duplicated', () => {
-    const fam = surface.process_truth.process_families?.[0]!;
-    const withNote = fam.stages.find((s) => Boolean(s.note));
-    if (withNote?.note) {
-      // If a note were rendered here it would appear verbatim. Assert on a
-      // fragment only, so this cannot false-positive on a headline.
-      const fragment = withNote.note.slice(0, 40);
-      expect(text).not.toContain(decode(fragment));
-    }
+    const note = 'FIXTURE-PHASE4-STAGE-NOTE-MUST-NOT-APPEAR-ON-ATTENTION';
+    const cloned: any = structuredClone(surface);
+    const families = cloned.process_truth.process_families ?? [];
+    cloned.process_truth = {
+      ...cloned.process_truth,
+      process_families: families.length
+        ? families.map((f: any, i: number) =>
+            i === 0
+              ? {
+                  ...f,
+                  stages: [
+                    ...(f.stages ?? []),
+                    { stage: 'FixtureNote', note, blocked_by: null },
+                  ],
+                }
+              : f,
+          )
+        : [{ id: 'FIX', stages: [{ stage: 'FixtureNote', note, blocked_by: null }] }],
+    };
+    const fixtureText = decode(
+      renderToStaticMarkup(React.createElement(AttentionSurface, { surface: cloned })).replace(
+        /<[^>]+>/g,
+        ' ',
+      ),
+    );
+    expect(fixtureText).not.toContain(note);
+    expect(fixtureText).not.toContain('SERP-FIXTURE-SHOULD-NOT-RENDER');
   });
 });
 
@@ -318,12 +338,38 @@ describe('PROOF 9 — the STALE header is honest context, not an attention item'
 
 describe('PROOF D — declared conflicts render and are never merged', () => {
   it('renders one row per declared truth disagreement', () => {
-    const declared = (surface.floor?.constraints ?? []).filter(
-      (c) => c.kind === 'TRUTH_DISAGREEMENT',
+    const cloned: any = structuredClone(surface);
+    cloned.execution_truth = {
+      ...cloned.execution_truth,
+      agents: [
+        ...(cloned.execution_truth.agents ?? []),
+        {
+          handle: 'fixture-disagree',
+          current_state: 'active',
+          current_task: 'FIXTURE-EXEC-TASK',
+          counts_as_active_staff: false,
+          staff_classification: 'UNKNOWN',
+        },
+      ],
+    };
+    cloned.staff_state = {
+      ...cloned.staff_state,
+      byHandle: {
+        ...(cloned.staff_state?.byHandle ?? {}),
+        'fixture-disagree': { duty_current_task: 'FIXTURE-DUTY-TASK', duty_state: 'assigned' },
+      },
+    };
+    cloned.floor = buildFloor({ surface: cloned });
+    const declared = (cloned.floor?.constraints ?? []).filter(
+      (c: { kind: string }) => c.kind === 'TRUTH_DISAGREEMENT',
     );
     expect(declared.length).toBeGreaterThan(0);
-    const rows = marked(html, 'data-attention-disagreement');
-    expect(rows.sort()).toEqual(declared.map((c) => c.subject).sort());
+    const fixtureHtml = renderToStaticMarkup(
+      React.createElement(AttentionSurface, { surface: cloned }),
+    );
+    const rows = marked(fixtureHtml, 'data-attention-disagreement');
+    expect(rows.sort()).toEqual(declared.map((c: { subject: string }) => c.subject).sort());
+    expect(rows).toContain('fixture-disagree');
   });
 
   it('names the canonical source on every rendered conflict row', () => {

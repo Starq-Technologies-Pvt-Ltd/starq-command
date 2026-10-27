@@ -124,7 +124,7 @@ export function resolveProjectBoardRecords(
     return {
       records: building.erp_tasks,
       projectLabel: erp?.name ?? 'starqERP',
-      reason: building.erp_tasks === null ? 'Canonical ERP task records unavailable.' : null,
+      reason: building.erp_tasks === null ? 'Historical Nexus ERP task records unavailable in the Building projection (HISTORICAL_SNAPSHOT; not a Command board).' : null,
     };
   }
 
@@ -133,7 +133,7 @@ export function resolveProjectBoardRecords(
     return {
       records,
       projectLabel: building.projects.find((project) => project.id === 'hoadha')?.name ?? 'Hoadha',
-      reason: records === null ? 'Canonical live Hoadha boards unavailable.' : null,
+      reason: records === null ? 'Historical Nexus Hoadha board records unavailable in the Building projection (HISTORICAL_SNAPSHOT; not a Command board).' : null,
     };
   }
 
@@ -281,6 +281,7 @@ export function ProjectBoard({
         <span className="chip" data-tone="muted">{filtered.length} / {all.length}</span>
         <span className="spacer" />
         <Chip value="READ ONLY" />
+        <Chip value="HISTORICAL_SNAPSHOT" />
       </div>
 
       <div className="flex flex-wrap items-end gap-2 border-b border-border p-2.5">

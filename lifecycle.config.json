@@ -44,6 +44,9 @@
         "path": "/api/building/health",
         "status": 200,
         "content_type": "application/json",
+        "json_equals": {
+          "integrity": "SOURCE_READ"
+        },
         "json_has": [
           "generated_at",
           "origin",
@@ -222,7 +225,7 @@
         "canonical_owner": "the Founder, operating standalone Herdr interactively; not the Command lifecycle",
         "owner_protocol": "OPERATOR_INTERACTIVE",
         "command_actuation": "NONE",
-        "executable": "C:\\Users\\Ali Musthaq\\.herdr\\packages\\standalone\\releases\\0.9.3-x86_64-pc-windows-msvc\\herdr.exe",
+        "executable": "C:\\Users\\Ali Musthaq\\.herdr\\packages\\standalone\\releases\\0.9.5-x86_64-pc-windows-msvc\\herdr.exe",
         "storage_root": "C:\\Users\\Ali Musthaq\\AppData\\Roaming\\herdr",
         "storage_basis": "OBSERVED_DEFAULT: no HERDR_* override observed on 03 Oct 2026; Rule0 residency undecided",
         "legacy_config_evidence": "D:\\!starq\\herdr\\config\\config.toml (read-only history; not adopted as current config)",
@@ -237,6 +240,7 @@
       "wsl_seats": "EXPLICITLY_UNAVAILABLE",
       "normal_founder_profile": false,
       "acceptance": "OFFLINE_ONLY; real disposable test requires separate authorization; whole-stack acceptance pending"
-    }
+    },
+    "tier": "development"
   }
 }

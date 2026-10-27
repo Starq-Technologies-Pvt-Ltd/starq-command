@@ -72,7 +72,7 @@ export function SourcePanel({
                       data-tone={s.state === 'AVAILABLE' ? 'ok' : 'unknown'}
                     >
                       <a
-                        href={`/api/raw?path=${encodeURIComponent(s.source)}`}
+                        href={`/api/building/raw?path=${encodeURIComponent(s.source)}`}
                         target="_blank"
                         rel="noreferrer"
                         onClick={(e) => e.stopPropagation()}

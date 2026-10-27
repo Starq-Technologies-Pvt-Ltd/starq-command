@@ -27,6 +27,7 @@ import { AboutMethod, PeerWorkHeader } from '@/components/work-area';
 import { StaffGlance } from '@/components/staff-glance';
 import { ActivityPanel, CapacityPanel, StaffSurface } from '@/surfaces/staff';
 import { PmPortfolioSnapshot } from '@/surfaces/pm-portfolio';
+import { SevenNeedOverview } from '@/surfaces/seven-need-overview';
 
 /**
  * Executive company snapshot: what is happening now.
@@ -80,6 +81,7 @@ export function ExecutiveOverview({ surface }: { surface: CommandSurface }) {
           reason="Building projection unavailable."
           detail="Building-dependent room, process, and health fields remain UNKNOWN. The PM-backed project register is shown independently below."
         />
+        <SevenNeedOverview surface={surface} />
         <PmPortfolioSnapshot />
       </div>
     );
@@ -177,6 +179,8 @@ export function ExecutiveOverview({ surface }: { surface: CommandSurface }) {
           </span>
         </div>
       </div>
+
+      <SevenNeedOverview surface={surface} />
 
       <div className="executive-grid">
         {/*

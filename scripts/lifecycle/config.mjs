@@ -12,6 +12,8 @@ import path from 'node:path';
 
 export const CONFIG_SCHEMA = 'starq.command.lifecycle.config/v1';
 export const REQUIRED_COMPONENTS = Object.freeze(['data', 'building', 'herdrBroker', 'herdr', 'pm', 'ui']);
+export const DEVELOPMENT_TIER = 'development';
+export const RELEASE_TIER = 'release';
 export const OBSERVATION_PROFILE = 'command-observation-only/v1';
 export const OBSERVATION_COMPONENTS = Object.freeze(['data', 'building', 'ui']);
 const OBSERVATION_COMPONENT_PINS = Object.freeze({
@@ -21,7 +23,7 @@ const OBSERVATION_COMPONENT_PINS = Object.freeze({
   },
   building: {
     port: 5178, kind: 'module', entry: '00_STARQ_HQ\\operations\\starq-command\\server\\building-service.mjs', cwd: '00_STARQ_HQ\\operations\\starq-command',
-    health: { path: '/api/building/health', status: 200, content_type: 'application/json', json_has: ['generated_at', 'origin', 'integrity'] },
+    health: { path: '/api/building/health', status: 200, content_type: 'application/json', json_equals: { integrity: 'SOURCE_READ' }, json_has: ['generated_at', 'origin', 'integrity'] },
   },
   ui: {
     port: 5173, kind: 'vite', entry: '00_STARQ_HQ\\operations\\starq-command\\node_modules\\vite\\dist\\node\\index.js', cwd: '00_STARQ_HQ\\operations\\starq-command\\observation', vite_config: '00_STARQ_HQ\\operations\\starq-command\\observation\\vite.config.ts',

@@ -53,6 +53,49 @@ function safeTempFixturePath(candidate, protectedPaths) {
 }
 
 /**
+ * Prove an exact raw byte prefix of the same Room path that readRoomSnapshot would read for
+ * this root. Path validation is identical to readRoomSnapshot's default branch.
+ */
+export function readRoomRawPrefix(root = workspace.root, { recordCount, expectedSha16 } = {}) {
+  if (!root) return { proven: false, byteLength: null, reason: 'Workspace unresolved' };
+  if (!reader?.readRoomRawPrefix) return { proven: false, byteLength: null, reason: `Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.` };
+  const expectedPath = abs(root, CANONICAL.roomLedger);
+  const protectedPaths = workspace.root ? [abs(workspace.root, CANONICAL.roomLedger)] : [];
+  if (workspace.root && samePath(root, workspace.root)) {
+    if (!samePath(reader.ROOM_PATH, expectedPath)) {
+      return { proven: false, byteLength: null, reason: 'Configured Room reader path does not match the canonical workspace ledger.' };
+    }
+    return reader.readRoomRawPrefix({ recordCount, expectedSha16 });
+  }
+  if (!safeTempFixturePath(expectedPath, protectedPaths)) {
+    return { proven: false, byteLength: null, reason: 'Non-canonical Room path refused; only a direct temp fixture is supported.' };
+  }
+  return reader.readRoomRawPrefix({ roomPath: expectedPath, recordCount, expectedSha16 });
+}
+
+/**
+ * Read the Room once for this root and return records, digests and the raw-prefix proof derived
+ * from the same bytes. Path validation is identical to readRoomSnapshot / readRoomRawPrefix.
+ */
+export function readRoomBoundSnapshot(root = workspace.root, { recordCount, expectedSha16 } = {}) {
+  const refused = (reason) => ({ ...unavailable(reason), rawPrefix: { proven: false, byteLength: null, reason } });
+  if (!root) return refused('Workspace unresolved');
+  if (!reader?.readRoomBoundSnapshot) return refused(`Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.`);
+  const expectedPath = abs(root, CANONICAL.roomLedger);
+  const protectedPaths = workspace.root ? [abs(workspace.root, CANONICAL.roomLedger)] : [];
+  if (workspace.root && samePath(root, workspace.root)) {
+    if (!samePath(reader.ROOM_PATH, expectedPath)) {
+      return refused('Configured Room reader path does not match the canonical workspace ledger.');
+    }
+    return reader.readRoomBoundSnapshot({ recordCount, expectedSha16 });
+  }
+  if (!safeTempFixturePath(expectedPath, protectedPaths)) {
+    return refused('Non-canonical Room path refused; only a direct temp fixture is supported.');
+  }
+  return reader.readRoomBoundSnapshot({ roomPath: expectedPath, recordCount, expectedSha16 });
+}
+
+/**
  * Read one snapshot. An explicit non-workspace root is used by fixture-backed
  * unit tests; a production caller cannot redirect the configured Room path.
  */

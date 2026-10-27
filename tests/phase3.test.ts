@@ -81,6 +81,53 @@ const floorServer = readFileSync(path.join(SERVER, 'floor.mjs'), 'utf8');
 const surface = await buildPhase3Surface();
 const floor = surface.floor!;
 
+/** Isolated floor that always exercises contracts the live roster may not currently hit. */
+function fixtureFloor() {
+  return buildFloor({
+    surface: {
+      execution_truth: {
+        state: 'OK',
+        agents: [
+          {
+            handle: 'fixture-active-nonstaff',
+            current_state: 'active',
+            current_task: 'FIXTURE-EXEC-TASK',
+            current_assignment: 'SERP-FIXTURE-1',
+            current_task_confidence: 'recorded',
+            current_task_source: 'activity.json',
+            current_assignment_confidence: 'recorded',
+            current_assignment_source: 'activity.json',
+            counts_as_active_staff: false,
+            staff_classification: 'UNKNOWN',
+            mentioned_task_count: 7,
+          },
+          {
+            handle: 'fixture-idle-staff',
+            current_state: 'idle',
+            current_task: 'FIXTURE-IDLE-TASK',
+            counts_as_active_staff: true,
+            staff_classification: 'STAFF',
+            mentioned_task_count: 0,
+          },
+        ],
+        activity_events: [],
+        conflicts: [],
+      },
+      identities: { byHandle: {} },
+      staff_state: {
+        byHandle: {
+          'fixture-active-nonstaff': {
+            duty_current_task: 'FIXTURE-DUTY-TASK',
+            duty_state: 'assigned',
+          },
+        },
+      },
+      sessions: { byHandle: {} },
+      herdr_manifest: { available: true, bySeatId: {}, seats: [] },
+    },
+  });
+}
+
 describe('Phase 3 — the floor assembles from live canonical source', () => {
   it('carries the Phase 3 payload on the surface', () => {
     expect(surface.phase3?.name).toBe('Dev Studio Floor');
@@ -231,16 +278,22 @@ describe('Phase 3 — RETIRED never renders as active staff', () => {
         expect(e.is_active_staff).toBe(false);
       }
     }
-    const states = new Set(floor.roster.entries.map((e) => e.current_state));
-    const activeExec = floor.roster.entries.filter((e) => e.current_state === 'active');
-    expect(activeExec.length).toBeGreaterThan(0);
+    const fx = fixtureFloor();
+    const activeNonStaff = fx.roster.entries.find((e) => e.handle === 'fixture-active-nonstaff')!;
+    expect(activeNonStaff.current_state).toBe('active');
+    expect(activeNonStaff.counts_as_active_staff).toBe(false);
+    expect(activeNonStaff.is_active_staff).toBe(false);
+    const states = new Set(fx.roster.entries.map((e) => e.current_state));
+    expect(fx.roster.entries.filter((e) => e.current_state === 'active').length).toBeGreaterThan(0);
     expect(states.size).toBeGreaterThan(1);
   });
 });
 
 describe('Phase 3 — RULING 2: the two current-task truths are never merged', () => {
   it('carries both sides with explicit provenance when both exist', () => {
-    const both = floor.roster.entries.filter((e) => e.execution_current_task && e.duty_current_task);
+    const both = fixtureFloor().roster.entries.filter(
+      (e) => e.execution_current_task && e.duty_current_task,
+    );
     expect(both.length).toBeGreaterThan(0);
     for (const e of both) {
       expect(e.truth_disagreement).toBeTruthy();
@@ -250,7 +303,7 @@ describe('Phase 3 — RULING 2: the two current-task truths are never merged', (
   });
 
   it('reports the disagreement without adjudicating it', () => {
-    const differing = floor.roster.entries.filter(
+    const differing = fixtureFloor().roster.entries.filter(
       (e) => e.truth_disagreement?.values_differ === true,
     );
     expect(differing.length).toBeGreaterThan(0);

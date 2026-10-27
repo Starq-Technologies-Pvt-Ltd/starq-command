@@ -108,7 +108,7 @@ describe('existing activity producer, isolated workspace only (#9538)', () => {
     const original=fs.readFileSync(room,'utf8'); const previous=JSON.parse(original.trim().split(/\r?\n/).at(-1)!);
     const event:any={protocolVersion:'1.0',createdAt:new Date().toISOString(),senderHandle:'codex',senderIdentityId:'fixture-only-codex',nonce:'offline-fixture-only',type:'MESSAGE',
       body:'Title: Copied-ledger automatic handoff\nOwner: @codex\nStatus: Fixture report\nBlocker: Fixture gate\nVerification: Fixture test',metadata:{project:'general',task:'FIXTURE-AUTOMATIC-HANDOFF',action:'result'}};
-    const record:any={brokerRecordVersion:'1.0',brokerSequence:previous.brokerSequence+1,previousRecordHash:previous.recordHash,event,eventId:computeEventId(event),authorityDecision:{allowed:true,senderAuthorityLevel:'CORE_AGENT'}};
+    const record:any={brokerRecordVersion:'1.0',brokerSequence:previous.brokerSequence+1,ledgerEpochId:previous.ledgerEpochId||'epoch-3-post-room-incident-2026-10-18',previousRecordHash:previous.recordHash,event,eventId:computeEventId(event),authorityDecision:{allowed:true,senderAuthorityLevel:'CORE_AGENT'}};
     record.recordHash=computeRecordHash(record);
     const child=spawn('python',['-B',path.join(f.board,'ingest_room_activity.py'),'--watch','--poll-seconds','1','--max-refreshes','1'],{env:{...process.env,STARQ_WORKSPACE:f.root,PYTHONDONTWRITEBYTECODE:'1'},stdio:['ignore','pipe','pipe']});
     let output='',errors='',appended=false;

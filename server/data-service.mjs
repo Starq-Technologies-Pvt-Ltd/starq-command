@@ -16,7 +16,7 @@
  * What this file DOES compute is metadata about the projections, never the
  * projections' truth:
  *   - reachability      : can we see the canonical source at all
- *   - freshness         : does the recorded ledger hash still match the live one
+ *   - freshness         : MATCH, or a verified prefix-extension lag, vs blocking corruption
  *   - drift             : do the contract's recorded provenance hashes still match
  *   - parse validity    : is the projection structurally readable
  *
@@ -37,8 +37,9 @@ import { loadCompanyOs } from './company-os.mjs';
 import { buildSnapshot } from './snapshot.mjs';
 import { runReadOnlyGates } from './gates.mjs';
 import { readRoomVisibility } from './room-work.mjs';
-import { readRoomSnapshot } from './room-snapshot.mjs';
+import { readRoomSnapshot, readRoomBoundSnapshot } from './room-snapshot.mjs';
 import { classifyFilesystemPath } from './room-path.mjs';
+import { classifyRoomLedgerRelation } from './room-ledger-relation.mjs';
 
 const PORT = Number(process.env.COMMAND_PORT || 5177);
 // The observer profile is pinned to loopback even if a caller bypasses the
@@ -68,9 +69,43 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+/**
+ * Resolve a contract/provenance stored path the same way
+ * starqerp-control-board/starq_paths.py WorkspacePaths.resolve does.
+ * Stored starqERP/... and starqNexus/... aliases locate existing files under
+ * Projects/StarqERP and Projects/StarqNexus. Other paths keep the established
+ * workspace-root join after stripping a StarqTech / !starq prefix.
+ */
+function resolveStoredSourcePath(stored, workspaceRoot) {
+  const s = String(stored ?? '').replace(/\\/g, '/');
+  const norm = s.replace(/D:/g, '');
+  const parts = norm.split('/').filter(Boolean);
+  for (const marker of ['!starq', 'StarqTech']) {
+    const idx = parts.lastIndexOf(marker);
+    if (idx !== -1) {
+      parts.splice(0, idx + 1);
+      break;
+    }
+  }
+  const bases = [];
+  if (workspaceRoot) bases.push(workspaceRoot);
+  const derived = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
+  if (derived && derived !== workspaceRoot) bases.push(derived);
+  if (parts[0] === 'starqERP' || parts[0] === 'starqNexus') {
+    const project = parts[0] === 'starqERP' ? 'StarqERP' : 'StarqNexus';
+    for (const base of bases) {
+      const cand = path.join(base, 'Projects', project, ...parts.slice(1));
+      if (fs.existsSync(cand)) return cand;
+    }
+  }
+  if (!workspaceRoot) return stored;
+  if (parts.length === 0) return abs(workspaceRoot, stored);
+  return path.join(workspaceRoot, ...parts);
+}
+
 /** Read a canonical JSON source read-only and classify the outcome. */
 function loadSource(relPath, workspaceRoot) {
-  const target = abs(workspaceRoot, relPath);
+  const target = resolveStoredSourcePath(relPath, workspaceRoot);
   const meta = { path: relPath, absolute_path: target };
 
   if (!fs.existsSync(target)) {
@@ -159,9 +194,21 @@ function readProcessTruth(contract, sourceState) {
 }
 
 // ── Execution truth (activity.json) ────────────────────────────────────────
-// The event/agent layer is forwarded verbatim. Freshness is the one thing
-// added here, and it is added because the contract itself demands it:
-// "Room changed since ingest -> render STALE, re-ingest."
+// The event/agent layer is forwarded verbatim. Freshness distinguishes a
+// verified append-only Room extension (projection lag; Command stays healthy)
+// from truncated / non-prefix / epoch / missing-checkpoint failures (blocking).
+// Command never ingests from this path.
+function readActivityCheckpoint(workspaceRoot) {
+  const target = abs(workspaceRoot, `${CANONICAL.controlBoard}/${CONTROL_BOARD_FILES.state}`);
+  try {
+    if (!fs.existsSync(target)) return null;
+    const data = readJson(target);
+    return data.checkpoint ?? null;
+  } catch {
+    return { unreadable: true };
+  }
+}
+
 function readExecutionTruth(activity, sourceState, workspaceRoot) {
   if (sourceState !== STATE.OK) {
     return {
@@ -177,9 +224,15 @@ function readExecutionTruth(activity, sourceState, workspaceRoot) {
   let liveHash = null;
   let ledgerState = STATE.OK;
   let ledgerReason = null;
+  let ledgerRelation = null;
+  let ledgerLag = false;
 
   try {
-    const room = readRoomSnapshot(workspaceRoot);
+    // One read: records, digests and the raw-prefix proof all come from the same bytes.
+    const room = readRoomBoundSnapshot(workspaceRoot, {
+      recordCount: a.activity_ledger?.records_total ?? null,
+      expectedSha16: recordedHash,
+    });
     if (room.state === 'UNAVAILABLE' || room.state === 'EMPTY') {
       ledgerState = STATE.UNAVAILABLE;
       ledgerReason = room.reason ?? 'room ledger unavailable';
@@ -188,9 +241,25 @@ function readExecutionTruth(activity, sourceState, workspaceRoot) {
       ledgerReason = room.reason ?? `Room snapshot is ${room.state}/${room.parseStatus}`;
     } else {
       liveHash = room.sha256Prefix;
-      if (recordedHash && liveHash !== recordedHash) {
-        ledgerState = STATE.STALE;
-        ledgerReason = 'room ledger changed since last ingest; regeneration required';
+      const checkpoint = readActivityCheckpoint(workspaceRoot);
+      if (checkpoint?.unreadable) {
+        ledgerState = STATE.UNREADABLE;
+        ledgerReason = 'activity checkpoint unreadable';
+      } else {
+        const classified = classifyRoomLedgerRelation({
+          recordedHash,
+          liveHash,
+          liveRecords: room.records,
+          liveTailSequence: room.tailSequence,
+          recordedCount: a.activity_ledger?.records_total ?? checkpoint?.event_count ?? null,
+          recordedSeq: a.activity_ledger?.max_broker_sequence ?? checkpoint?.max_broker_sequence ?? null,
+          lastEventId: checkpoint?.last_event_id ?? null,
+          rawPrefix: room.rawPrefix,
+        });
+        ledgerRelation = classified.relation;
+        ledgerLag = classified.lag === true;
+        ledgerState = classified.healthState;
+        ledgerReason = classified.reason;
       }
     }
   } catch (err) {
@@ -215,6 +284,8 @@ function readExecutionTruth(activity, sourceState, workspaceRoot) {
       live_sha256_prefix: liveHash,
       state: ledgerState,
       reason: ledgerReason,
+      relation: ledgerRelation,
+      lag: ledgerLag,
       records_total: a.activity_ledger?.records_total ?? null,
       broker_records: a.activity_ledger?.broker_records ?? null,
       max_broker_sequence: a.activity_ledger?.max_broker_sequence ?? null,
@@ -556,7 +627,7 @@ function checkProvenanceDrift(contract, sourceState, workspaceRoot) {
   for (const [name, entry] of Object.entries(recorded)) {
     const rel = entry?.path;
     if (!rel) continue;
-    const target = abs(workspaceRoot, rel);
+    const target = resolveStoredSourcePath(rel, workspaceRoot);
     const recordedDigest = entry.sha256_prefix ?? null;
 
     const roomPathIdentity = classifyFilesystemPath(target, abs(workspaceRoot, CANONICAL.roomLedger));

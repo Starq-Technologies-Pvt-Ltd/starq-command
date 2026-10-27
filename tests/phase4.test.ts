@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { buildPhase3Surface } from '../server/data-service.mjs';
+import surface from './fixtures/cmd-stu-003-surface.json';
 import { STAGE_SEVERITY, worstStage } from '../src/lib/states';
 
 /**
@@ -52,7 +52,6 @@ const oracleWorst = (states: string[]): string => {
 };
 
 /** Canonical process truth, read straight off the live surface. */
-const surface = await buildPhase3Surface();
 const pt = surface.process_truth;
 const families = pt.process_families ?? [];
 

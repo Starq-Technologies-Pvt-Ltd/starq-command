@@ -24,14 +24,16 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE } from './config.mjs';
 import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from './state.mjs';
-import { inspectProcesses, listListeners, osVerdict, sameExe, InspectionError } from './inspect.mjs';
+import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
 import { proveInstance, requestShutdown } from './control.mjs';
 import { checkHealth } from './health.mjs';
+import { buildHealthPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
-import { readGates, readObservationGates, readStandaloneHerdrGate } from './gates.mjs';
+import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
 import { readHerdrStatus } from '../../../herdr-floor/src/herdr-status.mjs';
 import { nativeContainment, resolvePid } from '../../../herdr-floor/src/launcher.mjs';
 import { containmentOptions } from '../../../herdr-floor/src/containment-config.mjs';
+import { evaluateHistoricalCloseoutHandoff } from './historical-closeout-handoff.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CHILD_HOST = path.resolve(HERE, '..', 'lifecycle-child.mjs');
@@ -74,12 +76,14 @@ function forceKillReal(pid) {
   });
 }
 
-export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {} }) {
-  const jobs = () => nativeContainment(containmentOptions(cfgOf().workspace_root, runtimeDir));
+export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {}, tier = null }) {
+  const jobs = () => nativeContainment(containmentOptions(cfgOf().workspace_root, runtimeDir, { tier: effectiveTier() }));
+  const effectiveTier = () => tier ?? (cfgOf().profile?.tier ?? 'development');
   const inspectionOptions = inspectionTools ? { powershellExe: inspectionTools.powershell } : {};
   const listenerOptions = inspectionTools ? { netstatExe: inspectionTools.netstat } : {};
   const d = {
     inspect: deps.inspect ?? ((pids) => inspectProcesses(pids, inspectionOptions)),
+    inspectInfrastructure: deps.inspectInfrastructure ?? ((pins) => inspectDeclaredInfrastructure(pins, inspectionOptions)),
     listListeners: deps.listListeners ?? (() => listListeners(listenerOptions)),
     spawnChild: deps.spawnChild ?? (async (exe, args, opts, reserve) => {
       const child = jobs().launch({ argv: [exe, ...args], ...opts }, reserve);
@@ -88,6 +92,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     }),
     proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),
     requestShutdown: deps.requestShutdown ?? ((child) => requestShutdown(child)),
+    gracefulStopContained: deps.gracefulStopContained ?? ((child, graceMs) => child.containment
+      ? jobs().stop(child.containment, { force: false, graceMs })
+      : Promise.resolve({ outcome: 'UNKNOWN', detail: 'contained graceful stop requires the recorded job descriptor' })),
+    historicalCloseoutHandoff: deps.historicalCloseoutHandoff ?? evaluateHistoricalCloseoutHandoff,
     checkHealth: deps.checkHealth ?? ((host, comp) => checkHealth(host, comp)),
     brokerRequest: deps.brokerRequest ?? brokerRequestReal,
     readFile: deps.readFile ?? ((f) => readFileSync(f, 'utf8')),
@@ -97,9 +105,11 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     selfPid: deps.selfPid ?? process.pid,
     treeClosed: deps.treeClosed ?? (async (child) => child.containment ? (await jobs().status(child.containment)).closed === true : false),
     treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
-    prerequisites: deps.prerequisites ?? ((cfg) => cfg.profile?.name === OBSERVATION_PROFILE
-      ? readObservationGates(cfg.workspace_root, cfg)
-      : readGates(cfg.workspace_root)),
+    prerequisites: deps.prerequisites ?? ((cfg) => {
+      if (cfg.profile?.name === OBSERVATION_PROFILE) return readObservationGates(cfg.workspace_root, cfg);
+      if (effectiveTier() === 'development') return readDevelopmentGates(cfg.workspace_root, cfg);
+      return readGates(cfg.workspace_root);
+    }),
     standaloneHerdrGate: deps.standaloneHerdrGate ?? ((cfg) => readStandaloneHerdrGate(cfg.workspace_root)),
     // Read-only `herdr status` through the pinned binary; reached only after G-PROFILE resolves.
     probeStandaloneHerdr: deps.probeStandaloneHerdr ?? ((entry) => readHerdrStatus({ bin: entry.executable })),
@@ -119,6 +129,13 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
   const save = (doc) => writeState(statePath, doc);
   const cfgOf = () => loadConfig(configFile, configOptions);
   const comp = (cfg, name) => cfg.components.find((c) => c.name === name);
+  const transitivelyDependsOn = (components, name, target, seen = new Set()) => {
+    if (name === target || seen.has(name)) return name === target;
+    seen.add(name);
+    const current = components.find((c) => c.name === name);
+    return (current?.depends_on ?? []).some((dependency) => dependency === target
+      || transitivelyDependsOn(components, dependency, target, seen));
+  };
 
   async function withLock(op, fn) {
     let lock;
@@ -191,7 +208,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
   }
 
   /** Graceful stop of one owned child. Never forces. */
-  async function stopChild(cfg, doc, child) {
+  async function stopChild(cfg, doc, child, { historicalCloseoutHandoff = null } = {}) {
     const [v] = [(await classify(cfg, [child])).get(child.name)];
     if (v.verdict === 'GONE' || v.verdict === 'FOREIGN') {
       if (!await d.treeClosed(child)) return { outcome: 'UNKNOWN', detail: 'root absent; descendant closeout unproven' };
@@ -206,7 +223,35 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       if (token) {
         await broker(cfg, 'POST', '/api/lifecycle/drain');
         const r = await broker(cfg, 'POST', '/api/lifecycle/shutdown');
-        if (r.status !== 202) return { outcome: 'SHUTDOWN_REFUSED', detail: `broker refused shutdown: ${r.status} ${r.body?.code ?? r.error ?? ''}` };
+        if (r.status !== 202) {
+          if (r.status === 409 && r.body?.code === 'NOT_DRAINED' && historicalCloseoutHandoff?.applied === true) {
+            const latest = await broker(cfg, 'GET', '/api/lifecycle');
+            const floor = await broker(cfg, 'GET', '/api/agents');
+            const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
+            const current = latest.status === 200 && floor.status === 200
+              ? await d.historicalCloseoutHandoff({ stateDir, lifecycleView: latest.body, registryProjection: floor.body?.registry_records })
+              : { applied: false, reason: 'live lifecycle or registry projection unavailable for final recheck' };
+            if (current?.applied !== true || !child.containment) {
+              return { outcome: 'SHUTDOWN_REFUSED', detail: `historical exception recheck failed; no fallback signal: ${current?.reason ?? 'containment descriptor missing'}` };
+            }
+            const proof = await d.gracefulStopContained(child, cfg.timeouts_ms.graceful_exit);
+            if (proof?.outcome !== 'GONE' || proof.closed !== true || proof.active !== 0 || proof.owned !== true || proof.forced === true) {
+              return { outcome: proof?.outcome ?? 'UNKNOWN', detail: `non-forced JobGuardian closeout did not prove the broker job closed: ${proof?.error ?? proof?.detail ?? 'incomplete proof'}` };
+            }
+            appendEvent(doc, 'child.historical_closeout_exception_graceful_handoff', {
+              decision: current.decision,
+              session_ids: current.session_ids,
+              historical_closeout: 'UNKNOWN',
+              broker_boot_id: current.broker_boot_id,
+              command_child_job_closed: true,
+              forced: false,
+            });
+            save(doc);
+            journal('child.historical_closeout_exception_graceful_handoff', { decision: current.decision, session_ids: current.session_ids, broker_boot_id: current.broker_boot_id, forced: false });
+          } else {
+            return { outcome: 'SHUTDOWN_REFUSED', detail: `broker refused shutdown: ${r.status} ${r.body?.code ?? r.error ?? ''}` };
+          }
+        }
       } else {
         return { outcome: 'SHUTDOWN_REFUSED', detail: 'broker lifecycle channel required for agent closeout' };
       }
@@ -384,17 +429,27 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
 
     deadline = until(cfg.timeouts_ms.health);
     let health;
+    let rows = [];
+    const summarizeListeners = (list) => list.map((r) => `${r.address ?? '?'}:${r.port}<-pid ${r.pid}`).join(', ') || 'none';
+    const ownedByLaunch = (list) => list.length > 0 && list.every((l) => l.pid === rec.pid);
+    const foreignOwner = (list) => list.some((l) => l.pid !== rec.pid);
     for (;;) {
       health = await d.checkHealth(cfg.host, c);
-      if (health.ok || Date.now() >= deadline) break;
+      if (health.ok) {
+        rows = (await d.listListeners()).filter((l) => l.port === c.port);
+        if (foreignOwner(rows)) {
+          throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
+        }
+        if (ownedByLaunch(rows)) break;
+      }
+      if (Date.now() >= deadline) break;
       const still = osVerdict(rec, (await d.inspect([rec.pid])).get(rec.pid), cfg.node);
       if (still.verdict !== 'MATCH') throw new Error(`${c.name}: process ${still.verdict} before healthy (${still.detail})`);
       await d.sleep(d.pollMs);
     }
     if (!health.ok) throw new Error(`${c.name}: health contract not met: ${health.detail}`);
-    const rows = (await d.listListeners()).filter((l) => l.port === c.port);
-    if (!rows.length || rows.some((l) => l.pid !== rec.pid)) {
-      throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${rows.map((r) => r.pid).join(',') || 'none'})`);
+    if (!ownedByLaunch(rows)) {
+      throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
     }
     rec.status = 'READY';
     doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), { name: c.name, port: c.port, ready: true, detail: health.detail }];
@@ -425,6 +480,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         return refuse(`ownership cannot be proven; nothing signalled: ${unknown.map((c) => `${c.name}(${verdicts.get(c.name).detail})`).join('; ')}`, { code: 'OWNERSHIP_UNPROVEN' });
       }
       const previousState = doc.state;
+      let historicalCloseoutHandoff = null;
       const brokerChild = live.find((c) => c.name === 'herdrBroker' && verdicts.get(c.name).verdict === 'OWNED');
       if (brokerChild) {
         const view = await broker(cfg, 'GET', '/api/lifecycle');
@@ -447,21 +503,47 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
           }
         }
         const after = await broker(cfg, 'GET', '/api/lifecycle');
-        if (after.status !== 200 || !after.body?.drained) {
+        if (after.status !== 200) {
           doc.state = 'STOP_INCOMPLETE'; save(doc);
           return { result: RESULT.STOP_INCOMPLETE, phase: 'drain-verify', detail: after.body ?? after.error };
         }
-        appendEvent(doc, 'stop.drained'); save(doc);
+        if (!after.body?.drained) {
+          const floor = await broker(cfg, 'GET', '/api/agents');
+          const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
+          historicalCloseoutHandoff = floor.status === 200
+            ? await d.historicalCloseoutHandoff({ stateDir, lifecycleView: after.body, registryProjection: floor.body?.registry_records })
+            : { applied: false, reason: 'broker registry projection unavailable' };
+          if (historicalCloseoutHandoff?.applied !== true) {
+            doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'stop.drain_incomplete', { detail: after.body, historical_closeout_exception: historicalCloseoutHandoff?.reason ?? 'not authorized' }); save(doc);
+            return { result: RESULT.STOP_INCOMPLETE, phase: 'drain-verify', detail: after.body, historical_closeout_exception: historicalCloseoutHandoff?.reason ?? 'not authorized' };
+          }
+          appendEvent(doc, 'stop.historical_closeout_exception_verified', {
+            decision: historicalCloseoutHandoff.decision,
+            session_ids: historicalCloseoutHandoff.session_ids,
+            historical_closeout: 'UNKNOWN',
+            broker_boot_id: historicalCloseoutHandoff.broker_boot_id,
+          });
+          save(doc);
+        } else {
+          appendEvent(doc, 'stop.drained'); save(doc);
+        }
       } else {
         doc.state = 'STOPPING'; appendEvent(doc, 'stop.begin', { stop_agents: stopAgents, broker: 'not live' }); save(doc);
       }
 
-      const order = topoOrder(cfg.components).map((c) => c.name).reverse();
+      const reverseTopological = topoOrder(cfg.components).map((c) => c.name).reverse();
+      const order = historicalCloseoutHandoff?.applied === true
+        ? [
+          ...reverseTopological.filter((name) => transitivelyDependsOn(cfg.components, name, 'herdrBroker')),
+          'herdrBroker',
+          ...reverseTopological.filter((name) => name !== 'herdrBroker' && !transitivelyDependsOn(cfg.components, name, 'herdrBroker')),
+        ]
+        : reverseTopological;
       const steps = [];
       for (const name of order) {
         const child = doc.children.find((c) => c.name === name && c.status !== 'EXITED');
         if (!child) continue;
-        const r = await stopChild(cfg, doc, child);
+        const r = await stopChild(cfg, doc, child, { historicalCloseoutHandoff });
         steps.push({ name, ...r });
         if (r.outcome !== 'GONE') {
           doc.state = 'STOP_INCOMPLETE'; appendEvent(doc, 'stop.incomplete', { name, ...r }); save(doc);
@@ -577,8 +659,14 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     // keeps the pre-existing read-only standalone probe behavior.
     let shGate = { resolved: false, detail: 'not evaluated' };
     let shObserved = { state: 'NOT_PROBED', detail: 'not evaluated' };
+    let shEntry = null;
+    const infraPins = {
+      herdrExecutable: null,
+      scriptsRoot: cfg.workspace_root ? path.join(cfg.workspace_root, 'agent-comms', 'scripts') : null,
+    };
     if (!observationOnly) {
-      const shEntry = standaloneHerdr(cfg);
+      shEntry = standaloneHerdr(cfg);
+      infraPins.herdrExecutable = shEntry?.executable ?? null;
       try { shGate = await d.standaloneHerdrGate(cfg); } catch (err) { shGate = { resolved: false, detail: `G-PROFILE: ${err.message}` }; }
       shObserved = { state: 'NOT_PROBED', detail: 'owner protocol not commissioned; the standalone binary was not executed' };
       if (shGate.resolved && shEntry) {
@@ -588,6 +676,16 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         name: cfg.profile?.name, ready: false, external_required: cfg.profile?.external_required ?? [],
         standalone_herdr: { owner_gate: shGate, observed: { state: shObserved.state, detail: shObserved.detail } },
         detail: 'ready requires control plane RUNNING, a commissioned standalone Herdr owner protocol and standalone Herdr observed AVAILABLE; control-plane status alone is not full-profile readiness',
+      };
+      const herdrClass = classifyInfrastructureProcess(
+        { exe: shEntry?.executable, cmd: shEntry?.executable },
+        infraPins,
+      );
+      report.infrastructure_policy = {
+        command_ports_remain_blocking: true,
+        standalone_herdr: herdrClass,
+        declared_external: ['standalone-herdr', 'starqbot-gateway', 'room-watcher'],
+        note: 'Declared Starq infrastructure is not a Command child and is not an unowned Command blocker unless it holds a Command control-plane port.',
       };
     } else {
       report.observation_profile = {
@@ -608,6 +706,24 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
 
     let listeners = null;
     try { listeners = await d.listListeners(); } catch (err) { fail(`listeners: ${err.message}`); }
+    const listenerPids = [...new Set((listeners ?? []).map((l) => l.pid).filter((pid) => Number.isInteger(pid) && pid > 0))];
+    let listenerInfos = new Map();
+    if (listenerPids.length) {
+      try { listenerInfos = await d.inspect(listenerPids); }
+      catch (err) { fail(`listener processes: ${err.message}`); }
+    }
+    if (!observationOnly) {
+      try {
+        const rows = await d.inspectInfrastructure(infraPins);
+        report.live_infrastructure = (rows ?? []).map((info) => ({
+          pid: info.pid, name: info.name ?? null, exe: info.exe ?? null,
+          ...classifyInfrastructureProcess(info, infraPins),
+        })).filter((row) => row.kind === 'DECLARED_EXTERNAL_INFRASTRUCTURE');
+      } catch (err) {
+        fail(`infrastructure: ${err.message}`);
+        report.live_infrastructure = [];
+      }
+    }
     const children = doc ? doc.children : [];
     const verdicts = await classify(cfg, children);
     for (const [name, v] of verdicts) if (v.verdict === 'UNKNOWN') fail(`${name}: ${v.detail}`);
@@ -629,6 +745,16 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
           present: rows.length > 0,
           owned: rows.length > 0 && entry.ownership === 'OWNED' && rows.every((l) => l.pid === rec.pid),
           pids: rows.map((l) => l.pid),
+          classifications: rows.map((l) => {
+            const info = listenerInfos.get(l.pid);
+            return {
+              pid: l.pid,
+              ...classifyInfrastructureProcess(
+                { name: info?.name, exe: info?.exe, cmd: info?.cmd },
+                infraPins,
+              ),
+            };
+          }),
         };
       }
       report.components.push(entry);
@@ -668,6 +794,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       if (x.listener?.present && !x.listener.owned) report.problems.push(`${x.name} port ${x.port} held by non-owned pid(s) ${x.listener.pids.join(',')}`);
       if (x.ownership === 'UNPROVEN') report.problems.push(`${x.name} alive but instance unproven: ${x.ownership_detail}`);
     }
+    report.health_preflight = buildHealthPreflight(report);
     return report;
   }
 

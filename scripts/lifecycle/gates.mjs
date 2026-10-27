@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { checkObservationRule0, checkWorkspaceRule0 } from '../../../starq-lifecycle/runtime-policy.mjs';
-import { compatibilityGate } from '../../../herdr-floor/src/containment-config.mjs';
+import { checkObservationRule0, checkWorkspaceRule0, checkDevelopmentRule0 } from '../../../starq-lifecycle/runtime-policy.mjs';
+import { compatibilityGate, developmentContainmentGate } from '../../../herdr-floor/src/containment-config.mjs';
 import {
   OBSERVATION_COMPONENTS, OBSERVATION_PROFILE, OBSERVATION_RUNTIME_DIRECTORY,
   OBSERVATION_SHARED_LOCK, validateConfig,
@@ -59,6 +59,33 @@ export function evaluateObservationRule0Gate(workspace, cfg, { check = checkObse
     };
   } catch (err) {
     return { resolved: false, detail: `G-RULE0-OBS: scoped actual-path inventory UNKNOWN (${err.message})` };
+  }
+}
+
+export function evaluateDevelopmentRule0Gate(workspace, cfg = null, { check = checkDevelopmentRule0 } = {}) {
+  if (typeof workspace !== 'string' || !workspace) {
+    return { resolved: false, detail: 'G-RULE0-DEV: canonical workspace root required for development operational inventory enforcement' };
+  }
+  try {
+    const result = check(workspace, cfg);
+    const inventory = result?.inventory;
+    const complete = inventory?.schema === 'starq.rule0.inventory/v1'
+      && Array.isArray(inventory.entries) && inventory.entries.length > 0
+      && Array.isArray(inventory.unresolved) && inventory.unresolved.length === 0
+      && /^[a-f0-9]{64}$/i.test(inventory.sha256 ?? '')
+      && Array.isArray(result.failures) && result.failures.length === 0
+      && result.resolved === true;
+    return {
+      resolved: complete,
+      detail: complete
+        ? `G-RULE0-DEV: focused operational inventory verified (${inventory.entries.length} entries; ${result.advisories?.length ?? 0} advisories)`
+        : (result?.detail ?? 'G-RULE0-DEV: operational inventory or policy evaluation incomplete'),
+      failure_count: Array.isArray(result?.failures) ? result.failures.length : null,
+      advisory_count: Array.isArray(result?.advisories) ? result.advisories.length : 0,
+      inventory_sha256: inventory?.sha256 ?? null,
+    };
+  } catch (err) {
+    return { resolved: false, detail: `G-RULE0-DEV: operational inventory UNKNOWN (${err.message})` };
   }
 }
 
@@ -135,6 +162,19 @@ export function evaluateStandaloneHerdrOwner(record, entry, { read = readFileSyn
   if (!/^[a-f0-9]{64}$/i.test(record.executable_sha256 ?? '')) return fail('executable hash pin missing');
   if (!record.verifier || record.verifier === record.builder || !Number.isFinite(Date.parse(record.verified_at))) return fail('independent verification metadata incomplete');
   if (!Array.isArray(record.evidence) || !record.evidence.length) return fail('hashed evidence required');
+  const pending = record.pin_update?.pending_independent_verification;
+  if (typeof pending === 'string' && pending.trim()) return fail('executable pin pending independent verification');
+  const pinSha = String(record.pin_update?.to_sha256 ?? record.executable_sha256).toLowerCase();
+  if (!/^[a-f0-9]{64}$/i.test(pinSha) || pinSha !== record.executable_sha256.toLowerCase()) {
+    return fail('pin_update.to_sha256 is not bound to executable_sha256');
+  }
+  const iv = record.independent_verification;
+  if (!iv || !/^[a-f0-9]{64}$/i.test(iv.executable_hash_recomputed ?? '')) {
+    return fail('independent verification does not recompute the executable hash');
+  }
+  if (iv.executable_hash_recomputed.toLowerCase() !== record.executable_sha256.toLowerCase()) {
+    return fail('independent verification hash is not bound to the current executable pin');
+  }
   try {
     if (digest(read(entry.executable)).toLowerCase() !== record.executable_sha256.toLowerCase()) return fail('standalone Herdr executable hash drift');
     for (const e of record.evidence) {
@@ -158,7 +198,33 @@ export function readStandaloneHerdrGate(workspace, { read = readFileSync } = {})
   return evaluateStandaloneHerdrOwner(record, entry, { read });
 }
 
-export function readGates(workspace, { read = readFileSync, checkRule0 = checkWorkspaceRule0 } = {}) {
+export function readWslGate(workspace, { read = readFileSync } = {}) {
+  const root = path.join(workspace, '00_STARQ_HQ', 'operations', 'starq-lifecycle', 'state');
+  try {
+    const record = JSON.parse(read(path.join(root, 'wsl-autostart-audit.json'), 'utf8'));
+    return { kind: 'G-WSL', ...evaluateGate('G-WSL', record, { read, workspace }) };
+  } catch (err) {
+    return { kind: 'G-WSL', resolved: false, detail: `G-WSL: missing/unreadable evidence (${err.message})` };
+  }
+}
+
+export function readDevelopmentGates(workspace, cfg = null, {
+  read = readFileSync,
+  checkRule0 = checkDevelopmentRule0,
+  checkContainment = developmentContainmentGate,
+} = {}) {
+  const root = path.join(workspace, '00_STARQ_HQ', 'operations', 'starq-lifecycle', 'state');
+  const gates = [['G-WSL', 'wsl-autostart-audit.json']].map(([kind, file]) => {
+    try { return { kind, ...evaluateGate(kind, JSON.parse(read(path.join(root, file), 'utf8')), { read }) }; }
+    catch (err) { return { kind, resolved: false, detail: `${kind}: missing/unreadable evidence (${err.message})` }; }
+  });
+  gates.push({ kind: 'G-RULE0', ...evaluateDevelopmentRule0Gate(workspace, cfg, { check: checkRule0 }) });
+  gates.push({ kind: 'G-PROFILE', ...readStandaloneHerdrGate(workspace, { read }) });
+  gates.push({ kind: 'G-CONTAINMENT', ...checkContainment(workspace, { read }) });
+  return gates;
+}
+
+export function readGates(workspace, { read = readFileSync, checkRule0 = checkWorkspaceRule0, containmentTier = 'release' } = {}) {
   const root = path.join(workspace, '00_STARQ_HQ', 'operations', 'starq-lifecycle', 'state');
   const gates = [['G-WSL', 'wsl-autostart-audit.json']].map(([kind, file]) => {
     try { return { kind, ...evaluateGate(kind, JSON.parse(read(path.join(root, file), 'utf8')), { read }) }; }
@@ -166,6 +232,9 @@ export function readGates(workspace, { read = readFileSync, checkRule0 = checkWo
   });
   gates.push({ kind: 'G-RULE0', ...evaluateGate('G-RULE0', null, { workspace, checkRule0 }) });
   gates.push({ kind: 'G-PROFILE', ...readStandaloneHerdrGate(workspace, { read }) });
-  gates.push({ kind: 'G-CONTAINMENT', ...compatibilityGate(workspace) });
+  gates.push({
+    kind: 'G-CONTAINMENT',
+    ...(containmentTier === 'development' ? developmentContainmentGate(workspace, { read }) : compatibilityGate(workspace, { read })),
+  });
   return gates;
 }

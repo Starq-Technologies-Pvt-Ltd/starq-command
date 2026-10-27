@@ -1,22 +1,24 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.mjs';
-import { readGates, readObservationGates, readStandaloneHerdrGate } from './gates.mjs';
+import { readGates, readObservationGates, readStandaloneHerdrGate, readWslGate } from './gates.mjs';
 import { compatibilityGate } from '../../../herdr-floor/src/containment-config.mjs';
 // Gates that need no runtime inventory are evaluated alone, so a single query
 // does not trigger the full Rule0 filesystem scan.
 const OBSERVATION_KINDS = new Set(['G-RULE0-OBS', 'G-PROFILE-OBS', 'G-OWNERSHIP-OBS']);
-const FULL_KINDS = new Set(['G-WSL', 'G-RULE0']);
+const FULL_KINDS = new Set(['G-RULE0']);
 
 export function readNamedGate(workspace, kind, {
   readFull = readGates,
   readObservation = readObservationGates,
   readProfile = readStandaloneHerdrGate,
+  readWsl = readWslGate,
   readContainment = compatibilityGate,
   loadObservation = (root) => loadConfig(path.join(root, '00_STARQ_HQ/operations/starq-command/lifecycle.observation.config.json')),
 } = {}) {
   if (kind === 'G-PROFILE') return { kind, ...readProfile(workspace) };
   if (kind === 'G-CONTAINMENT') return { kind, ...readContainment(workspace) };
+  if (kind === 'G-WSL') return readWsl(workspace);
   if (OBSERVATION_KINDS.has(kind)) {
     try {
       const result = readObservation(workspace, loadObservation(workspace)).find((gate) => gate.kind === kind);

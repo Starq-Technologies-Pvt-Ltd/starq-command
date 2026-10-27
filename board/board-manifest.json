@@ -1,0 +1,687 @@
+{
+  "manifest_version": "1.0.0",
+  "board_id": "STARQ-COMMAND-MODS",
+  "generated_by": "codex",
+  "authorization": {
+    "classification": "BOUNDED AUTHORIZATION - OFFLINE FILE RECOVERY ONLY",
+    "founder_directive": {
+      "sequence": 9453,
+      "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+      "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+      "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+      "senderHandle": "mustarq",
+      "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+    },
+    "architecture_approval_in_principle": {
+      "sequence": 9452,
+      "eventId": "023d62eddd098be76ed229fca2dcf2a456a79cf89f4b76591278a8fb1b30f74c",
+      "recordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+      "previousRecordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+      "senderHandle": "mustarq",
+      "purpose": "Founder architecture approval in principle; not creation authority by itself."
+    },
+    "proposal_source": {
+      "sequence": 9451,
+      "eventId": "2ca1956225dd0393eaaedd71d2ae2f539835b348828abc244b9506d03b4dfc57",
+      "recordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+      "previousRecordHash": "9ec77695f6a9ed7eb58fca6ed45655ca1e489bf967afdb26f7b4eb2d1afd3fac",
+      "senderHandle": "codex",
+      "purpose": "Codex proposal and 33-row migration specification."
+    },
+    "all_stop_baseline": {
+      "sequence": 9208,
+      "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+      "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+      "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+      "senderHandle": "codex",
+      "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+    },
+    "verifier": "vision",
+    "required_verdicts": [
+      "ACCEPT - PHASE 1 BOARD SOURCE INTEGRITY ONLY",
+      "REJECT - WITH EXACT FINDINGS",
+      "BLOCKED / UNKNOWN - INSUFFICIENT EVIDENCE"
+    ],
+    "completion_status": "CANDIDATE_NOT_ACCEPTED pending Vision independent review"
+  },
+  "source": {
+    "historical_ledger_path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json",
+    "historical_ledger_bytes": 26842,
+    "historical_ledger_sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+    "expected_sha256_from_room_9451": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+    "fingerprint_match": true,
+    "source_checkpoint_sequence": 9367,
+    "source_checkpoint_record_hash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+    "source_checkpoint_event_id": "1bab60fcf25cc85514493628816ea8d10037d22bf3a181948e8bb49ea94152b9",
+    "source_checkpoint_matches_canonical_room": true,
+    "input_role": "Immutable historical input; never overwritten."
+  },
+  "migration": {
+    "source_schema": "starq-command-continuity/task-ledger/v1",
+    "source_task_count": 33,
+    "imported_task_count": 33,
+    "source_ids": [
+      "CMD-PHASE-1-5",
+      "CMD-PHASE-6-7",
+      "CMD-DI-0-1",
+      "CMD-DI-0-2",
+      "CMD-DI-0-3",
+      "CMD-DI-1-1",
+      "CMD-DI-1-2",
+      "CMD-DI-1-3",
+      "CMD-DI-1-4",
+      "CMD-DI-1-5",
+      "CMD-DI-2-1",
+      "CMD-DI-2-2",
+      "CMD-DI-2-3",
+      "CMD-DI-2-4",
+      "CMD-DI-2-5",
+      "CMD-DI-3-1",
+      "CMD-DI-3-2",
+      "CMD-DI-3-2a",
+      "CMD-DI-3-2b",
+      "CMD-DI-3-2c",
+      "CMD-DI-3-3",
+      "CMD-DI-3-4",
+      "CMD-DI-4-1",
+      "CMD-DI-4-2",
+      "CMD-DI-4-3",
+      "DP-GATE-A-PREP-001",
+      "ROOM-FORMAT-INVESTIGATION",
+      "TELEGRAM-TRUNCATION",
+      "MODS",
+      "MISSION-SERP-AIKIDO-BASELINE",
+      "SERP-354",
+      "CONT-PKG-9358",
+      "CONT-PKG-9361"
+    ],
+    "imported_ids": [
+      "CMD-PHASE-1-5",
+      "CMD-PHASE-6-7",
+      "CMD-DI-0-1",
+      "CMD-DI-0-2",
+      "CMD-DI-0-3",
+      "CMD-DI-1-1",
+      "CMD-DI-1-2",
+      "CMD-DI-1-3",
+      "CMD-DI-1-4",
+      "CMD-DI-1-5",
+      "CMD-DI-2-1",
+      "CMD-DI-2-2",
+      "CMD-DI-2-3",
+      "CMD-DI-2-4",
+      "CMD-DI-2-5",
+      "CMD-DI-3-1",
+      "CMD-DI-3-2",
+      "CMD-DI-3-2a",
+      "CMD-DI-3-2b",
+      "CMD-DI-3-2c",
+      "CMD-DI-3-3",
+      "CMD-DI-3-4",
+      "CMD-DI-4-1",
+      "CMD-DI-4-2",
+      "CMD-DI-4-3",
+      "DP-GATE-A-PREP-001",
+      "ROOM-FORMAT-INVESTIGATION",
+      "TELEGRAM-TRUNCATION",
+      "MODS",
+      "MISSION-SERP-AIKIDO-BASELINE",
+      "SERP-354",
+      "CONT-PKG-9358",
+      "CONT-PKG-9361"
+    ],
+    "exact_id_order_match": true,
+    "missing_ids": [],
+    "extra_ids": [],
+    "duplicate_ids": [],
+    "source_state_counts": {
+      "ACCEPTED": 12,
+      "UNKNOWN": 3,
+      "REJECTED": 2,
+      "BLOCKED": 6,
+      "CLOSED": 2,
+      "SUPERSEDED": 2,
+      "PROPOSED": 6
+    },
+    "raw_source_record_deep_match_count": 33,
+    "source_states_preserved": true,
+    "source_owners_preserved": true,
+    "source_qualifiers_and_dependencies_preserved": true,
+    "dependency_reference_count": 52,
+    "unresolved_dependency_targets": [],
+    "additional_rows_created_from_room_overlays": 0
+  },
+  "room_reconciliation": {
+    "cutoff": {
+      "sequence": 9455,
+      "eventId": "421f81968f26051917f1ee4bcc325ceac8437d92c4fca2db6428562a3f18493a",
+      "recordHash": "b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+      "previousRecordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+      "senderHandle": "mustarq",
+      "purpose": "Continuation of #9453 verifier verdict and stop conditions."
+    },
+    "linked_chain_start": 9367,
+    "linked_chain_end": 9455,
+    "linked_record_count": 89,
+    "missing_sequences": [],
+    "previous_record_hash_link_failures": [],
+    "event_refs": [
+      {
+        "sequence": 9208,
+        "eventId": "0c90d5c125be806f24eeb3d34d1af688525015f092b9474659150b36a6087761",
+        "recordHash": "1d34123ffa6c5fb3a544ce3da3c005c1a4aa899aca3656a236a5cc8abdad1268",
+        "previousRecordHash": "9c75826c29a4dd8508ac21e6b458a236baaed453f2bc0f0c9cbc416ec0e0d6fe",
+        "senderHandle": "codex",
+        "purpose": "Controlling ALL-STOP baseline; #9453 is a narrow exception only."
+      },
+      {
+        "sequence": 9360,
+        "eventId": "d5ac910480e96d167352f7606e8add4e06745606ffb68e993a79f8787ce25a66",
+        "recordHash": "085849f91fc00133dbc0fd513e0b2a46b400eeab8a876a105c4f878125d09cac",
+        "previousRecordHash": "861e87d1209d749336cbbfc18e6760cce565b8c09f9d422456ff4919bc19ff93",
+        "senderHandle": "vision",
+        "purpose": "Historical latest independent verdict referenced by the ledger; baseline for rejected rows."
+      },
+      {
+        "sequence": 9367,
+        "eventId": "1bab60fcf25cc85514493628816ea8d10037d22bf3a181948e8bb49ea94152b9",
+        "recordHash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+        "previousRecordHash": "610a8362aa77f326d9ba796cbd00be9821c7ffe120b48b27ad1d70b5c0afc127",
+        "senderHandle": "mustarq",
+        "purpose": "Founder-authorized ledger checkpoint; source SHA and record hash must match."
+      },
+      {
+        "sequence": 9371,
+        "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+        "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+        "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+      },
+      {
+        "sequence": 9372,
+        "eventId": "8335d97850ad464099e982a3561d0abc8e9646884cc52b096c88ab68fbb405eb",
+        "recordHash": "911253a6631898a858ee6a74615aacdc658a64e58de0ec281989238257d8b355",
+        "previousRecordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+        "senderHandle": "cursor",
+        "purpose": "Report-only reconciliation; no source-state mutation."
+      },
+      {
+        "sequence": 9374,
+        "eventId": "d4add4f0ab0789878066e4488ee8ccb474b3c4e944d77ce0825b70ab5e2bf8f0",
+        "recordHash": "4c118faff40239d6b8cf3fd8df50f2f9968627b3b2089d47dd7d051eff4a029e",
+        "previousRecordHash": "9d3e37aa511efc038da19a964a7e9b9fe0b868c5f5825fff29f3c578df8d2e6e",
+        "senderHandle": "mustarq",
+        "purpose": "Founder reaffirms bounded CMD-DI correction; Codex lane remains read-only."
+      },
+      {
+        "sequence": 9376,
+        "eventId": "4e73038ee72f23b62612e7fbdad0117c7c9ec2ba91264210403e14bbbdd3f8c9",
+        "recordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+        "previousRecordHash": "323db0599e874a3e8a8d9bd11376347b7df6e2423731eff133cd33198c76215b",
+        "senderHandle": "cursor",
+        "purpose": "Evidence for scoped CMD-DI correction."
+      },
+      {
+        "sequence": 9377,
+        "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+        "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+        "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+        "senderHandle": "vision",
+        "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+      },
+      {
+        "sequence": 9378,
+        "eventId": "167f2d46ed19f80c16125b2865478bb70af9318adc120a03d682b4370cd2096f",
+        "recordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+        "previousRecordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes only 320px staff readability correction."
+      },
+      {
+        "sequence": 9379,
+        "eventId": "98fe9ae5a734d5ccd9a1595684d129df05956a78c423ad39c08a7dc497e1fb70",
+        "recordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+        "previousRecordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+        "senderHandle": "claude",
+        "purpose": "Correction report; verification incomplete."
+      },
+      {
+        "sequence": 9380,
+        "eventId": "509b1d01ad10469a4d4fbb6520f6acb8b4d8d1d3e9058f58b17ae93d09e4f582",
+        "recordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+        "previousRecordHash": "5e726b44398bfe53c3599ecdec46e87488261c21c1831952d51e02072f8eb8cd",
+        "senderHandle": "mustarq",
+        "purpose": "Founder authorizes bounded read-only verification."
+      },
+      {
+        "sequence": 9381,
+        "eventId": "dfbbe21ac4020accbd1429a935da7302d7c8c2252ea46e57fc5ce5f048dfde54",
+        "recordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+        "previousRecordHash": "4d4d795de6f4b9bc68c3b49ee87aca89067239adb2ff8bb01d2c139df41d343d",
+        "senderHandle": "claude",
+        "purpose": "Verification evidence; no test outcome claimed."
+      },
+      {
+        "sequence": 9382,
+        "eventId": "5f7cb4cc70d6eab52d8a61224e71cb63e804ad1bea836e1542988fe9f94fa6a0",
+        "recordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+        "previousRecordHash": "0b34cd5fe354cc7c3e7211a339b026c32a7f9ddf1bdffaa090786cd3658a282f",
+        "senderHandle": "mustarq",
+        "purpose": "Follow-on Room record in scoped CMD-DI correction chain."
+      },
+      {
+        "sequence": 9383,
+        "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+        "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+        "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+        "senderHandle": "vision",
+        "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+      },
+      {
+        "sequence": 9384,
+        "eventId": "40b0e27fd5c7453e0a5475a61c45276f6d33be73a314948a5ab64427f44f2afa",
+        "recordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+        "previousRecordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+        "senderHandle": "mustarq",
+        "purpose": "Founder MODS readiness assessment directive."
+      },
+      {
+        "sequence": 9385,
+        "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+        "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+        "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+        "senderHandle": "codex",
+        "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+      },
+      {
+        "sequence": 9386,
+        "eventId": "3f0fa76d7d341840c03e9b873619c4a5bd004bb620b3b6f41f1cf122c72b9058",
+        "recordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+        "previousRecordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+        "senderHandle": "mustarq",
+        "purpose": "Founder defines MODS exit scope; not an execution grant."
+      },
+      {
+        "sequence": 9387,
+        "eventId": "583985b195af624a5e90065bc83535fd072ed47bbb9b1d949298732689d8079a",
+        "recordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+        "previousRecordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+        "senderHandle": "mustarq",
+        "purpose": "Founder assigns read-only MODS readiness assessment."
+      },
+      {
+        "sequence": 9388,
+        "eventId": "c79b0c9ba29edd52430002e10fe01435f0e1f8ab44423a2358bec29f50d66d80",
+        "recordHash": "5c8f05811f045730d05bdd628ef0b40f95616082536d2f53596a7290e29c772a",
+        "previousRecordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+        "senderHandle": "antigravity",
+        "purpose": "Antigravity readiness report; operational gating is not acceptance."
+      },
+      {
+        "sequence": 9391,
+        "eventId": "7803b66b8390ac6ba1ded19d49cc3746c3e74cdb2cc5118644f04678b223c44f",
+        "recordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+        "previousRecordHash": "54ab4ce6b9b7e742fee70a701741e13302c635e7ae3cfd8d402e14c723c2804f",
+        "senderHandle": "mustarq",
+        "purpose": "Founder read-only native-containment planning assignment; no execution authority."
+      },
+      {
+        "sequence": 9392,
+        "eventId": "b110c93bbf42cef2de67edf457247b39b6f17bb24d0ec129333e3fe45cbae065",
+        "recordHash": "589c1d41ee30f3d2656cd59d5798eeffe3d996eef9096a3beabe143c0a2a275d",
+        "previousRecordHash": "38a7518152e0c82351ffcb7fa9b9ee2d768630a757a6671aff8ac49cd40b56d4",
+        "senderHandle": "codex",
+        "purpose": "Codex read-only plan/evidence report; no tests or services executed."
+      },
+      {
+        "sequence": 9395,
+        "eventId": "84f1cc22935bf8a00af49e7d7ae003ec255f45ea647afeb380c6ae903d13d8b0",
+        "recordHash": "1d80d7afbfc4738c6860d1b5021fe42fc72accbe7bf957ff10712d08027f982b",
+        "previousRecordHash": "cbd58800af505ad2851f255992acd8c909f9e0f5078c36d06a11aefc6158a12f",
+        "senderHandle": "vision",
+        "purpose": "Vision correction: N-1 readiness rejected; G-CONTAINMENT remains open."
+      },
+      {
+        "sequence": 9441,
+        "eventId": "430d6046a872f7e6a19b1b402ca9dc02fc1855259f13fecd3e4dea9a35160121",
+        "recordHash": "d61175e9ff0be73bd41ae208b8a1f7b0f2492dcc67f56d33291e89ed4f9ffe35",
+        "previousRecordHash": "79eb7f68447fbfb6fbd23484fd95831255d05037b91af55c9e7c171716c2e992",
+        "senderHandle": "mustarq",
+        "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+      },
+      {
+        "sequence": 9443,
+        "eventId": "f539ff79f3253b4dc01c345adb7ac136b9cf00f6f5a3bccae4ac1b15c919e2b0",
+        "recordHash": "bfec5b50276d0d86579e546843c34d66f8fe52d805955246e856a03f68e65a71",
+        "previousRecordHash": "00a6433a662a6503bef9bd4e72b59deaf1d4bbedaded1216ae3e5ac0f999ef18",
+        "senderHandle": "codex",
+        "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+      },
+      {
+        "sequence": 9450,
+        "eventId": "0e8f23d1a7912bb1da68bf3676a7e0d045c92cf15c780d99ccbf92b7c1eb34a8",
+        "recordHash": "9ec77695f6a9ed7eb58fca6ed45655ca1e489bf967afdb26f7b4eb2d1afd3fac",
+        "previousRecordHash": "e24bc004cb332a5132d42a7e848178c436c4be7ff832dd5d67143f9828b9d94f",
+        "senderHandle": "mustarq",
+        "purpose": "Founder directive initiating separate Command board proposal."
+      },
+      {
+        "sequence": 9451,
+        "eventId": "2ca1956225dd0393eaaedd71d2ae2f539835b348828abc244b9506d03b4dfc57",
+        "recordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+        "previousRecordHash": "9ec77695f6a9ed7eb58fca6ed45655ca1e489bf967afdb26f7b4eb2d1afd3fac",
+        "senderHandle": "codex",
+        "purpose": "Codex proposal and 33-row migration specification."
+      },
+      {
+        "sequence": 9452,
+        "eventId": "023d62eddd098be76ed229fca2dcf2a456a79cf89f4b76591278a8fb1b30f74c",
+        "recordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+        "previousRecordHash": "044d23fc59a7ef65f5c05c71652fd57fdb5ae61d9687c221bec3097dbb7e0bef",
+        "senderHandle": "mustarq",
+        "purpose": "Founder architecture approval in principle; not creation authority by itself."
+      },
+      {
+        "sequence": 9453,
+        "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+        "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+        "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+        "senderHandle": "mustarq",
+        "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+      },
+      {
+        "sequence": 9454,
+        "eventId": "dcf20f1e4b99ca8d74b737fe08d51c4c6aa9a8c08015c4d39aa5deddcf4a9fa7",
+        "recordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+        "previousRecordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+        "senderHandle": "mustarq",
+        "purpose": "Continuation of #9453 constraints and required evidence."
+      },
+      {
+        "sequence": 9455,
+        "eventId": "421f81968f26051917f1ee4bcc325ceac8437d92c4fca2db6428562a3f18493a",
+        "recordHash": "b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+        "previousRecordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+        "senderHandle": "mustarq",
+        "purpose": "Continuation of #9453 verifier verdict and stop conditions."
+      }
+    ],
+    "overlay_findings": [
+      {
+        "task_ids": [
+          "CMD-DI-1-3",
+          "CMD-DI-1-4"
+        ],
+        "finding": "Full task rejection remains; 320px chip-readability sub-check ACCEPTED only. Historical source states are unchanged.",
+        "refs": [
+          {
+            "sequence": 9371,
+            "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+            "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+          },
+          {
+            "sequence": 9377,
+            "eventId": "dd517d6ad55d171866e954d05e4b80c3bda1b2c3202d80dc63466ef0a8ca298a",
+            "recordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "previousRecordHash": "dddf1198b2cf107a84b88d922f624b0fdaa3e50bdd8b2290beafc636ed7f497b",
+            "senderHandle": "vision",
+            "purpose": "Independent verdict: full acceptance rejected; narrow 320x720 sub-check accepted."
+          },
+          {
+            "sequence": 9378,
+            "eventId": "167f2d46ed19f80c16125b2865478bb70af9318adc120a03d682b4370cd2096f",
+            "recordHash": "fa11e6e62e3688df52eeae13465dd1d8596fefa967a723d79f2750603b7a568a",
+            "previousRecordHash": "1b83cbe76716f73ced3ff6cf8ece691bb1ced28f1ad8bd83a9e86a102d233697",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes only 320px staff readability correction."
+          },
+          {
+            "sequence": 9383,
+            "eventId": "ead85fb4ad53910ca1d2b98ffba75c510d7a726a78959b6dff158912d07fc58b",
+            "recordHash": "042714f0493c0791fb36db8b452eaa55e8d24c8c36fe6a386c2241d0f9541868",
+            "previousRecordHash": "f7c8bf995623bf2fc30788050e212f9033eea4a5c471fbc05a572206efeb4c7b",
+            "senderHandle": "vision",
+            "purpose": "Vision accepts scoped chip-readability correction; full task remains open/rejected."
+          },
+          {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          }
+        ]
+      },
+      {
+        "task_ids": [
+          "CONT-PKG-9361"
+        ],
+        "finding": "Founder acceptance is scoped to continuity documentation/cold-start; source checkpoint BLOCKED remains preserved.",
+        "refs": [
+          {
+            "sequence": 9367,
+            "eventId": "1bab60fcf25cc85514493628816ea8d10037d22bf3a181948e8bb49ea94152b9",
+            "recordHash": "1bd33bbdbb14adf557eb5a1063246d6b54b6bbfd186a16c65ffc7ff773acf9a1",
+            "previousRecordHash": "610a8362aa77f326d9ba796cbd00be9821c7ffe120b48b27ad1d70b5c0afc127",
+            "senderHandle": "mustarq",
+            "purpose": "Founder-authorized ledger checkpoint; source SHA and record hash must match."
+          },
+          {
+            "sequence": 9371,
+            "eventId": "fa73248ce2a2c2fd48dafdbcdacdcff4be6a690b9615420a4571c722d532a1b7",
+            "recordHash": "71ca88745b586eb7ef56e1dcc8ca2182e09d71425f26021907771f8373211662",
+            "previousRecordHash": "530c7c57ce65a5d0bae34863c11fea65c19e4f56a31974c3e6ef229265d07617",
+            "senderHandle": "mustarq",
+            "purpose": "Founder authorizes bounded CMD-DI-1-3/1-4 correction; accepts continuity documentation only."
+          }
+        ]
+      },
+      {
+        "task_ids": [
+          "MODS"
+        ],
+        "finding": "Founder scope is defined; readiness reports differ by gate; N-1 readiness is rejected and MODS operational acceptance is not established.",
+        "refs": [
+          {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          },
+          {
+            "sequence": 9386,
+            "eventId": "3f0fa76d7d341840c03e9b873619c4a5bd004bb620b3b6f41f1cf122c72b9058",
+            "recordHash": "36b75a6e18b76c48344dee3c350f1061e067dc35778afc9c39bf3d97e548df18",
+            "previousRecordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "senderHandle": "mustarq",
+            "purpose": "Founder defines MODS exit scope; not an execution grant."
+          },
+          {
+            "sequence": 9388,
+            "eventId": "c79b0c9ba29edd52430002e10fe01435f0e1f8ab44423a2358bec29f50d66d80",
+            "recordHash": "5c8f05811f045730d05bdd628ef0b40f95616082536d2f53596a7290e29c772a",
+            "previousRecordHash": "4852ea291b3f8ccb8ef51d227538e96c4e44622600d280c0d2f9c6830e289080",
+            "senderHandle": "antigravity",
+            "purpose": "Antigravity readiness report; operational gating is not acceptance."
+          },
+          {
+            "sequence": 9395,
+            "eventId": "84f1cc22935bf8a00af49e7d7ae003ec255f45ea647afeb380c6ae903d13d8b0",
+            "recordHash": "1d80d7afbfc4738c6860d1b5021fe42fc72accbe7bf957ff10712d08027f982b",
+            "previousRecordHash": "cbd58800af505ad2851f255992acd8c909f9e0f5078c36d06a11aefc6158a12f",
+            "senderHandle": "vision",
+            "purpose": "Vision correction: N-1 readiness rejected; G-CONTAINMENT remains open."
+          },
+          {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          }
+        ]
+      },
+      {
+        "task_ids": [
+          "MISSION-SERP-AIKIDO-BASELINE",
+          "SERP-354"
+        ],
+        "finding": "No new mission/Aikido execution or StarqERP task work is authorized; existing holds remain.",
+        "refs": [
+          {
+            "sequence": 9385,
+            "eventId": "090c8bc8a3612e0c87dbff5d1fb9c2f7138d10a0a14bf7f5ff462a04047dcbea",
+            "recordHash": "62225f0487d3b920e82cc57889c9c406c6d1c882f88f067039157faf607517a2",
+            "previousRecordHash": "70664c0c8bb65526cc9a534be457b11bb98bca54e9a02bd83bc4d8f2e6e45d3f",
+            "senderHandle": "codex",
+            "purpose": "Codex read-only MODS readiness assessment; informational, not an independent verdict."
+          },
+          {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          },
+          {
+            "sequence": 9454,
+            "eventId": "dcf20f1e4b99ca8d74b737fe08d51c4c6aa9a8c08015c4d39aa5deddcf4a9fa7",
+            "recordHash": "1109733958cdc66811506a94f10259244959c859f221d67c5afdc1f1054299cd",
+            "previousRecordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "senderHandle": "mustarq",
+            "purpose": "Continuation of #9453 constraints and required evidence."
+          }
+        ]
+      },
+      {
+        "task_ids": [],
+        "finding": "B1 is outside this recovery. #9441/#9443 are boundary references only; #9453 retains PAUSED/BLOCKED and forbids reopening.",
+        "refs": [
+          {
+            "sequence": 9441,
+            "eventId": "430d6046a872f7e6a19b1b402ca9dc02fc1855259f13fecd3e4dea9a35160121",
+            "recordHash": "d61175e9ff0be73bd41ae208b8a1f7b0f2492dcc67f56d33291e89ed4f9ffe35",
+            "previousRecordHash": "79eb7f68447fbfb6fbd23484fd95831255d05037b91af55c9e7c171716c2e992",
+            "senderHandle": "mustarq",
+            "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+          },
+          {
+            "sequence": 9443,
+            "eventId": "f539ff79f3253b4dc01c345adb7ac136b9cf00f6f5a3bccae4ac1b15c919e2b0",
+            "recordHash": "bfec5b50276d0d86579e546843c34d66f8fe52d805955246e856a03f68e65a71",
+            "previousRecordHash": "00a6433a662a6503bef9bd4e72b59deaf1d4bbedaded1216ae3e5ac0f999ef18",
+            "senderHandle": "codex",
+            "purpose": "Boundary reference only under #9453; no B1 review or work performed."
+          },
+          {
+            "sequence": 9453,
+            "eventId": "2dc8f43e7f75ec99ad06e022935f9fb51a0f8dea75ae754dc36bce43db5e036b",
+            "recordHash": "fb5759bdcb2e160cb0b174b546c09453474cc07aab197e062da1c1a178709bd5",
+            "previousRecordHash": "3354672cc90f04838ec07f5f90db5db164406f4ed35267fbefe3e536c6817773",
+            "senderHandle": "mustarq",
+            "purpose": "Authenticated Founder Phase 1 offline file recovery authorization."
+          }
+        ]
+      }
+    ],
+    "dispositions": "Source states remain intact. Only cited overlays are applied. Owner/verifier/current workflow remain UNKNOWN. Room remains governing authority.",
+    "scope_conflicts": [
+      "The #9385 NOT READY TO COMMISSION report and #9388 READY FOR OPERATIONAL GATING report use different readiness boundaries; neither is MODS operational acceptance, and #9395 independently rejects N-1 readiness.",
+      "CMD-DI-1-3/1-4 full acceptance remains rejected even though the #9383 320px chip-readability sub-check is accepted.",
+      "B1 remains outside scope; only the #9453 PAUSED/BLOCKED boundary is represented."
+    ]
+  },
+  "protected_sources": {
+    "historical_ledger": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json",
+      "before_sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+      "after_board_sha256": "91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F",
+      "unchanged": true
+    },
+    "documented_starqerp_task_ssot": {
+      "path": "D:\\StarqTech\\starqNexus\\data\\starq-erp-tasks.json",
+      "present_before": false,
+      "present_after": false,
+      "state": "ABSENT at documented path; not created or substituted"
+    },
+    "starqerp_projection_contract": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starqerp-control-board\\contract.json",
+      "bytes_before": 27974,
+      "bytes_after_board": 27974,
+      "sha256_before": "16628EC3CA445FDD0FCEE81E690D8ABA2997B574421F1F38F466BCACADD1D34F",
+      "sha256_after_board": "16628EC3CA445FDD0FCEE81E690D8ABA2997B574421F1F38F466BCACADD1D34F",
+      "unchanged": true
+    },
+    "herdr_taskstore": {
+      "status": "NOT ACCESSED",
+      "reason": "Explicitly excluded by #9453; no content, metadata, or sidecars read."
+    },
+    "other_exclusions": [
+      "No D:\\!starq access.",
+      "No Command UI or projection wiring.",
+      "No services, runtime, broker, watcher, Herdr, TaskStore, or native execution.",
+      "No B1 implementation, source review, reassignment, or reopening.",
+      "No historical source or Room record mutation."
+    ]
+  },
+  "artifacts": {
+    "board": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\command-board.json",
+      "bytes": 153988,
+      "sha256": "E3B6A30246A44CBAF9BBA88B5C930EB643FA4D4BF565D9E632F26B74C3F09651"
+    },
+    "schema": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\board-schema.json",
+      "bytes": 5675,
+      "sha256": "2B8BB447E089F238CBE961F02C99CCC23C3545D544B008AD7CC8B11D7F47B5CD"
+    },
+    "immutable_snapshot": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\snapshots\\e3b6a30246a44cbaf9bba88b5c930eb643fa4d4bf565d9e632f26b74c3f09651.json",
+      "bytes": 153988,
+      "sha256": "E3B6A30246A44CBAF9BBA88B5C930EB643FA4D4BF565D9E632F26B74C3F09651",
+      "bytes_identical_to_board": true
+    },
+    "manifest_hash_note": "This manifest does not self-embed its own hash; its exact size and SHA-256 are reported in the Room evidence post."
+  },
+  "rollback": {
+    "executed": false,
+    "procedure": "No prior independently accepted Command board snapshot exists at this path. Preserve this exact candidate and its content-addressed snapshot. Any discard, restore, or replacement requires fresh Founder authorization and may restore only a separately identified independently accepted board hash. Never alter TASK_LEDGER.json, StarqERP state, TaskStore, or Room history."
+  },
+  "acceptance_gates": [
+    "Codex posts complete Phase 1 artifact, source, validation, and boundary evidence to Room.",
+    "Vision independently reviews the exact board, schema, manifest, and snapshot hashes read-only.",
+    "Vision posts ACCEPT - PHASE 1 BOARD SOURCE INTEGRITY ONLY, REJECT with exact findings, or BLOCKED / UNKNOWN with insufficient-evidence detail, all pinned to the exact artifacts and Room #9455 cutoff.",
+    "Until Vision posts the scoped ACCEPT, this board remains CANDIDATE_NOT_ACCEPTED. No Phase 2 UI, runtime use, managed floor, MODS readiness claim, or later programme gate is authorized."
+  ],
+  "validation": {
+    "mode": "Pure offline PowerShell JSON/schema, fingerprint, row, dependency, snapshot, and Room-chain validation; no application tests.",
+    "commands": [
+      "Get-FileHash -Algorithm SHA256 -LiteralPath 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\continuity\\TASK_LEDGER.json'",
+      "Test-Json -LiteralPath 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\command-board.json' -SchemaFile 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\board-schema.json'",
+      "Test-Json -LiteralPath 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\board-manifest.json'",
+      "Inline PowerShell assertions: exact 33-ID order, 33/33 deep source-record equality, duplicate/missing/extra ID check, dependency-target check, Room sequence/hash-link check, snapshot filename/content hash check, protected-source before/after comparison."
+    ],
+    "transcript": [
+      "LEDGER_SHA256=91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F; EXPECTED=91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F; MATCH=True",
+      "SOURCE_ROWS=33; IMPORTED_ROWS=33; EXACT_ID_ORDER=True; MISSING=0; EXTRA=0; DUPLICATES=0",
+      "SOURCE_RECORD_DEEP_MATCH=33/33; SOURCE_STATE/OWNER/QUALIFIER/DEPENDENCIES=PRESERVED",
+      "DEPENDENCY_REFERENCES=52; UNRESOLVED=0",
+      "ROOM_CHAIN=9367..9455; RECORDS=89; SEQUENCE_GAPS=0; PREVIOUS_HASH_LINK_FAILURES=0; HEAD_HASH=b28c21b72d524f7d3262e1fc268798f3d4a70aa7fbe0f9d3000bf16177c1a070",
+      "SCHEMA_INSTANCE_VALID=true; SNAPSHOT_HASH_MATCH=True; SNAPSHOT_BYTES_MATCH=True",
+      "LEDGER_UNCHANGED=True; ERP_CONTRACT_UNCHANGED=True; DOCUMENTED_ERP_TASK_PATH_ABSENT=True",
+      "FAILURES=0; APPLICATION_TESTS=NOT_RUN; RUNTIME_UI_B1=NOT_EXECUTED"
+    ],
+    "failures": [],
+    "result": "PASS - offline board integrity/provenance validation only; candidate remains not independently accepted."
+  }
+}
+

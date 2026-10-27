@@ -4,6 +4,7 @@ import * as React from 'react';
 import { FloorSurface } from '@/surfaces/floor';
 import { DIMENSION_TONE, STAFF_CLASS_TONE } from '@/lib/states';
 import { buildPhase3Surface } from '../server/data-service.mjs';
+import { buildFloor } from '../server/floor.mjs';
 import { ABSOLUTE_WINDOWS_PATH } from '../server/snapshot.mjs';
 
 /**
@@ -32,6 +33,44 @@ const text = html
   .replace(/&quot;/g, '"')
   .replace(/\s+/g, ' ')
   .trim();
+
+function renderFixtureDisagreement() {
+  const cloned: any = structuredClone(surface);
+  cloned.execution_truth = {
+    ...cloned.execution_truth,
+    agents: [
+      ...(cloned.execution_truth.agents ?? []),
+      {
+        handle: 'fixture-disagree',
+        current_state: 'active',
+        current_task: 'FIXTURE-EXEC-TASK',
+        current_assignment: 'SERP-FIXTURE-1',
+        current_task_confidence: 'recorded',
+        current_task_source: 'activity.json',
+        current_assignment_confidence: 'recorded',
+        current_assignment_source: 'activity.json',
+        counts_as_active_staff: false,
+        staff_classification: 'UNKNOWN',
+        mentioned_task_count: 7,
+      },
+    ],
+  };
+  cloned.staff_state = {
+    ...cloned.staff_state,
+    byHandle: {
+      ...(cloned.staff_state?.byHandle ?? {}),
+      'fixture-disagree': { duty_current_task: 'FIXTURE-DUTY-TASK', duty_state: 'assigned' },
+    },
+  };
+  cloned.floor = buildFloor({ surface: cloned });
+  const fixtureHtml = renderToStaticMarkup(React.createElement(FloorSurface, { surface: cloned }));
+  const fixtureText = fixtureHtml
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return { floor: cloned.floor, html: fixtureHtml, text: fixtureText };
+}
 
 describe('the Dev Studio Floor renders from the real surface', () => {
   it('mounts without throwing and produces substantial markup', () => {
@@ -101,21 +140,22 @@ describe('the Dev Studio Floor renders from the real surface', () => {
   });
 
   it('renders both current-task truths with their provenance, and the disagreement', () => {
-    const differing = floor.roster.entries.filter((e) => e.truth_disagreement?.values_differ);
+    const fx = renderFixtureDisagreement();
+    const differing = fx.floor.roster.entries.filter((e) => e.truth_disagreement?.values_differ);
     expect(differing.length).toBeGreaterThan(0);
     // The disagreement is on screen as a first-class constraint, not smoothed.
-    expect(text).toMatch(/TRUTH_DISAGREEMENT/);
-    expect(text).toMatch(/activity\.json vs agent-comms\/protocol\/v1\/staff-state\.json/);
-    expect(text).toMatch(/BOTH RENDERED WITH PROVENANCE/);
-    expect(text).toMatch(/Assignments — execution side only/);
+    expect(fx.text).toMatch(/TRUTH_DISAGREEMENT/);
+    expect(fx.text).toMatch(/activity\.json vs agent-comms\/protocol\/v1\/staff-state\.json/);
+    expect(fx.text).toMatch(/BOTH RENDERED WITH PROVENANCE/);
+    expect(fx.text).toMatch(/Assignments — execution side only/);
   });
 
   it('renders a mention count under its own heading, labelled as not an assignment', () => {
     expect(html).toMatch(/text-right">Mentions/);
     expect(text).toMatch(/a mention is not an assignment/i);
-    // No mention id list is ever forwarded, so none can be rendered.
+    const fx = renderFixtureDisagreement();
     const mentionIds = ['SERP-0', 'SERP-1', 'SERP-2', 'SERP-3'];
-    const renderMentions = floor.assignments.filter(
+    const renderMentions = fx.floor.assignments.filter(
       (r) => r.current_assignment && String(r.current_assignment).includes('SERP-'),
     );
     expect(renderMentions.length).toBeGreaterThan(0);
@@ -123,6 +163,7 @@ describe('the Dev Studio Floor renders from the real surface', () => {
     for (const r of renderMentions) {
       expect(r.current_assignment).not.toBe(String(r.mention_count));
     }
+    expect(fx.text).toContain('SERP-FIXTURE-1');
     expect(mentionIds.length).toBe(4);
   });
 
