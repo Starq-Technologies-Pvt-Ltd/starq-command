@@ -583,7 +583,8 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       const brokerChild = doc.children.find((c) => c.name === 'herdrBroker' && c.status !== 'EXITED');
       if (brokerChild) {
         const v = (await classify(cfg, [brokerChild], { prove: false })).get('herdrBroker');
-        if (v.verdict === 'MATCH') {
+        const jobOwned = Boolean(brokerChild.containment) && v.verdict !== 'FOREIGN';
+        if (v.verdict === 'MATCH' || jobOwned) {
           const view = await broker(cfg, 'GET', '/api/lifecycle');
           if (view.status === 200 && view.body.running.length) {
             await broker(cfg, 'POST', '/api/lifecycle/drain');
@@ -597,8 +598,25 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
             return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker channel unavailable; refusing all force recovery without agent closeout proof' };
           }
           const drain = await broker(cfg, 'POST', '/api/lifecycle/drain');
-          if (drain.status !== 200 || drain.body?.admission !== 'DRAINING' || !drain.body?.drained) {
+          if (drain.status !== 200 || drain.body?.admission !== 'DRAINING') {
             return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: 'pending, orphaned, terminal or agent ownership remains unresolved' };
+          }
+          if (!drain.body?.drained) {
+            const floor = await broker(cfg, 'GET', '/api/agents');
+            const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
+            const handoff = floor.status === 200
+              ? await d.historicalCloseoutHandoff({ stateDir, lifecycleView: drain.body, registryProjection: floor.body?.registry_records })
+              : { applied: false, reason: 'broker registry projection unavailable' };
+            if (handoff?.applied !== true) {
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: handoff?.reason ?? 'pending, orphaned, terminal or agent ownership remains unresolved' };
+            }
+            appendEvent(doc, 'recover.historical_closeout_exception_verified', {
+              decision: handoff.decision,
+              session_ids: handoff.session_ids,
+              historical_closeout: 'UNKNOWN',
+              broker_boot_id: handoff.broker_boot_id,
+            });
+            save(doc);
           }
         } else {
           return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
