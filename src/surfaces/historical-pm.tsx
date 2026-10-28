@@ -58,7 +58,7 @@ export function HistoricalPmSurface({
             ['Hoadha Social', historical?.counts.hoadha_social ?? 'UNKNOWN'],
             ['Hoadha Concierge', historical?.counts.hoadha_concierge ?? 'UNKNOWN'],
             ['Unique ids', historical?.unique_source_ids.length ?? 'UNKNOWN'],
-            ['Workspace', 'D:\\!starq (not D:\\StarqTech\\Projects)'],
+            ['Configured source', historical?.files[0]?.source ?? 'UNAVAILABLE'],
             ['Reason', historical?.reason ?? 'none'],
           ]}
         />

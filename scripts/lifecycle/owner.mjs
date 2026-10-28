@@ -30,10 +30,21 @@ import { checkHealth } from './health.mjs';
 import { buildHealthPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
 import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
-import { readHerdrStatus } from '../../../herdr-floor/src/herdr-status.mjs';
-import { nativeContainment, resolvePid } from '../../../herdr-floor/src/launcher.mjs';
-import { containmentOptions } from '../../../herdr-floor/src/containment-config.mjs';
+import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
+
+const [herdrStatusComponent, herdrLauncherComponent, herdrContainmentComponent] = await Promise.all([
+  importExternalComponent('herdr-floor', 'src/herdr-status.mjs'),
+  importExternalComponent('herdr-floor', 'src/launcher.mjs'),
+  importExternalComponent('herdr-floor', 'src/containment-config.mjs'),
+]);
+const unavailableOperation = (component, exportName) => () => {
+  throw new Error(component.reason ?? `${component.name} module does not export ${exportName}`);
+};
+const readHerdrStatus = herdrStatusComponent.module?.readHerdrStatus ?? unavailableOperation(herdrStatusComponent, 'readHerdrStatus');
+const nativeContainment = herdrLauncherComponent.module?.nativeContainment ?? unavailableOperation(herdrLauncherComponent, 'nativeContainment');
+const resolvePid = herdrLauncherComponent.module?.resolvePid ?? unavailableOperation(herdrLauncherComponent, 'resolvePid');
+const containmentOptions = herdrContainmentComponent.module?.containmentOptions ?? unavailableOperation(herdrContainmentComponent, 'containmentOptions');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CHILD_HOST = path.resolve(HERE, '..', 'lifecycle-child.mjs');

@@ -35,7 +35,7 @@ function jsonWith(rawJson: string, update: (value: Record<string, any>) => void)
 describe('separate read-only Command task input', () => {
   it('exposes the pinned 33-row board as stale command_tasks and preserves UNKNOWNs', async () => {
     const projection = await validateCommandBoardBundle(raw);
-    expect(projection.state).toBe('STALE');
+    expect(projection.state, projection.reason).toBe('STALE');
     expect(projection.input).toBe('command_tasks');
     expect(projection.source.boardSha256).toBe(COMMAND_BOARD_SOURCE.boardSha256);
     expect(projection.acceptance).toEqual(PHASE1_ACCEPTANCE);
@@ -114,6 +114,14 @@ describe('separate read-only Command task input', () => {
     expect(Object.isFrozen(PHASE1_ACCEPTANCE)).toBe(true);
     expect(PHASE1_ACCEPTANCE.eventId).toBe('be17d38644207ea3c10325c8949042070ab51e72c63e4bc0d63bf674e2444357');
     expect(PHASE1_ACCEPTANCE.recordHash).toBe('30e31c54eb032474a1c51d5334df5216e2137f7e0a70e0206ccbf486a4e20dde');
+  });
+
+  it('uses repository-relative assets while preserving the accepted historical manifest byte pin', async () => {
+    const projection = await validateCommandBoardBundle(raw);
+    expect(projection.state).toBe('STALE');
+    expect(projection.tasks).toHaveLength(33);
+    expect(COMMAND_BOARD_SOURCE.identity).toBe('board/command-board.json');
+    expect(COMMAND_BOARD_SOURCE.identity).not.toMatch(/^[A-Za-z]:/);
   });
 
   it('shows UNAVAILABLE when a pinned board file is missing and does not fall back', async () => {

@@ -6,11 +6,17 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { type RoomEventEnvelope, type RoomEventType } from '../../src/schemas/room-event.ts';
+import { resolveExternalComponent } from '../../server/external-components.mjs';
+import { resolveWorkspace } from '../../server/paths.mjs';
 
-const ADAPTER_DIR = path.dirname(fileURLToPath(import.meta.url));
-export const CANONICAL_ROOM_LEDGER = path.resolve('D:\\StarqTech\\agent-comms\\room.jsonl');
+const agentComms = resolveExternalComponent('agent-comms');
+const workspaceRoot = resolveWorkspace().root;
+export const CANONICAL_ROOM_LEDGER = agentComms.root
+  ? path.join(agentComms.root, 'room.jsonl')
+  : workspaceRoot
+    ? path.join(workspaceRoot, 'agent-comms', 'room.jsonl')
+    : path.resolve(process.cwd(), 'agent-comms', 'room.jsonl');
 
 function sameFilesystemPath(left: string, right: string): boolean {
   const a = path.normalize(path.resolve(left));
@@ -34,12 +40,10 @@ function sameFilesystemPath(left: string, right: string): boolean {
 }
 
 export function canonicalRoomLedgerPaths(): string[] {
-  return [
-    CANONICAL_ROOM_LEDGER,
-    path.resolve('D:/StarqTech/agent-comms/room.jsonl'),
-    path.resolve(process.cwd(), 'agent-comms', 'room.jsonl'),
-    path.resolve(ADAPTER_DIR, '..', '..', '..', '..', '..', 'agent-comms', 'room.jsonl'),
-  ];
+  const candidates = [CANONICAL_ROOM_LEDGER, path.resolve(process.cwd(), 'agent-comms', 'room.jsonl')];
+  if (workspaceRoot) candidates.push(path.join(workspaceRoot, 'agent-comms', 'room.jsonl'));
+  if (agentComms.root) candidates.push(path.join(agentComms.root, 'room.jsonl'));
+  return [...new Set(candidates.map((candidate) => path.resolve(candidate)))];
 }
 
 export function assertEventsLedgerIsNotCanonicalRoom(eventsLedgerPath: string): string {

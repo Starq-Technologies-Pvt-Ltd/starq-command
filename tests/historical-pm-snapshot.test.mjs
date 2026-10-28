@@ -50,14 +50,20 @@ function nTasks(prefix, n, extra = () => ({})) {
   }));
 }
 
-test('live historical workspace root is D:\\\\!starq, not the Projects mirror', () => {
-  assert.equal(HISTORICAL_NEXUS_WORKSPACE_ROOT, 'D:\\!starq');
-  assert.equal(isForbiddenHistoricalMirror('D:\\StarqTech\\Projects'), true);
-  assert.equal(isForbiddenHistoricalMirror('D:\\StarqTech\\Projects\\StarqNexus'), true);
-  assert.equal(isForbiddenHistoricalMirror('D:\\!starq'), false);
-  const refused = loadHistoricalPmSnapshot({ workspaceRoot: 'D:\\StarqTech\\Projects' });
-  assert.equal(refused.records.length, 0);
-  assert.match(refused.reason, /not historical authority/);
+test('historical workspace root is configurable and excludes the configured Company Projects mirror', () => {
+  const expectedRoot = process.env.STARQ_NEXUS_WORKSPACE_ROOT
+    ? path.resolve(process.env.STARQ_NEXUS_WORKSPACE_ROOT)
+    : (process.platform === 'win32' ? path.resolve('D:\\!starq') : path.resolve('recovered', 'nexus'));
+  assert.equal(HISTORICAL_NEXUS_WORKSPACE_ROOT, expectedRoot);
+  assert.equal(isForbiddenHistoricalMirror('C:/starq/Projects', {
+    env: { STARQ_WORKSPACE: 'C:/starq' }, platform: 'linux',
+  }), true);
+  assert.equal(isForbiddenHistoricalMirror('C:/starq/Projects/StarqNexus', {
+    env: { STARQ_WORKSPACE: 'C:/starq' }, platform: 'linux',
+  }), true);
+  assert.equal(isForbiddenHistoricalMirror('C:/nexus-history', {
+    env: { STARQ_WORKSPACE: 'C:/starq' }, platform: 'linux',
+  }), false);
 });
 
 test('contract constants are the 763-row historical boards from #10623', () => {

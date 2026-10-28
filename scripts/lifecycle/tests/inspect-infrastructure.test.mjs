@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import { classifyInfrastructureProcess, inspectDeclaredInfrastructure, osVerdict } from '../inspect.mjs';
+import { resolveExternalComponent } from '../../../server/external-components.mjs';
 
 const HERDR = 'C:\\Users\\Ali Musthaq\\.herdr\\packages\\standalone\\releases\\0.9.5-x86_64-pc-windows-msvc\\herdr.exe';
 const NODE = 'C:\\Program Files\\nodejs\\node.exe';
-const SCRIPTS = 'D:\\StarqTech\\agent-comms\\scripts';
+const SCRIPTS = resolveExternalComponent('agent-comms').root
+  ? path.join(resolveExternalComponent('agent-comms').root, 'scripts')
+  : path.join(process.cwd(), 'agent-comms', 'scripts');
 const PINS = { herdrExecutable: HERDR, scriptsRoot: SCRIPTS };
 
 test('declared infrastructure is classified by node.exe and resolved script path, never by pid or substring', () => {

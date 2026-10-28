@@ -81,18 +81,20 @@ test('fixture historicalWorkspaceRoot attaches 763 raw historical records to Bui
   }
 });
 
-test('production Building origin binds D:\\\\!starq and does not use the Projects mirror', () => {
+test('production Building origin consumes the configured historical source and excludes the mirror', () => {
   const service = readFileSync(path.join(ROOT, 'server', 'building-service.mjs'), 'utf8');
   assert.match(service, /HISTORICAL_NEXUS_WORKSPACE_ROOT/);
   assert.match(service, /historicalWorkspaceRoot: HISTORICAL_NEXUS_WORKSPACE_ROOT/);
   assert.doesNotMatch(service, /StarqTech\\\\Projects/);
   const adapter = readFileSync(path.join(ROOT, 'server', 'historical-pm-snapshot.mjs'), 'utf8');
-  assert.match(adapter, /HISTORICAL_NEXUS_WORKSPACE_ROOT = 'D:\\\\!starq'/);
+  assert.match(adapter, /STARQ_NEXUS_WORKSPACE_ROOT/);
+  assert.match(adapter, /STARQ_NEXUS_FORBIDDEN_MIRROR_ROOT/);
 });
 
-test('pm-service and data-service are unmodified by this historical view package', () => {
+test('PM provenance stays separate from the read-only Building historical snapshot adapter', () => {
   const pm = readFileSync(path.join(ROOT, 'server', 'pm-service.mjs'), 'utf8');
   const data = readFileSync(path.join(ROOT, 'server', 'data-service.mjs'), 'utf8');
-  assert.doesNotMatch(pm, /historical-pm-snapshot|historical_pm|HISTORICAL_NEXUS/);
+  assert.doesNotMatch(pm, /historical-pm-snapshot|historical_pm/);
   assert.doesNotMatch(data, /historical-pm-snapshot|historical_pm|HISTORICAL_NEXUS/);
+  assert.match(pm, /provenance = 'HISTORICAL_NEXUS'/, 'PM retains its own historical import provenance');
 });

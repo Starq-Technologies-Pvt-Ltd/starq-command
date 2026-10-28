@@ -16,9 +16,12 @@ import crypto from 'node:crypto';
 import { resolveReadOnlyTarget } from './path-guard.mjs';
 
 /** Live Building historical root (#10646). Adapter paths are relative to this parent. */
-export const HISTORICAL_NEXUS_WORKSPACE_ROOT = 'D:\\!starq';
-export const HISTORICAL_NEXUS_DATA_ROOT = 'D:\\!starq\\starqNexus\\data';
-const FORBIDDEN_MIRROR = 'd:\\starqtech\\projects';
+const DEFAULT_NEXUS_WORKSPACE = process.env.STARQ_NEXUS_WORKSPACE_ROOT
+  || (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus'));
+export const HISTORICAL_NEXUS_WORKSPACE_ROOT = path.resolve(DEFAULT_NEXUS_WORKSPACE);
+export const HISTORICAL_NEXUS_DATA_ROOT = path.resolve(
+  process.env.STARQ_NEXUS_DATA_ROOT || path.join(HISTORICAL_NEXUS_WORKSPACE_ROOT, 'starqNexus', 'data'),
+);
 
 export const HISTORICAL_PM_BOARD_SOURCES = Object.freeze([
   'starqNexus/data/starq-erp-tasks.json',
@@ -57,9 +60,15 @@ export function normalizeHistoricalWorkspaceRoot(root) {
 }
 
 /** The D:\\StarqTech\\Projects copy is hash-identical, not authority (#10642/#10646). */
-export function isForbiddenHistoricalMirror(root) {
+export function isForbiddenHistoricalMirror(root, { env = process.env, platform = process.platform } = {}) {
   const normalised = normalizeHistoricalWorkspaceRoot(root);
-  return normalised === FORBIDDEN_MIRROR || normalised.startsWith(`${FORBIDDEN_MIRROR}\\`);
+  const workspace = env.STARQ_WORKSPACE;
+  const forbiddenRoots = [
+    env.STARQ_NEXUS_FORBIDDEN_MIRROR_ROOT,
+    workspace ? path.join(workspace, 'Projects') : null,
+    platform === 'win32' ? 'D:\\StarqTech\\Projects' : null,
+  ].filter(Boolean).map((candidate) => normalizeHistoricalWorkspaceRoot(candidate));
+  return forbiddenRoots.some((candidate) => normalised === candidate || normalised.startsWith(`${candidate}\\`));
 }
 
 export function emptyHistoricalPmSnapshot(reason) {
@@ -206,7 +215,7 @@ export function loadHistoricalPmSnapshot(opts = {}) {
     return emptyHistoricalPmSnapshot('workspaceRoot is required; canonical workspace is not auto-resolved');
   }
   if (isForbiddenHistoricalMirror(workspaceRoot)) {
-    return emptyHistoricalPmSnapshot('D:\\StarqTech\\Projects is not historical authority; use D:\\!starq');
+    return emptyHistoricalPmSnapshot('The configured StarqTech Projects mirror is not historical authority; set STARQ_NEXUS_WORKSPACE_ROOT to the authorized historical source root.');
   }
   const sources = opts.sources ?? HISTORICAL_PM_BOARD_SOURCES;
   if (!Array.isArray(sources) || sources.some((source) => !HISTORICAL_PM_BOARD_SOURCES.includes(source))) {

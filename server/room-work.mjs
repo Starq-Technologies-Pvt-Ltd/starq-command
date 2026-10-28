@@ -2,10 +2,16 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { resolveReadOnlyTarget } from './path-guard.mjs';
-import { computeRecordHash } from '../../../../agent-comms/protocol/v1/hashChain.mjs';
-import { computeEventId } from '../../../../agent-comms/protocol/v1/envelope.mjs';
+import { importExternalComponent } from './external-components.mjs';
 import { readRoomBoundSnapshot } from './room-snapshot.mjs';
 import { classifyRoomLedgerRelation } from './room-ledger-relation.mjs';
+
+const [hashChain, envelope] = await Promise.all([
+  importExternalComponent('agent-comms', 'protocol/v1/hashChain.mjs'),
+  importExternalComponent('agent-comms', 'protocol/v1/envelope.mjs'),
+]);
+const computeRecordHash = hashChain.module?.computeRecordHash;
+const computeEventId = envelope.module?.computeEventId;
 
 const SOURCES = ['agent-comms/protocol/v1/ledger-epoch.json',
   'agent-comms/protocol/v1/projects.json', 'agent-comms/protocol/v1/identities.json',
@@ -23,6 +29,9 @@ function read(root, source) {
   return fs.readFileSync(result.resolved, 'utf8');
 }
 export function projectRoomRecords(records, epoch, projects, identities, ingestedIds = records.map(r => r.eventId)) {
+  if (typeof computeRecordHash !== 'function' || typeof computeEventId !== 'function') {
+    throw new Error(hashChain.reason ?? envelope.reason ?? 'agent-comms integrity modules are unavailable');
+  }
   const anchor = records.findIndex(r => r.eventId === epoch.current?.anchor?.eventId);
   if (anchor < 0) throw new Error('Current Room epoch anchor unavailable');
   const projectIds = new Set(projects.projects.map(p => p.slug));

@@ -1,12 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { checkObservationRule0, checkWorkspaceRule0, checkDevelopmentRule0 } from '../../../starq-lifecycle/runtime-policy.mjs';
-import { compatibilityGate, developmentContainmentGate } from '../../../herdr-floor/src/containment-config.mjs';
+import { importExternalComponent } from '../../server/external-components.mjs';
 import {
   OBSERVATION_COMPONENTS, OBSERVATION_PROFILE, OBSERVATION_RUNTIME_DIRECTORY,
   OBSERVATION_SHARED_LOCK, validateConfig,
 } from './config.mjs';
+
+const [starqLifecycle, herdrFloor] = await Promise.all([
+  importExternalComponent('starq-lifecycle', 'runtime-policy.mjs'),
+  importExternalComponent('herdr-floor', 'src/containment-config.mjs'),
+]);
+const unavailableCheck = (component, exportName) => () => {
+  throw new Error(component.reason ?? `${component.name} module does not export ${exportName}`);
+};
+const checkObservationRule0 = starqLifecycle.module?.checkObservationRule0 ?? unavailableCheck(starqLifecycle, 'checkObservationRule0');
+const checkWorkspaceRule0 = starqLifecycle.module?.checkWorkspaceRule0 ?? unavailableCheck(starqLifecycle, 'checkWorkspaceRule0');
+const checkDevelopmentRule0 = starqLifecycle.module?.checkDevelopmentRule0 ?? unavailableCheck(starqLifecycle, 'checkDevelopmentRule0');
+const unavailableGate = (component, label, exportName) => () => ({
+  resolved: false,
+  detail: `${label}: ${component.reason ?? `${component.name} module does not export ${exportName}`}`,
+});
+const compatibilityGate = herdrFloor.module?.compatibilityGate ?? unavailableGate(herdrFloor, 'G-CONTAINMENT', 'compatibilityGate');
+const developmentContainmentGate = herdrFloor.module?.developmentContainmentGate ?? unavailableGate(herdrFloor, 'G-CONTAINMENT', 'developmentContainmentGate');
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 // Evidence files are checked without executing any audit or booting WSL.

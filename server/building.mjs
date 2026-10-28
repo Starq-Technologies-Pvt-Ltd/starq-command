@@ -29,8 +29,14 @@ export const NEXUS_TASK_SOURCES = [
   'starqNexus/data/hoadha-concierge-tasks.json',
   'starqNexus/data/starq-erp-tasks.json',
 ];
-export const NEXUS_COMPANY_BOARD_ROOT = 'D:\\!starq\\starqNexus\\data';
-export const HOADHA_COMPANY_DOCUMENT_ROOT = 'D:\\!starq\\03_PROJECTS\\hoadha\\HOADHA_DEV_STUDIO';
+const DEFAULT_NEXUS_WORKSPACE = process.env.STARQ_NEXUS_WORKSPACE_ROOT
+  || (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus'));
+export const NEXUS_COMPANY_BOARD_ROOT = path.resolve(
+  process.env.STARQ_NEXUS_DATA_ROOT || path.join(DEFAULT_NEXUS_WORKSPACE, 'starqNexus', 'data'),
+);
+export const HOADHA_COMPANY_DOCUMENT_ROOT = path.resolve(
+  process.env.STARQ_HOADHA_SOURCE_ROOT || path.join(DEFAULT_NEXUS_WORKSPACE, '03_PROJECTS', 'hoadha', 'HOADHA_DEV_STUDIO'),
+);
 export const BUILDING_SOURCES = [
   ...HOADHA_DOCUMENT_SOURCES,
   ...NEXUS_TASK_SOURCES,

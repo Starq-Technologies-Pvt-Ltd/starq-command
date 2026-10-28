@@ -1,6 +1,6 @@
 export const COMMAND_BOARD_SOURCE = Object.freeze({
   input: 'command_tasks',
-  identity: 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\command-board.json',
+  identity: 'board/command-board.json',
   boardSha256: 'E3B6A30246A44CBAF9BBA88B5C930EB643FA4D4BF565D9E632F26B74C3F09651',
   schemaSha256: '2B8BB447E089F238CBE961F02C99CCC23C3545D544B008AD7CC8B11D7F47B5CD',
   manifestSha256: '4AD73C8D4A8D7981012BC63600EE16FCEFE51AA13A157A8522DCAEE40E548611',
@@ -21,8 +21,6 @@ export const PHASE1_ACCEPTANCE = Object.freeze({
 const BOARD_URL = new URL('../../board/command-board.json', import.meta.url);
 const SCHEMA_URL = new URL('../../board/board-schema.json', import.meta.url);
 const MANIFEST_URL = new URL('../../board/board-manifest.json', import.meta.url);
-const SCHEMA_IDENTITY = 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\board-schema.json';
-const SNAPSHOT_IDENTITY = 'D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command\\board\\snapshots\\e3b6a30246a44cbaf9bba88b5c930eb643fa4d4bf565d9e632f26b74c3f09651.json';
 const HISTORICAL_LEDGER_SHA256 = '91C16B4FB74F8551CFBFAD0E260C1D9747E919910A1A5DB3D0F11D016187297F';
 
 type JsonObject = Record<string, unknown>;
@@ -266,14 +264,11 @@ function assertManifestAndBoard(
     boardArtifact.sha256 !== computedBoardHash ||
     boardArtifact.sha256 !== COMMAND_BOARD_SOURCE.boardSha256 ||
     schemaArtifact.sha256 !== COMMAND_BOARD_SOURCE.schemaSha256 ||
-    boardArtifact.path !== COMMAND_BOARD_SOURCE.identity ||
-    schemaArtifact.path !== SCHEMA_IDENTITY ||
-    snapshotArtifact.path !== SNAPSHOT_IDENTITY ||
     snapshotArtifact.sha256 !== COMMAND_BOARD_SOURCE.boardSha256 ||
     snapshotArtifact.bytes_identical_to_board !== true ||
     snapshotArtifact.bytes !== boardArtifact.bytes
   ) {
-    throw new Error('Manifest artifact paths, hashes, or immutable snapshot claims conflict.');
+    throw new Error('Manifest artifact hashes or immutable snapshot claims conflict.');
   }
   if (
     manifest.manifest_version !== '1.0.0' ||

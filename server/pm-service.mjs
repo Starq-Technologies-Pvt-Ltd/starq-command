@@ -28,9 +28,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { pathToFileURL } from 'node:url';
 import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
-import { readRoomSnapshot } from '../../../../agent-comms/scripts/room.mjs';
+import { readRoomSnapshot } from './room-snapshot.mjs';
+import { importExternalComponent, resolveExternalComponent } from './external-components.mjs';
 import {
   initOrgSchema,
   seedOperatingOrg,
@@ -99,11 +99,12 @@ export function allowedNext(task) {
 // ── Configuration ──────────────────────────────────────────────────────────
 const workspace = resolveWorkspace();
 const ROOT = workspace.root;
+const AGENT_COMMS = resolveExternalComponent('agent-comms', { workspaceRoot: ROOT });
 const ROOM_POST = (process.env.PM_ROOM_POST || 'on') !== 'off';
 const ROOM_FROM = String(process.env.PM_ROOM_FROM || '').trim();
 const ROOM_INSTANCE = String(process.env.PM_ROOM_INSTANCE || '').trim();
 const ROOM_TAGS = process.env.PM_ROOM_TAGS || '';
-const SEND_SCRIPT = process.env.PM_ROOM_SEND_SCRIPT || (ROOT ? abs(ROOT, 'agent-comms/scripts/send.mjs') : '');
+const SEND_SCRIPT = process.env.PM_ROOM_SEND_SCRIPT || (AGENT_COMMS.root ? path.join(AGENT_COMMS.root, 'scripts', 'send.mjs') : '');
 
 function requireExplicitRoomWriter() {
   if (!ROOM_FROM || !ROOM_INSTANCE) {
@@ -184,23 +185,24 @@ function localLedgerRef({ actor, purpose, kind, taskId }) {
 
 // The Room's own hash function, read-only. If it cannot be loaded, Room references
 // cannot be authenticated and every one is refused (fail closed).
-let computeRecordHash = null;
-if (ROOT) {
-  try {
-    const mod = await import(pathToFileURL(abs(ROOT, 'agent-comms/protocol/v1/hashChain.mjs')).href);
-    computeRecordHash = mod.computeRecordHash;
-  } catch { computeRecordHash = null; }
-}
+const roomHashModule = await importExternalComponent('agent-comms', 'protocol/v1/hashChain.mjs', { workspaceRoot: ROOT });
+const computeRecordHash = roomHashModule.module?.computeRecordHash ?? null;
 const LEDGER_PATH = () => {
   const o = process.env.PM_ROOM_LEDGER;
-  if (o && SCRATCH) return path.resolve(o);
+  if (SCRATCH) {
+    if (!o) throw new HttpError(503, 'UNAVAILABLE', 'Scratch Room fixture path is not configured.');
+    return path.resolve(o);
+  }
+  if (!SCRATCH && process.env.PM_ROOM_LEDGER) {
+    throw new HttpError(503, 'UNAVAILABLE', 'Production Room path is fixed by the canonical workspace.');
+  }
   return abs(ROOT, CANONICAL.roomLedger);
 };
 
 function snapshotLedger() {
   if (!ROOT) throw new HttpError(503, 'UNAVAILABLE', 'Workspace unresolved.');
   if (!computeRecordHash) throw new HttpError(503, 'UNAVAILABLE', 'Room hash function unavailable; Room references cannot be authenticated.');
-  const snapshot = readRoomSnapshot({ roomPath: LEDGER_PATH() });
+  const snapshot = readRoomSnapshot(ROOT, { roomPath: LEDGER_PATH(), fixturePath: SCRATCH });
   if (!snapshot.stable || snapshot.state !== 'OK') {
     throw new HttpError(503, 'UNAVAILABLE', snapshot.reason || 'Room snapshot unavailable; reference cannot be verified.');
   }

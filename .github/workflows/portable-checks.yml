@@ -1,0 +1,27 @@
+name: Portable checks
+
+on:
+  push:
+    branches: [main, command-convergence-20261028]
+  pull_request:
+    branches: [main]
+
+jobs:
+  command:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:node
+      - run: npx vitest run tests/external-components.test.ts tests/production-entrypoints.test.ts

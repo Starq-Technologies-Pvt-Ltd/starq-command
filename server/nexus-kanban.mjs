@@ -10,7 +10,11 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
-export const NEXUS_DATA_ROOT = process.env.STARQ_NEXUS_DATA_ROOT || 'D:\\!starq\\starqNexus\\data';
+const DEFAULT_NEXUS_WORKSPACE = process.env.STARQ_NEXUS_WORKSPACE_ROOT
+  || (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus'));
+export const NEXUS_DATA_ROOT = path.resolve(
+  process.env.STARQ_NEXUS_DATA_ROOT || path.join(DEFAULT_NEXUS_WORKSPACE, 'starqNexus', 'data'),
+);
 
 export const KANBAN_STATUSES = Object.freeze([
   'TODO', 'NEXT', 'IN_PROGRESS', 'BLOCKED', 'DONE',

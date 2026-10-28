@@ -1,5 +1,13 @@
-import { Registry } from '../../../herdr-floor/src/registry.mjs';
-import { HISTORICAL_CLOSEOUT_EXCEPTION, evaluateHistoricalCloseoutException } from '../../../herdr-floor/src/historical-closeout-exception.mjs';
+import { importExternalComponent } from '../../server/external-components.mjs';
+
+const [registryComponent, exceptionComponent] = await Promise.all([
+  importExternalComponent('herdr-floor', 'src/registry.mjs'),
+  importExternalComponent('herdr-floor', 'src/historical-closeout-exception.mjs'),
+]);
+const Registry = registryComponent.module?.Registry;
+const HISTORICAL_CLOSEOUT_EXCEPTION = exceptionComponent.module?.HISTORICAL_CLOSEOUT_EXCEPTION ?? { sessionIds: [], decision: null };
+const evaluateHistoricalCloseoutException = exceptionComponent.module?.evaluateHistoricalCloseoutException
+  ?? (() => ({ applied: false, reason: exceptionComponent.reason ?? 'herdr-floor module does not export evaluateHistoricalCloseoutException' }));
 
 const EXPECTED_UNVERIFIED_COUNT = 6;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

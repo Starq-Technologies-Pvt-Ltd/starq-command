@@ -43,6 +43,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { resolveExternalComponent } from '../../server/external-components.mjs';
 
 // HTTP verb definitions avoiding single-quote literals to preserve architecture guards
 const VERB_GET = "GET";
@@ -74,11 +75,10 @@ export function validateAgentId(id) {
 /** Read recent audit events from herdr-floor logs (read-only inspection). */
 export function readRecentAuditEvents(limit = 15) {
   try {
-    const candidates = [
-      path.resolve(process.cwd(), "..", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
-      path.resolve(process.cwd(), "00_STARQ_HQ", "operations", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
-      path.resolve("D:", "!starq", "00_STARQ_HQ", "operations", "herdr-floor", "logs", "herdr-floor-audit.jsonl"),
-    ];
+    const floor = resolveExternalComponent('herdr-floor');
+    const candidates = floor.root
+      ? [path.join(floor.root, 'logs', 'herdr-floor-audit.jsonl')]
+      : [];
 
     for (const auditPath of candidates) {
       if (fs.existsSync(auditPath)) {

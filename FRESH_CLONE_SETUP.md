@@ -1,6 +1,8 @@
 # Fresh Clone Setup and Portability Report
 
-**Verified against:** GitHub `main` at `02402fbf7ab3eb73e00879ed0cf11a60bc632122` on 2026-10-28. The lifecycle test command correction described below is the only runtime-package change in the follow-up portability commit; it does not add dependencies.
+> The clean-clone measurements below are pinned to the earlier `02402fbf7ab3eb73e00879ed0cf11a60bc632122` checkpoint. See **Current portability remediation** at the end for subsequent loader, configuration, lifecycle, and CI changes. Do not apply an earlier failure statement to later commits without rerunning it.
+
+**Historical clone SHA:** GitHub `main` at `02402fbf7ab3eb73e00879ed0cf11a60bc632122` on 2026-10-28.
 
 ## Compatibility result
 
@@ -37,6 +39,7 @@ npm ci
 npm run typecheck
 npm run build
 npm run test:lifecycle
+npm run test:node
 npx vitest run --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=dot tests/dispatch-integration.test.ts
 npm test -- --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=dot
 ```
@@ -63,14 +66,14 @@ The run also created ignored test data under this clone's `data/` directory only
 
 These are not Git submodules or tracked files in `starq-command`; the repository does not pin their remotes or revisions. A developer needs separately authorized, versioned copies and the appropriate data before attempting full operation:
 
-- **Canonical workspace and Room:** a workspace root containing `STARQ.md` and `00_STARQ_HQ`, plus the `agent-comms` protocol package, Room ledger, identities, leases, project registry and send scripts. `server/room-work.mjs` and `server/pm-service.mjs` statically import `agent-comms`; without it, the data and PM servers fail before startup. The Room ledger and identity/lease files are private operational state, not source fixtures.
-- **Lifecycle and containment:** the sibling `starq-lifecycle` and `herdr-floor` source modules, lifecycle configuration/state, and the native JobGuardian binary/records. `scripts/lifecycle/gates.mjs`, `gate-status.mjs`, `owner.mjs` and lifecycle tests use static relative imports into those siblings. The JobGuardian executable is not tracked here. The canonical lifecycle also expects the full workspace and native containment evidence; do not run `command:start` on an arbitrary clone.
+- **Canonical workspace and Room:** a workspace root containing `STARQ.md` and `00_STARQ_HQ`, plus the `agent-comms` protocol package, Room ledger, identities, leases, project registry and send scripts. Configure `STARQ_AGENT_COMMS_ROOT` if it is outside the inferred workspace. Room ledger and identity/lease files are private operational state, not source fixtures. Without them, Command reports communications/identity evidence unavailable and refuses Room-backed writes.
+- **Lifecycle and containment:** the sibling `starq-lifecycle` and `herdr-floor` source modules, lifecycle configuration/state, and the native JobGuardian binary/records. Set `STARQ_LIFECYCLE_ROOT` and `STARQ_HERDR_FLOOR_ROOT` when those components are elsewhere. Lifecycle gates report absent components as unresolved; they cannot satisfy startup. The JobGuardian executable is not tracked here. The canonical lifecycle expects the full workspace and native containment evidence; do not run `command:start` on an arbitrary clone.
 - **Herdr workforce:** the operator-owned standalone Herdr installation and its pinned version/configuration, the Herdr floor broker, registered workers, live sessions/panes and capability mappings. The Command Herdr integration is not a replacement for the standalone operator-owned runtime.
 - **PM and control-plane state:** the active `data/pm-operating.db`, control-plane/task store, evidence and lease state are not tracked. A new clone has no production tasks; initialize an isolated scratch database only with the documented PM scratch settings. Do not copy or point at another machine's production DB without authorization.
 - **Nexus, Library and Cortex:** historical PM and recovered Nexus source data/indexes are absent (`recovered/nexus` has no tracked files). Library and Cortex code has `STARQ_COMMAND_NEXUS_LIBRARY_ROOT` and `STARQ_COMMAND_NEXUS_GRAPH` overrides. Kanban has `STARQ_NEXUS_DATA_ROOT`, but defaults to `D:\!starq\starqNexus\data`.
 - **Building/Hoadha and control-board inputs:** `server/building.mjs`, historical PM projection code, and `src/lib/command-board.ts` contain machine-specific `D:\!starq\...` / `D:\StarqTech\...` paths. Some defaults are configurable; several are fixed. The relevant historical data, Hoadha sources and control-board workspace are not bundled.
 
-Some relevant configuration names are `STARQ_WORKSPACE`, `COMMAND_PORT`, `COMMAND_DATA_SERVICE`, `BUILDING_SERVICE`, `HERDR_SERVICE`, `BUILDING_SERVICE_PORT`, `PM_PORT`, `PM_DB_PATH`, `PM_ROOM_POST`, `PM_ROOM_LEDGER`, `PM_ROOM_SEND_SCRIPT`, `STARQ_NEXUS_DATA_ROOT`, `STARQ_COMMAND_NEXUS_GRAPH`, `STARQ_COMMAND_NEXUS_LIBRARY_ROOT`, and `COMMAND_PYTHON`. There is no tracked `.env.example` or complete standalone environment file. `STARQ_WORKSPACE` must point to a real, authorized workspace; pointing it at the repository alone is invalid. These variables do not resolve the lifecycle and Room modules that are statically imported from outside the repository.
+See [.env.example](.env.example) for non-secret settings. It is a reference file and is not auto-loaded. `STARQ_WORKSPACE` must point to a real, authorized workspace; pointing it at the repository alone is invalid. Use separate component and data roots. An invalid explicit component root remains unavailable rather than falling back.
 
 ## Inspecting the UI without external state
 
@@ -89,6 +92,29 @@ Open `http://127.0.0.1:15173/`. API-backed surfaces will be unavailable until th
 3. Historical Building, Kanban, PM, and Command-board paths contain fixed D: locations. Some Nexus services have environment overrides; fixed consumers remain non-portable.
 4. Several tests require an external census document and canonical historical data, and test results depend on that ambient workspace. The clean clone exposed missing fixtures and test-contract failures.
 5. No setup document or `.env.example` previously described these prerequisites. This file documents what is clone-local versus external; it does not fabricate or copy canonical operational state.
+
+## Current portability remediation
+
+The following work updates selected findings from the historical `02402fb` clone report while preserving the separate ownership of external components. The current source SHA is recorded in the corresponding commit and Room report.
+
+- `server/external-components.mjs` resolves `agent-comms`, `starq-lifecycle`, and `herdr-floor` from `STARQ_AGENT_COMMS_ROOT`, `STARQ_LIFECYCLE_ROOT`, and `STARQ_HERDR_FLOOR_ROOT`, or from the verified workspace layout. Missing or invalid components return explicit unavailable/unresolved results. No external component version is pinned by this repository. Record each component's authorized remote URL and commit SHA locally before commissioning.
+- The external module/export contract and the exact revision manifest fields to retain are listed in [COMPANION_COMPATIBILITY.md](COMPANION_COMPATIBILITY.md). This documents the required interfaces; it does not claim an unrecorded version is compatible.
+- Lifecycle status/gates and the historical closeout evaluator now load external modules through that resolver. Missing dependencies cannot satisfy lifecycle gates. `npm run test:lifecycle` lists and skips only companion-dependent test files when their component is absent; a skip is not a pass. The hard-coded Room script path in the lifecycle infrastructure test is now resolved from the workspace.
+- Nexus roots accept `STARQ_NEXUS_WORKSPACE_ROOT`, `STARQ_NEXUS_DATA_ROOT`, `STARQ_NEXUS_FORBIDDEN_MIRROR_ROOT`, and `STARQ_HOADHA_SOURCE_ROOT`. The Command board fetches assets relative to the repository and retains the exact accepted manifest and artifact hashes; its historical absolute manifest paths are provenance, not runtime clone paths.
+- PM scratch bootstrap, schema version 3, backup, read-only verification, and migration steps are documented in [PM_DATABASE_SETUP.md](PM_DATABASE_SETUP.md). Current implementation and missing capabilities are classified in [COMMAND_CAPABILITY_GAP_INVENTORY.md](COMMAND_CAPABILITY_GAP_INVENTORY.md).
+- [`.env.example`](.env.example) provides non-secret reference settings. [`.github/workflows/portable-checks.yml`](.github/workflows/portable-checks.yml) runs Node 22 and 24 on Windows and Linux with `npm ci`, typecheck, build, resolver regressions, and real production entrypoint probes. It does not start the pinned production lifecycle.
+
+### Remediation verification on the current workstation
+
+- `npm run typecheck` — passed.
+- `npm run build` — passed.
+- Focused resolver, board integrity, and actual production-entrypoint tests — **19/19 passed**. The data, Building, PM scratch DB, and Herdr entrypoints each started and answered their health route.
+- `npm run test:node` — **69 passed, 0 failed** across the 12 Node built-in `.mjs` test files. This command brings the historical PM, Building, Room snapshot, Kanban, Library, Cortex, and PM fidelity tests into the documented test workflow; the prior default Vitest include did not discover those `.mjs` files.
+- `npm run test:lifecycle` — **119 passed, 0 failed, 2 skipped**. The two skips are pre-existing child-host platform-conditional tests. Companion-dependent lifecycle suites ran because the companions were available on this workstation.
+- Full Vitest — **1,083 passed, 32 failed, 1,115 total across 53 files**. Eleven files retain failures in legacy Phase 3/Phase 7 UI and surface expectations, Building/route fixture behavior, external floor fixture evidence, PM portfolio archive fixture handling, and projection contract states. The suite remains red and is not marked accepted. See [KNOWN_TEST_FAILURES_20261028.md](KNOWN_TEST_FAILURES_20261028.md) for the exact 32 test names.
+- Dispatch integration — **5/5 passed** in the full run: exclusive lease, worker/session evidence, contention, Room delivery failure, dirty-work recovery, fresh worktree retry, evidence, review, acceptance, and closure.
+
+The measurements above are from the local canonical-workspace checkout, not a second computer or a clean clone of the resulting SHA. The earlier independent clone result remains separately identified at the top of this file.
 
 ## Readiness
 

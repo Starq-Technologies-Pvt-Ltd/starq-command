@@ -1,8 +1,13 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { importExternalComponent } from '../../server/external-components.mjs';
 import { loadConfig } from './config.mjs';
 import { readGates, readObservationGates, readStandaloneHerdrGate, readWslGate } from './gates.mjs';
-import { compatibilityGate } from '../../../herdr-floor/src/containment-config.mjs';
+const herdrFloor = await importExternalComponent('herdr-floor', 'src/containment-config.mjs');
+const compatibilityGate = herdrFloor.module?.compatibilityGate ?? (() => ({
+  resolved: false,
+  detail: `G-CONTAINMENT: ${herdrFloor.reason ?? 'herdr-floor module does not export compatibilityGate'}`,
+}));
 // Gates that need no runtime inventory are evaluated alone, so a single query
 // does not trigger the full Rule0 filesystem scan.
 const OBSERVATION_KINDS = new Set(['G-RULE0-OBS', 'G-PROFILE-OBS', 'G-OWNERSHIP-OBS']);

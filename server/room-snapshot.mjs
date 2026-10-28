@@ -6,20 +6,15 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { pathToFileURL } from 'node:url';
 import { CANONICAL, abs, resolveWorkspace } from './paths.mjs';
+import { importExternalComponent } from './external-components.mjs';
 import { classifyFilesystemPath } from './room-path.mjs';
 
 const workspace = resolveWorkspace();
-const readerPath = workspace.root
-  ? abs(workspace.root, 'agent-comms/scripts/room.mjs')
-  : null;
 let reader = null;
-let loadError = null;
-if (readerPath) {
-  try { reader = await import(pathToFileURL(readerPath).href); }
-  catch (err) { loadError = err.message; }
-}
+const externalReader = await importExternalComponent('agent-comms', 'scripts/room.mjs');
+reader = externalReader.module;
+const loadError = externalReader.reason ?? null;
 
 const unavailable = (reason) => ({
   state: 'UNAVAILABLE', stable: false, parseStatus: 'UNAVAILABLE', reason,
