@@ -591,6 +591,34 @@ export function run() { loadMessages('common', true); neighborhood('root', 2); s
     expect(detectTransportWriteCapabilityInSource(sf, 'fake-unresolved-init.ts').hasWriteCapability).toBe(true);
   });
 
+  it('resolves a renamed options variable initializer for an unresolved callable', () => {
+    const code = `const cfg = { method: 'POST' };
+export function run(url: string) { send(url, cfg); }`;
+    const sf = ts.createSourceFile('fake-renamed-init.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const result = detectTransportWriteCapabilityInSource(sf, 'fake-renamed-init.ts');
+    expect(result.hasWriteCapability).toBe(true);
+    expect(result.suspiciousCalls[0].reason).toMatch(/unresolved callable/);
+  });
+
+  it('resolves an aliased fetch call and arbitrary RequestInit variable names', () => {
+    const code = `const send = fetch;
+const cfg = { method: 'POST' };
+export function run(url: string) { return send(url, cfg); }`;
+    const sf = ts.createSourceFile('fake-fetch-alias-init.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const result = detectTransportWriteCapabilityInSource(sf, 'fake-fetch-alias-init.ts');
+    expect(result.hasWriteCapability).toBe(true);
+    expect(result.suspiciousCalls[0].reason).toBe("fetch with method 'POST'");
+  });
+
+  it('accepts a resolved read-only GET options variable', () => {
+    const code = `const requestCfg = { method: 'GET', cache: 'no-store' };
+export function run(url: string) { return fetch(url, requestCfg); }`;
+    const sf = ts.createSourceFile('fake-fetch-get-init.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const result = detectTransportWriteCapabilityInSource(sf, 'fake-fetch-get-init.ts');
+    expect(result.hasWriteCapability).toBe(false);
+    expect(result.suspiciousCalls).toHaveLength(0);
+  });
+
   it('an imported helper call is NOT flagged as transport', () => {
     const code = `import { fetchRawSource } from '@/lib/use-command-surface';
 export async function e(p: string) { return fetchRawSource(p); }`;

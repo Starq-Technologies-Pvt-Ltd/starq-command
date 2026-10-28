@@ -624,21 +624,43 @@ export function detectTransportWriteCapabilityInSource(
     return false;
   };
 
+  const resolveVariableInitializer = (
+    argument: ts.Expression | undefined,
+    seen = new Set<string>(),
+  ): ts.Expression | undefined => {
+    if (!argument || !ts.isIdentifier(argument)) return argument;
+    const name = argument.text;
+    if (seen.has(name)) return undefined;
+    seen.add(name);
+    const declarations = collectVarDeclarations(sf, sf).filter(
+      (declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === name,
+    );
+    // A repeated/shadowed name cannot be resolved safely without a TypeChecker.
+    // Leave it unknown so the caller can fail closed.
+    if (declarations.length !== 1 || !declarations[0]?.initializer) return undefined;
+    return resolveVariableInitializer(declarations[0].initializer, seen);
+  };
+
+  const looksLikeRequestInit = (argument: ts.Expression | undefined): boolean => {
+    if (!argument || !ts.isObjectLiteralExpression(argument)) return false;
+    return argument.properties.some((property) => {
+      if (ts.isSpreadAssignment(property)) return true;
+      if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return false;
+      const name = property.name;
+      if (ts.isComputedPropertyName(name)) return true;
+      const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : '';
+      return /^(method|body|headers|signal|credentials|mode|redirect|referrer|integrity|keepalive|cache)$/i.test(key);
+    });
+  };
+
   const mayBeRequestInit = (argument: ts.Expression | undefined): boolean => {
     if (!argument) return false;
     if (ts.isIdentifier(argument)) {
+      const initializer = resolveVariableInitializer(argument);
+      if (looksLikeRequestInit(initializer)) return true;
       return /^(?:opts?|options?|init|requestInit|fetchOptions|requestOptions)$/i.test(argument.text);
     }
-    if (ts.isObjectLiteralExpression(argument)) {
-      return argument.properties.some((property) => {
-        if (ts.isSpreadAssignment(property)) return true;
-        if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return false;
-        const name = property.name;
-        if (ts.isComputedPropertyName(name)) return true;
-        const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : '';
-        return /^(method|body|headers|signal|credentials|mode|redirect|referrer|integrity|keepalive|cache)$/i.test(key);
-      });
-    }
+    if (looksLikeRequestInit(argument)) return true;
     if (ts.isCallExpression(argument) && ts.isIdentifier(argument.expression)) {
       return /(?:options|requestInit|fetchInit)$/i.test(argument.expression.text);
     }
@@ -653,14 +675,15 @@ export function detectTransportWriteCapabilityInSource(
     if (isFetchCallee(callee)) {
       const optionsArg = call.arguments[1];
       if (!optionsArg) continue; // no options → GET by default ✓
+      const resolvedOptions = resolveVariableInitializer(optionsArg);
 
       // Options is an object literal — inspect method property
-      if (ts.isObjectLiteralExpression(optionsArg)) {
+      if (resolvedOptions && ts.isObjectLiteralExpression(resolvedOptions)) {
         // A spread can carry `method` in at runtime and cannot be verified
         // statically, so ANY spread in the options object is suspicious.
         // (Verified hole: fetch(url, { ...opts }) previously fell through to
         // the "no method key → GET" branch and was treated as safe.)
-        const hasSpread = optionsArg.properties.some(ts.isSpreadAssignment);
+        const hasSpread = resolvedOptions.properties.some(ts.isSpreadAssignment);
         if (hasSpread) {
           suspiciousCalls.push({
             file: label,
@@ -674,7 +697,7 @@ export function detectTransportWriteCapabilityInSource(
         // a matchable PropertyAssignment name, so it used to fall through to
         // the "no method key → GET" branch. Any computed key is suspicious:
         // the key cannot be resolved statically, so the method is unverifiable.
-        const hasComputedKey = optionsArg.properties.some(
+        const hasComputedKey = resolvedOptions.properties.some(
           p =>
             (ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) &&
             ts.isComputedPropertyName(p.name),
@@ -689,7 +712,7 @@ export function detectTransportWriteCapabilityInSource(
           continue;
         }
 
-        const methodProp = optionsArg.properties.find(
+        const methodProp = resolvedOptions.properties.find(
           p =>
             ts.isPropertyAssignment(p) &&
             (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) &&
