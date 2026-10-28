@@ -116,6 +116,18 @@ The following work updates selected findings from the historical `02402fb` clone
 
 The measurements above are from the local canonical-workspace checkout, not a second computer or a clean clone of the resulting SHA. The earlier independent clone result remains separately identified at the top of this file.
 
+### Clean-clone recheck of current `main`
+
+After pushing the portability changes, a new HTTPS clone at `C:\starq-command-portability-check-20261028` fetched `main` at **`a71d3e08b6e1478661aa17cd327650ab683ee0fc`**. This was an isolated checkout outside the Starq workspaces; `STARQ_WORKSPACE` was unset and the companion roots were absent.
+
+- `npm ci` — passed; 260 packages installed from the committed lockfile.
+- `npm run typecheck` and `npm run build` — passed.
+- `npm run test:node` — **66 passed, 0 failed, 3 skipped**. The three Room parser tests require the separately managed `agent-comms` reader; path-safety and PM scratch-path tests ran and passed.
+- `npx vitest run tests/external-components.test.ts tests/production-entrypoints.test.ts` — **9 passed, 0 failed**. The data, Building, PM scratch DB, and Herdr production entrypoints each started in isolated child processes and answered their health route. The full production lifecycle and companion-backed Room operations were not started.
+- Full Vitest was not rerun in this clean clone. Use the canonical-checkout full-suite count above and the exact failure inventory separately; external data/fixtures make clean-clone totals non-comparable.
+
+This proves a same-host clean checkout at the recorded SHA, not an independent physical-computer run. Full Software Factory operation still requires the private external components and operational data listed above.
+
 ## Readiness
 
 An authorized developer can clone the private repository, install dependencies, typecheck, build, run the passing dispatch test, and inspect the static UI from the repository alone. They cannot reproduce the full test baseline or operate the PM/Room/Herdr/JobGuardian Software Factory from this repository alone. Full operation requires the separately versioned Starq workspace, external component repositories and canonical data described above. This clone test ran on the Founder's laptop; repeat it on a second Windows computer before claiming hardware-independent verification.
