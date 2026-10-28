@@ -17,7 +17,7 @@
     "command:observation-start": "node scripts/command-lifecycle.mjs observation-start",
     "command:observation-status": "node scripts/command-lifecycle.mjs observation-status",
     "command:observation-stop": "node scripts/command-lifecycle.mjs observation-stop",
-    "test:lifecycle": "node --test scripts/lifecycle/tests/",
+    "test:lifecycle": "node --test \"scripts/lifecycle/tests/*.test.mjs\"",
     "data": "node server/data-service.mjs",
     "pm:start": "node server/pm-service.mjs",
     "os:start": "node scripts/start-command-os.mjs",
