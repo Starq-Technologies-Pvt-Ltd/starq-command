@@ -9,14 +9,18 @@ type RepoResolver = (task: any) => { repoPath: string; baseSha: string; worktree
  * and RoomEventAdapter. It never launches or prompts a Herdr worker directly.
  */
 export class Dispatcher {
-  constructor(private options: {
+  private readonly options: {
     store: PmTaskExecutionStore;
     getWorkforce: WorkforceProvider;
     worktreeManager: any;
     repoResolver: RepoResolver;
     roomAdapter: any;
     sender: string;
-  }) {}
+  };
+
+  constructor(options: Dispatcher['options']) {
+    this.options = options;
+  }
 
   async preview() {
     const workforce = await this.options.getWorkforce();
