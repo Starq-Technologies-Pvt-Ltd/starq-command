@@ -5,6 +5,7 @@ on:
     branches: [main, command-convergence-20261028]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   command:

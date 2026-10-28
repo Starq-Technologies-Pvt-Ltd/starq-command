@@ -1,6 +1,14 @@
-# Known full-suite failures — 2026-10-28
+# Full-suite remediation record — 2026-10-28
 
-Reproduced after the portability/audit remediation edits on the canonical workstation. This is a record of current red tests, not a waiver or a claim that the product is accepted. Command: `npx vitest run --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=dot`. Full suite result: 1,083 passed, 32 failed, 1,115 total across 53 files. A focused rerun of the 11 affected files produced the same 32 failures.
+## Current verification
+
+The 32 failures below were the inherited suite state before this remediation pass; they are no longer current failures. On 2026-10-28, the canonical command `npx vitest run --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=dot` completed with **53 files passed, 1,118 tests passed, 0 failed** in 126.35 seconds. Focused reruns passed for all changed test groups. This is test evidence, not production acceptance.
+
+The remediation corrected the AST capability guard to follow variable aliases and resolve fetch options before applying the method allowlist; updated stale surface census/order expectations; made phase metadata checks non-vacuous; aligned floor/provenance assertions with their dimension-level states; and redirected historical Nexus assertions to the read-only Building snapshot owner while active Studio boards remain PM-owned. Test fixtures now return the PM source shape expected by the UI.
+
+## Historical starting failures
+
+The initial canonical run was 1,083 passed, 32 failed, 1,115 total across 53 files. The following list records that starting point for traceability; it must not be read as the current result:
 
 - `building-unavailable-routes.test.tsx` — Building absent: existing independent surfaces remain reachable preserves the portfolio and historical board in Projects with the Studio tab rail
 - `building-unavailable-routes.test.tsx` — Building absent: existing independent surfaces remain reachable keeps the Building-dependent route #studio/mercury/board guarded

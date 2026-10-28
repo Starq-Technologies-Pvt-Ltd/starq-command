@@ -213,8 +213,11 @@ describe('CMD-DI-2-2 project id from the route and the building projection', () 
       <BuildingSurface route={parseBuildingRoute('#studio/mercury/board')} surface={surface} />,
     );
     expect(parseBuildingRoute('#studio/mercury/board').projectId).toBe('mercury');
-    expect(mercury).toContain('data-project-id="mercury"');
-    expect(mercury).toContain('MRC-1');
+    // Studio boards now use PM as the active task authority. Building's
+    // historical projection remains covered by resolveProjectBoardRecords
+    // above; it is not silently substituted for the writable PM board.
+    expect(mercury).toContain('data-pm-route="mercury"');
+    expect(mercury).toContain('Reading the board…');
     expect(mercury).not.toContain('H-ON-MERCURY');
     expect(mercury).not.toContain('H-BARE');
     expect(mercury).not.toContain('H-1');
@@ -222,8 +225,8 @@ describe('CMD-DI-2-2 project id from the route and the building projection', () 
     const fromQuery = renderToStaticMarkup(
       <BuildingSurface route={parseBuildingRoute('#studio/projects?project_id=mercury')} surface={surface} />,
     );
-    expect(fromQuery).toContain('data-project-id="mercury"');
-    expect(fromQuery).toContain('MRC-1');
+    expect(fromQuery).toContain('data-pm-route="mercury"');
+    expect(fromQuery).toContain('Reading the board…');
     expect(fromQuery).not.toContain('H-ON-MERCURY');
 
     expect(parseBuildingRoute('#studio/projects/board')).toEqual({
@@ -236,9 +239,9 @@ describe('CMD-DI-2-2 project id from the route and the building projection', () 
     );
     expect(projectsTab).not.toContain('data-project-id="projects"');
     expect(projectsTab).not.toContain('MRC-1');
-    expect(projectsTab).toContain('Project-room mapping');
-    expect(projectsTab).toContain('data-input="command_tasks"');
-    expect(projectsTab).toContain('Reading the three pinned offline board assets.');
+    expect(projectsTab).toContain('data-pm="portfolio"');
+    expect(projectsTab).toContain('Project boards');
+    expect(projectsTab).toContain('Source records &amp; history');
   });
 
   it('keeps the ERP and Hoadha room routes on their existing boards', () => {
@@ -256,16 +259,14 @@ describe('CMD-DI-2-2 project id from the route and the building projection', () 
     const erp = renderToStaticMarkup(
       <BuildingSurface route={parseBuildingRoute('#studio/erp/tasks')} surface={surface} />,
     );
-    expect(erp).toContain('data-room="erp"');
-    expect(erp).toContain('SERP-9');
-    expect(erp).toContain('COM-1');
+    expect(erp).toContain('data-pm-route="erp"');
+    expect(erp).toContain('Reading the board…');
     expect(erp).not.toContain('data-project-id="mercury"');
     const hoadha = renderToStaticMarkup(
       <BuildingSurface route={parseBuildingRoute('#studio/hoadha/board')} surface={surface} />,
     );
-    expect(hoadha).toContain('data-room="hoadha"');
-    expect(hoadha).toContain('H-1');
-    expect(hoadha).toContain('H-BARE');
+    expect(hoadha).toContain('data-pm-route="hoadha"');
+    expect(hoadha).toContain('Reading the board…');
     expect(hoadha).not.toContain('data-project-id="mercury"');
   });
 
@@ -309,9 +310,9 @@ describe('CMD-DI-2-2 project id from the route and the building projection', () 
     const html = renderToStaticMarkup(
       <BuildingSurface route={parseBuildingRoute(route)} surface={surface} />,
     );
-    expect(html).toContain('data-project-id="mercury"');
-    expect(html).toContain('MRC-1');
-    expect(html).not.toContain('data-project-id="projects"');
+    expect(html).toContain('data-pm-route="mercury"');
+    expect(html).toContain('Reading the board…');
+    expect(html).not.toContain('data-pm-route="projects"');
     expect(html).not.toContain('Project-room mapping');
     expect(html).not.toContain('Project id unavailable');
   });

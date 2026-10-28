@@ -361,10 +361,11 @@ describe('Phase 2 boundaries', () => {
       ).toBe(true);
     }
 
-    // If a nav entry opts into phase metadata, keep its value well formed. The
-    // historical phase-five ceiling is not a product-wide scope restriction.
+    // Phase metadata was removed from live navigation because it implied a
+    // hidden release gate while every current surface is authorized. Keep that
+    // invariant explicit instead of accepting any positive integer vacuously.
     const phaseNumbers = [...shellSrc.matchAll(/phase:\s*(\d+)\b/g)].map((match) => Number(match[1]));
-    expect(phaseNumbers.every((phase) => Number.isSafeInteger(phase) && phase > 0)).toBe(true);
+    expect(phaseNumbers).toHaveLength(0);
 
     const navIds = [...shellSrc.matchAll(/\bid: '([a-z0-9]+)'/g)].map((m) => m[1]!);
     // Keep the census aligned with the integrated Company OS surfaces. An

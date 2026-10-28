@@ -399,7 +399,7 @@ describe('System owns runtime/control-plane and is not interchangeable with Evid
 describe('Dev Studio peers each own a distinct work area', () => {
   it('every peer names the question it answers', () => {
     const questions: string[] = [];
-    for (const peer of ['staff', 'projects', 'capacity', 'activity']) {
+    for (const peer of ['staff', 'capacity', 'activity']) {
       const html = render(`#studio/${peer}`);
       expect(html, `${peer} has no peer work header`).toContain('peer-work-head');
       questions.push(/data-peer-work="[^"]*"[^>]*><span class="mark">([^<]*)</.exec(html)?.[1] ?? peer);
@@ -407,12 +407,16 @@ describe('Dev Studio peers each own a distinct work area', () => {
     expect(new Set(questions).size, `peer headings collided: ${questions.join(', ')}`).toBe(
       questions.length,
     );
+    const projects = render('#studio/projects');
+    expect(projects).toContain('data-pm="portfolio"');
+    expect(projects).toContain('Project boards');
   });
 
-  it('Projects owns the project-room mapping', () => {
-    const html = render('#studio/projects');
-    expect(html).toContain('Project-room mapping');
-    expect(html).toMatch(/OCCUPIED is not evidence/i);
+  it('Building owns the project-room mapping and keeps occupancy separate from execution', () => {
+    const html = render('#building');
+    expect(html).toContain('starqERP / Hoadha → Dev Studio');
+    expect(html).toMatch(/OCCUPIED · ON_HOLD/);
+    expect(html).toContain('process closure governs maturity');
   });
 
   it('capacity remains UNKNOWN where no quota is declared (mission §5)', () => {
@@ -475,11 +479,12 @@ describe('ERP reads as process closure', () => {
   });
 
   it('room state survives on EVERY ERP tab, including router-owned ones', () => {
-    // WF-ERP-03. Three tabs are mounted by the router, not the room module, so
-    // a band rendered inside the room module would miss exactly those.
-    for (const tab of ['overview', 'process', 'tasks', 'decisions', 'evidence', 'staff', 'integrity']) {
+    // PM Tasks is now its own authoritative board surface; the Building-backed
+    // ERP room tabs retain the process state band.
+    for (const tab of ['overview', 'process', 'decisions', 'evidence', 'staff', 'integrity']) {
       expect(render(`#studio/erp/${tab}`), `erp/${tab}`).toContain('room-state-band');
     }
+    expect(render('#studio/erp/tasks')).toContain('data-pm-route="erp"');
   });
 });
 
@@ -520,20 +525,21 @@ describe('Hoadha reads as prepared and not started', () => {
     expect(html).not.toContain('focus-rail');
   });
 
-  it('Board makes the live/proposed choice impossible to misunderstand (WF-HOA-03)', () => {
+  it('PM Board is distinct from the prepared Building snapshot', () => {
     const html = render('#studio/hoadha/board');
-    expect(html).toContain('data-collection-switch="live"');
-    // Both counts inside the control, the active one named, the other marked
-    // not live, and no single summed total.
-    expect(html).toMatch(/active collection\s*<strong>LIVE<\/strong>/);
-    expect(html).toMatch(/proposed records are NOT live/i);
-    expect(html).toMatch(/never summed/i);
+    expect(html).toContain('data-pm-route="hoadha"');
+    expect(html).toContain('Reading the board…');
+    const overview = render('#studio/hoadha/overview');
+    expect(overview).toContain('data-room-state-band="hoadha"');
+    expect(overview).toMatch(/live\s+\d+[\s\S]{0,100}proposed\s+\d+/i);
+    expect(overview).toMatch(/never summed/i);
   });
 
   it('room state survives on every Hoadha tab', () => {
-    for (const tab of ['overview', 'loops', 'board', 'waves', 'stages', 'evidence', 'staff', 'integrity']) {
+    for (const tab of ['overview', 'loops', 'waves', 'stages', 'evidence', 'staff', 'integrity']) {
       expect(render(`#studio/hoadha/${tab}`), `hoadha/${tab}`).toContain('room-state-band');
     }
+    expect(render('#studio/hoadha/board')).toContain('data-pm-route="hoadha"');
   });
 });
 

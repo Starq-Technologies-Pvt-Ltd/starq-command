@@ -57,7 +57,13 @@ describe('Command project boards', () => {
   it('shows board counts on the compact overview', async () => {
     const registered = [project('command', 'Starq Command', 'CMD', 'BLOCKED'), project('erp', 'starqERP', 'SERP')];
     const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: registered };
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => portfolio })));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/nexus/sources')) return { ok: true, json: async () => ({ sources: [] }) };
+      return { ok: false, status: 404, json: async () => ({ message: `unexpected route: ${url}` }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
     dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);
@@ -82,7 +88,13 @@ describe('Command project boards', () => {
       project('hoadha', 'Hoadha', 'DHIV'),
     ];
     const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: registered };
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => portfolio })));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/nexus/sources')) return { ok: true, json: async () => ({ sources: [] }) };
+      return { ok: false, status: 404, json: async () => ({ message: `unexpected route: ${url}` }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
     dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/projects' });
     vi.stubGlobal('window', dom.window);
     vi.stubGlobal('document', dom.window.document);

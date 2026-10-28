@@ -181,12 +181,8 @@ describe('R3 (Goose, P2) — every rail button is named at every width', () => {
     expect(shellSrc).not.toMatch(/title=\{expanded \? undefined/);
   });
 
-  it('all seven nav entries carry a name', () => {
-    // SEVEN, not six, since Founder Room seq 8486/8487 authorised the Company OS
-    // surface. The guard that matters is the loop below — every entry is named
-    // and hinted — and it is unchanged; only the census moved. A further entry
-    // without a label or hint still fails here.
-    expect(NAV).toHaveLength(7);
+  it('all ten current nav entries carry a name', () => {
+    expect(NAV).toHaveLength(10);
     for (const item of NAV) {
       expect(item.label.length, item.id).toBeGreaterThan(0);
       expect(item.hint.length, item.id).toBeGreaterThan(0);
@@ -310,16 +306,16 @@ describe('R7 (Goose, P3) — the dead phase field and its unreachable badge are 
     // Reordering would have been an unrequested UX change; the field died, the
     // operator order did not move.
     //
-    // `company` is INSERTED, not re-sorted (Founder seq 8486/8487). It sits
-    // directly after Overview and before Building because it is the whole
-    // organisation and Building is the two project rooms beneath it — the same
-    // altitude relationship the Founder corrected. No existing entry moved
-    // relative to another: overview < company < building < studio < ... holds
-    // the previous sequence with one entry added.
+    // The current sequence is the operator order from shell.tsx. It is not
+    // sorted by phase; Company, Library, Cortex, and Comms retain their product
+    // positions alongside the original Studio surfaces.
     expect(NAV.map((i) => i.id)).toEqual([
       'overview',
       'company',
       'building',
+      'library',
+      'cortex',
+      'comms',
       'studio',
       'attention',
       'evidence',

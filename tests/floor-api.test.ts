@@ -80,8 +80,9 @@ function makeWorkspaceFixture(
   if (agents !== undefined) activity.agents = agents;
   writeFileSync(join(controlBoard, 'activity.json'), JSON.stringify(activity));
   writeFileSync(join(protocol, 'staff-state.json'), JSON.stringify({ entries: staffEntries }));
-  // A readable empty ledger keeps the execution source available for the
-  // source-confirmed empty-roster case.
+  // An empty ledger is readable, but it cannot satisfy the checkpoint integrity
+  // proof and therefore leaves execution_projection UNAVAILABLE. The activity
+  // snapshot remains separately testable as a roster source.
   writeFileSync(join(root, 'agent-comms', 'room.jsonl'), '');
   return root;
 }
@@ -112,7 +113,7 @@ describe('CMD-DI-3-1 · GET /api/floor staff glance counts', () => {
           staff_glance_counts?: Record<string, unknown>;
         };
       };
-      expect(payload.floor.execution_projection.state).toBe('OK');
+      expect(payload.floor.execution_projection.state).toBe('UNAVAILABLE');
       const entries = payload.floor.roster.entries;
       const buckets = payload.floor.staff_glance_counts;
       expect(buckets).toBeTruthy();
@@ -186,7 +187,7 @@ describe('CMD-DI-3-1 · GET /api/floor staff glance counts', () => {
           staff_glance_counts?: Record<string, unknown>;
         };
       };
-      expect(payload.floor.execution_projection.state).toBe('OK');
+      expect(payload.floor.execution_projection.state).toBe('UNAVAILABLE');
       expect(Object.hasOwn(payload.floor, 'staff_glance_counts')).toBe(false);
       expect(server.listening).toBe(false);
     } finally {
@@ -207,7 +208,7 @@ describe('CMD-DI-3-1 · GET /api/floor staff glance counts', () => {
           staff_glance_counts?: Record<string, unknown>;
         };
       };
-      expect(payload.floor.execution_projection.state).toBe('OK');
+      expect(payload.floor.execution_projection.state).toBe('UNAVAILABLE');
       expect(Object.hasOwn(payload.floor, 'staff_glance_counts')).toBe(false);
       expect(server.listening).toBe(false);
     } finally {
@@ -229,7 +230,7 @@ describe('CMD-DI-3-1 · GET /api/floor staff glance counts', () => {
           staff_glance_counts?: Record<string, unknown>;
         };
       };
-      expect(payload.floor.execution_projection.state).toBe('OK');
+      expect(payload.floor.execution_projection.state).toBe('UNAVAILABLE');
       expect(payload.floor.roster.entries).toEqual([]);
       expect(payload.floor.staff_glance_counts).toEqual({
         working: 0,

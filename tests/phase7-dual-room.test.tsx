@@ -5,6 +5,7 @@ import path from 'node:path';
 import { resolveWorkspace } from '../server/paths.mjs';
 import { buildBuilding, BUILDING_SOURCES } from '../server/building.mjs';
 import { BuildingSurface } from '@/surfaces/building';
+import { ProjectBoard } from '@/surfaces/project-board';
 import { parseBuildingRoute } from '@/lib/building-route';
 import fixture from './fixtures/phase5-surface.json';
 import type { CommandSurface } from '@/lib/contracts';
@@ -69,12 +70,23 @@ describe('Phase 7 — both real project rooms instantiate (Room seq 8358)', () =
     }
   });
 
-  it('the Hoadha board renders the real reconciled corpus', () => {
+  it('the PM board route stays distinct from the Building historical corpus', () => {
     const html = render('#studio/hoadha/board');
-    // The 326 live records and 33 proposed are separate collections; the
-    // surface must show both and must not merge them into one denominator.
-    expect(html).toMatch(/326|243/);
-    expect(html).not.toMatch(/100%\s*complete/i);
+    expect(html).toContain('data-pm-route="hoadha"');
+    expect(html).toContain('Reading the board…');
+    const historical = renderToStaticMarkup(
+      React.createElement(ProjectBoard, {
+        building,
+        projectId: 'hoadha',
+        label: 'Historical task records',
+        projectLabel: 'Hoadha',
+      }),
+    );
+    expect(historical).toContain('HISTORICAL_SNAPSHOT');
+    expect(historical).toMatch(/DHIV-/);
+    expect(building.hoadha.live_count).toBe(326);
+    expect(building.hoadha.proposed_count).toBe(33);
+    expect(historical).not.toMatch(/100%\s*complete/i);
   });
 
   it('the Hoadha room never claims execution or production readiness', () => {

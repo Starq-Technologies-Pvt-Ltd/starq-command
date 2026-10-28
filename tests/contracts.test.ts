@@ -94,14 +94,21 @@ describe('execution truth and honesty states', () => {
     expect(surface.execution_truth.available).toBe(true);
   });
 
-  it('reports the ledger hash comparison honestly', () => {
+  it('reports exact matches and verified append-only lag honestly', () => {
     const ledger = surface.execution_truth.ledger;
     expect(ledger?.recorded_sha256_prefix).toBeTruthy();
     expect(ledger?.live_sha256_prefix).toBeTruthy();
-    // If the live hash moved past the recorded one, state MUST be STALE.
-    // Presenting stale execution truth as current is the failure this guards.
-    if (ledger?.recorded_sha256_prefix !== ledger?.live_sha256_prefix) {
-      expect(ledger?.state).toBe(STATE.STALE);
+    if (ledger?.recorded_sha256_prefix === ledger?.live_sha256_prefix) {
+      expect(ledger?.relation).toBe('MATCH');
+      expect(ledger?.lag).toBe(false);
+    } else if (ledger?.relation === 'PREFIX_EXTENSION') {
+      // A verified append-only suffix means the snapshot is behind live Room,
+      // but the existing projection itself remains valid as of its ingest time.
+      expect(ledger?.lag).toBe(true);
+      expect(ledger?.reason).toMatch(/verified activity checkpoint/);
+    } else {
+      // Any other hash difference must be visibly stale or unreadable.
+      expect([STATE.STALE, STATE.UNREADABLE]).toContain(ledger?.state);
     }
   });
 

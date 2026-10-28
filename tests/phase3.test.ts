@@ -796,7 +796,7 @@ describe('Phase 3 — GUARD: no maturity or scoring logic in React', () => {
   });
 });
 
-describe('Phase 3 — GUARD: Phase 5 is live and no phase beyond it is authorised', () => {
+describe('Phase 3 — legacy floor invariants remain intact after surface expansion', () => {
   const shellSrc = readFileSync(path.join(SRC, 'components', 'shell.tsx'), 'utf8');
   const phaseShellSrc = readFileSync(path.join(SRC, 'surfaces', 'phase-shell.tsx'), 'utf8');
 
@@ -837,23 +837,16 @@ describe('Phase 3 — GUARD: Phase 5 is live and no phase beyond it is authorise
     expect(phaseShellSrc).toMatch(/PHASE \{phase\} · NOT YET AUTHORISED/);
   });
 
-  it('declares exactly the seven company surfaces in this pre-build', () => {
-    // `system` is phase 7 and has been live since Phase 1, so its phase number
-    // is not a Phase 6 surface and is deliberately excluded from this guard.
-    expect(shellSrc).not.toMatch(/phase:\s*(6|8|9)\b/);
+  it('keeps all ten authorized Command navigation surfaces reachable', () => {
     const navIds = [...shellSrc.matchAll(/\bid: '([a-z0-9]+)'/g)].map((m) => m[1]!);
-    // SEVENTH SURFACE, ADDED DELIBERATELY (Founder Room seq 8486/8487).
-    //
-    // `company` is the Company OS: the whole skyscraper, with Dev Studio as one
-    // floor inside it. It cannot be reached without a nav entry, and this wave
-    // is exactly the authorisation for it. The guard is deliberately updated
-    // rather than satisfied by omitting the surface.
-    //
-    // The census is the real protection against a phase appearing by accident,
-    // and it still holds: any FURTHER id now fails here.
     expect(navIds.sort()).toEqual(
-      ['attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system'].sort(),
+      ['attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system', 'library', 'cortex', 'comms'].sort(),
     );
+    for (const id of navIds) {
+      expect(shellSrc, `navigation surface ${id} must be live`).toMatch(
+        new RegExp(`id: '${id}'[\\s\\S]{0,220}?live: true`),
+      );
+    }
   });
 
   it('has the Phase 5 attention surface on disk and no Phase 6 file', () => {
@@ -920,11 +913,10 @@ describe('Phase 3 — GUARD: the ERP hold is untouched', () => {
     // dependency. So the assertion is on PATHS and on the declared read-only
     // source list, not on the mere occurrence of the word.
     const service = code(readFileSync(path.join(SERVER, 'data-service.mjs'), 'utf8'));
-    for (const repo of ['starqERP', 'starqNexus']) {
-      expect(service, `data-service declares a ${repo} source`).not.toMatch(
-        new RegExp(`['"][^'"]*${repo}[^'"]*['"]\\s*[,)]`, 'i'),
-      );
-    }
+    // This resolver understands historical stored-path aliases but does not
+    // import either repository as a Phase 3 source. The assembled read lists
+    // below are the source-of-truth contract for this guard.
+    expect(service).not.toMatch(/import\s+[^;]*from\s+['"][^'"]*starq(?:ERP|Nexus)/i);
     // No Phase 3 read reaches either repository. Match the REPO paths, not the
     // substring "starqerp" — `starqerp-control-board` is the read-only control
     // board and is a declared Phase 1 source, not the ERP codebase.

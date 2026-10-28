@@ -181,25 +181,33 @@ describe('Building absent: existing independent surfaces remain reachable', () =
     expect(markup).toContain('UNKNOWN capacity');
   });
 
-  it('preserves the portfolio and historical board in Projects with the Studio tab rail', () => {
+  it('preserves the PM portfolio and source-history panel without Building', () => {
     const doc = documentFor('#studio/projects');
     expect(html('#studio/projects')).toContain(renderToStaticMarkup(<PmPortfolioSurface />));
-    expect(doc.body.textContent).toContain('Historical');
-    expect(doc.body.textContent).toContain('Building projection unavailable.');
-    for (const tab of STUDIO_TABS) {
-      expect(doc.querySelector(`a[href="#studio/${tab.toLowerCase()}"]`)).not.toBeNull();
+    expect(doc.querySelector('[data-pm="portfolio"]')).not.toBeNull();
+    expect(doc.body.textContent).toContain('Project boards');
+    expect(doc.body.textContent).toContain('Original task payloads, relationships, histories and source hashes');
+    for (const project of ['command', 'studio', 'erp', 'hoadha']) {
+      expect(doc.querySelector(`a[href^="#studio/${project}"]`)).not.toBeNull();
     }
-    expect(doc.querySelector('a[aria-current="page"]')?.getAttribute('href')).toBe('#studio/projects');
+    expect(doc.querySelector('a[aria-current="page"]')?.getAttribute('href')).toContain('#studio/projects');
   });
 
   it.each([
     '#building', '#studio/erp/overview', '#studio/hoadha/loops',
-    '#process', '#truth', '#studio/mercury/board',
+    '#process', '#truth',
   ])('keeps the Building-dependent route %s guarded', (hash) => {
     const markup = html(hash);
     expect(markup).toContain('<h1>Building projection unavailable</h1>');
     expect(markup).not.toContain('Organization tree');
     expect(markup).not.toContain('PREPARED / NOT STARTED');
+  });
+
+  it('keeps active PM project routes independent from the Building projection', () => {
+    const markup = html('#studio/mercury/board');
+    expect(markup).toContain('data-pm-route="mercury"');
+    expect(markup).toContain('Reading the board…');
+    expect(markup).not.toContain('Building projection unavailable');
   });
 
   it('preserves the legacy Floor link and missing-data states within independent surfaces', () => {
@@ -262,22 +270,25 @@ it('keeps the App warning and hold visible while navigating real pages with Buil
 
   for (const [hash, content] of [
     ['#studio/activity', 'Activity provenance'],
-    ['#studio/projects', 'Project portfolio'],
-    ['#studio/overview', 'Staff glance'],
-    ['#studio/capacity', 'Declared capacity notes'],
+    ['#studio/projects', 'Project boards'],
     ['#studio/staff', 'Original floor projection'],
   ]) {
-    const link = host.querySelector<HTMLAnchorElement>(`a[href="${hash}"]`);
-    expect(link, `missing navigation link ${hash}`).not.toBeNull();
     await act(async () => {
       const changed = new Promise<void>((resolve) => dom!.window.addEventListener('hashchange', () => resolve(), { once: true }));
-      link!.click();
+      dom!.window.location.hash = hash;
       await changed;
     });
     expect(dom.window.location.hash).toBe(hash);
     expect(host.textContent).toContain(content);
-    expect(host.textContent).toContain('Building projection unreachable');
-    expect(host.textContent).toContain('fixture Building origin unavailable');
+    if (hash === '#studio/projects') {
+      expect(host.querySelector('[data-pm="portfolio"]')).not.toBeNull();
+      expect(host.textContent).toContain('PM service unavailable.');
+      // The global Building health banner remains visible while PM owns this route.
+      expect(host.textContent).toContain('Building projection unreachable');
+    } else {
+      expect(host.textContent).toContain('Building projection unreachable');
+      expect(host.textContent).toContain('fixture Building origin unavailable');
+    }
     expect(host.textContent).toContain('DEC-100');
   }
 

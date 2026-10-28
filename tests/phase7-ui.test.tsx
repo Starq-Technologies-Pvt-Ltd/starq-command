@@ -24,6 +24,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { buildBuilding, BUILDING_SOURCES, HOADHA_ROOT } from '../server/building.mjs';
 import { BuildingSurface } from '@/surfaces/building';
+import { ProjectBoard } from '@/surfaces/project-board';
 import { parseBuildingRoute } from '@/lib/building-route';
 import { toneOf, rowTone, show } from '@/components/console';
 import fixture from './fixtures/phase5-surface.json';
@@ -120,6 +121,11 @@ const base = {
 const render = (hash: string, surface: CommandSurface) =>
   renderToStaticMarkup(
     <BuildingSurface route={parseBuildingRoute(hash)} surface={surface} />,
+  );
+
+const renderHistoricalBoard = (building: NonNullable<CommandSurface['building']>, projectId: string) =>
+  renderToStaticMarkup(
+    <ProjectBoard building={building} projectId={projectId} label="Historical task records" projectLabel={projectId} />,
   );
 
 describe('Phase 7 — the first screen answers', () => {
@@ -262,10 +268,10 @@ describe('Phase 7 — the first screen answers', () => {
       they are asserted structurally.
     */
     const tabs: [string, string[]][] = [
-      ['erp', ['overview', 'process', 'tasks', 'decisions', 'evidence', 'staff', 'integrity']],
+      ['erp', ['overview', 'process', 'decisions', 'evidence', 'staff', 'integrity']],
       [
         'hoadha',
-        ['overview', 'loops', 'board', 'waves', 'stages', 'evidence', 'staff', 'integrity'],
+        ['overview', 'loops', 'waves', 'stages', 'evidence', 'staff', 'integrity'],
       ],
     ];
     for (const [room, list] of tabs)
@@ -281,6 +287,11 @@ describe('Phase 7 — the first screen answers', () => {
           // survive, the paragraph explaining it need not.
           expect(html, `${room}/${tab} room state band`).toContain('data-room-state-band');
         });
+    for (const [project, tab] of [['erp', 'tasks'], ['hoadha', 'board']] as const) {
+      const html = render(`#studio/${project}/${tab}`, base);
+      expect(html).toContain(`data-pm-route="${project}"`);
+      expect(html).toContain('Reading the board…');
+    }
   });
 });
 
@@ -314,8 +325,8 @@ describe('Phase 7 — the two rooms are one product with two accents', () => {
         ['#studio/hoadha/board', 'hoadha'],
       ] as const) {
         const html = render(hash, surface);
-        expect(html, room).toContain('command-panel');
-        expect(html, room).toContain('project-board');
+        expect(html, room).toContain(`data-pm-route="${room}"`);
+        expect(html, room).toContain('Reading the board…');
       }
 
       // Distinct room scope — the only difference is which room you are in.
@@ -346,7 +357,7 @@ describe('Phase 7 — density without a report scroll', () => {
   it('renders all 326 live rows inside a bounded pane, not as page length', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      const html = render('#studio/hoadha/board', surface);
+      const html = renderHistoricalBoard(surface.building!, 'hoadha');
       // Every row is in the DOM…
       expect(html.match(/DHIV-S\d-T\d/g)?.length).toBeGreaterThan(200);
       // …inside per-lane bounded scroll regions, which stop the page from
@@ -365,8 +376,8 @@ describe('Phase 7 — density without a report scroll', () => {
   it('renders 437 ERP tasks in a bounded pane with a live status filter', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      const html = render('#studio/erp/tasks', surface);
-      expect(html).toContain('Canonical ERP task records');
+      const html = renderHistoricalBoard(surface.building!, 'erp');
+      expect(html).toContain('Historical task records');
       expect(html).toContain('project-board-lane-list');
       // The source-status filter preserves source vocabulary; lane counts make
       // blocked work visible without reading every task row.
@@ -374,10 +385,11 @@ describe('Phase 7 — density without a report scroll', () => {
       const blockedCount = html.match(/<h3 id="project-board-lane-BLOCKED"[^>]*>BLOCKED<\/h3><span[^>]*>(\d+)<\/span>/);
       expect(blockedCount?.[1]).toBe('6');
       expect(html).toContain('DONE');
-      // The ERP room shows one collection, and says so — the live/proposed
-      // split is a Hoadha-room concern and ERP does not inherit it.
-      expect(html).not.toContain('Proposed HCD');
-      expect(html).toMatch(/task count is NOT maturity/i);
+      // This is a read-only historical snapshot, not the ERP process overview.
+      // The task board identifies that boundary and makes no maturity claim
+      // based on row volume.
+      expect(html).toContain('HISTORICAL_SNAPSHOT');
+      expect(html).not.toMatch(/\b\d+(?:\.\d+)?%\s*(?:maturity|complete)/i);
     }));
 
   it('splits wide content into panes instead of one long column', () =>
@@ -394,7 +406,7 @@ describe('Phase 7 — evidence drill-down is usable', () => {
   it('each row is selectable and the drawer leads with a ledger, not raw JSON', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      const html = render('#studio/hoadha/board', surface);
+      const html = renderHistoricalBoard(surface.building!, 'hoadha');
       // Native buttons are the task-card selection target and are keyboard
       // reachable without a custom tabindex/keydown implementation.
       expect(html).toContain('<button');
@@ -445,8 +457,8 @@ describe('Phase 7 — absence is never rendered as emptiness', () => {
     withRealisticRoot((root) => {
       fs.unlinkSync(path.join(root, 'starqNexus/data/hoadha-tasks.json'));
       const surface = { ...base, building: buildBuilding(root, base) };
-      const html = render('#studio/hoadha/board', surface);
-      expect(html).toContain('Canonical live Hoadha boards unavailable.');
+      const html = renderHistoricalBoard(surface.building!, 'hoadha');
+      expect(html).toContain('Historical Nexus Hoadha board records unavailable in the Building projection');
       expect(html).toContain('No fallback or historical task data is shown.');
       // Other collections being readable must not turn an incomplete live
       // board into an apparently complete task list.
@@ -560,11 +572,7 @@ describe('Phase 7 — navigation carries information', () => {
   it('the current tab is marked on every room and cross-room surface', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      for (const hash of [
-        '#studio/erp/tasks',
-        '#studio/hoadha/board',
-        '#studio/capacity',
-      ]) {
+      for (const hash of ['#studio/erp/overview', '#studio/hoadha/loops', '#studio/capacity']) {
         const html = render(hash, surface);
         const nav = html.slice(html.indexOf('command-tabs'), html.indexOf('command-tabs') + 3000);
         expect(nav, hash).toContain('aria-current="page"');
@@ -623,7 +631,7 @@ describe('Phase 7 — hold and prepared states are never routed around', () => {
   it('ERP hold is visible on every ERP tab and offers no restart control', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      for (const tab of ['overview', 'process', 'tasks', 'decisions', 'evidence', 'staff', 'integrity']) {
+      for (const tab of ['overview', 'process', 'decisions', 'evidence', 'staff', 'integrity']) {
         const html = render(`#studio/erp/${tab}`, surface);
         expect(html, tab).toMatch(/ON_HOLD|implementation ON HOLD/i);
         // No control anywhere in the ERP room may imply the hold can be lifted
@@ -635,7 +643,7 @@ describe('Phase 7 — hold and prepared states are never routed around', () => {
   it('Hoadha never activates H0 and never merges proposed into live', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
-      for (const tab of ['overview', 'loops', 'board', 'waves', 'stages', 'evidence', 'staff', 'integrity']) {
+      for (const tab of ['overview', 'loops', 'waves', 'stages', 'evidence', 'staff', 'integrity']) {
         const html = render(`#studio/hoadha/${tab}`, surface);
         expect(html, tab).toMatch(/NOT STARTED|PREPARED/);
         expect(html, tab).not.toMatch(/activate h0|start execution|begin wave/i);
@@ -653,19 +661,15 @@ describe('Phase 7 — hold and prepared states are never routed around', () => {
         matters — the separation is visible and stated — and they additionally
         require that neither table silently substitutes for the other.
       */
-      const board = render('#studio/hoadha/board', surface);
-      expect(board).toContain('Canonical live Hoadha boards');
-      expect(board).toMatch(/Two collections, never summed/i);
-      // The control names the active collection and carries BOTH counts, so the
-      // reader never has to infer which table they are looking at.
-      expect(board).toContain('data-collection-switch="live"');
-      expect(board).toMatch(/active collection\s*<strong>LIVE<\/strong>/);
-      expect(board, 'live count is in the control').toMatch(/Live[\s\S]{0,80}326/);
-      expect(board, 'proposed count is in the control').toMatch(/Proposed[\s\S]{0,80}33/);
-      // The inactive collection is explicitly marked not live.
-      expect(board).toMatch(/proposed records are NOT live/i);
-      // And the two are never summed into one operational total.
-      expect(board).toMatch(/never summed/i);
+      const board = renderHistoricalBoard(surface.building!, 'hoadha');
+      expect(board).toContain('project-board');
+      expect(board).toContain('DHIV-');
+      expect(board).not.toContain('PROPOSED');
+      // The Building-backed overview retains separate live/proposed counts;
+      // the PM board consumes only imported active records.
+      const overview = render('#studio/hoadha/overview', surface);
+      expect(overview).toMatch(/live\s+\d+[\s\S]{0,100}proposed\s+\d+/i);
+      expect(overview).toMatch(/never summed/i);
     }));
 
   it('Hoadha production and integration remain unverified everywhere they appear', () =>

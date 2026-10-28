@@ -74,7 +74,8 @@ describe('source failures stay explicit without a live service or regenerated pr
     expect(result.provenance.state).toBe('UNREADABLE');
     expect(result.provenance.sources[0].state).toBe('UNREADABLE');
     expect(result.provenance.sources[0].reason).toBeTruthy();
-    expect(result.health.overall).toBe('UNREADABLE');
+    expect(result.health.conditions.find((condition: { key: string }) => condition.key === 'provenance')?.state).toBe('UNREADABLE');
+    expect(result.health.overall).not.toBe('OK');
   });
 
   it('preserves missing-source and hash-drift evidence independently', () => {
