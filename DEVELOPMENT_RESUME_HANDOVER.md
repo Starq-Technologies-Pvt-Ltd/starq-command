@@ -36,7 +36,7 @@ The dispatch loop is deterministically tested but has not been demonstrated with
 - Last official recovery attempt remains `STOP_INCOMPLETE` at `job-recovery`; the `.command-runtime/state.json` records `STOP_INCOMPLETE`. Current `command-lifecycle status` reports DEGRADED with saved old children GONE/EXITED, no service listeners, preflight STOPPED/idle cooldown. No Command services are running on 5173/5176/5177/5178/5179/5188. Preview ports 5181/5182/5190 and 4173 were also clear at checkpoint.
 - Five historical job families remain `UNKNOWN`, with no authenticated `closed.json` for data `a591cbe1bf7419477e572095f8bb97bd`, Building `0bef096e0ff7ba4644b7f1bc2a47a5f2`, Herdr broker `03e418018d6abcd7d424a18a2fcc749e`, Herdr adapter `448cf3c97a34b1462081c64ebce43759`, and PM `340d8a765af84972ac5d206f93bc7c66`. The UI receipt is authenticated and closed. Missing root PIDs and clear ports do not prove descendant containment. No JobGuardian process is running. The verified binary is `D:\StarqTech\00_STARQ_HQ\operations\starq-lifecycle\native\JobGuardian.exe`, SHA-256 `5eb82b7ed4a0ac1caf03ba6b27f70071bfe599fe7088a046aeee073c0f0a3f58`.
 - Founder decision is still pending: recover trusted original receipts for the exact five instances, or authorize a separately contained new generation while retaining those historical families as `UNKNOWN`. Room #15896 contains the A/B choice. Do not start Command or fabricate closure evidence.
-- Standalone Herdr is pinned to 0.9.5 (`C:\Users\Ali Musthaq\.herdr\packages\standalone\releases\0.9.5-x86_64-pc-windows-msvc\herdr.exe`, SHA-256 `cd877c8744296f4a38a2703bf13cf11728973649ec54959959c4587ffe5368b2`). DEC-102 says OPERATOR_INTERACTIVE and `command_actuation: NONE`; Herdr was observed stopped/unavailable. The binary, roaming storage and lifecycle ownership record are included in the state archive.
+- Standalone Herdr is pinned to 0.9.5 (`C:\Users\Ali Musthaq\.herdr\packages\standalone\releases\0.9.5-x86_64-pc-windows-msvc\herdr.exe`, SHA-256 `cd877c8744296f4a38a2703bf13cf11728973649ec54959959c4587ffe5368b2`). DEC-102 says OPERATOR_INTERACTIVE and `command_actuation: NONE`; Herdr was observed stopped/unavailable. The pinned binary is in the state archive and the readable `.herdr`/roaming profile is in `herdr-runtime-profile.tar.gz`. Windows ACLs denied reading 50 Herdr session snapshot/backup files; their exact paths/errors are in `herdr-runtime-profile.tar.skips.json`. The `.herdr\packages\standalone\current` reparse point was skipped; its pinned 0.9.5 target was archived.
 - Live worker/seat readiness is not established while Herdr is unavailable. Workforce capability and dispatch code are present; deterministic dispatch tests pass, but no live worker allocation or pilot was completed.
 
 ## Existing Command capabilities and outstanding work
@@ -52,7 +52,8 @@ The checkpoint contains:
 
 - `git/starq-command-final-allrefs.bundle` — all Command history and refs after this handover commit.
 - `git/starqNexus-allrefs.bundle` — all Nexus refs, including the dirty checkout’s branch history.
-- `starq-command-state.tar.gz` — Command repository working state, lifecycle/JobGuardian files, canonical Room and communications files, Nexus checkout and active linked worktrees (with their dirty/index state), and pinned Herdr binary/runtime state. `node_modules` directories are included in this faithful snapshot.
+- `starq-command-state.tar.gz` — Command repository working state, lifecycle/JobGuardian files, canonical Room and communications files, Nexus checkout and active linked worktrees (with their dirty/index state), and pinned Herdr binary. Regular files and directories from `node_modules` are included; 537 Windows reparse-point entries (junctions/symlinks) were not traversed. Reinstall dependencies from the included lockfiles when restoring.
+- `herdr-runtime-profile.tar.gz` and `herdr-runtime-profile.tar.skips.json` — readable Herdr package/configuration and roaming state, plus the exact list of inaccessible session files and the skipped `current` reparse point.
 - `sqlite-consistent/` — consistent SQLite backups of all six database files.
 - `room-ledger-final.jsonl` — verbatim Room ledger captured after the final Room report.
 - `verification/` — exact full-test output, all test/build/typecheck logs and exit codes.
@@ -65,9 +66,10 @@ $root='D:\STARQ_BACKUPS\STARQ_COMMAND_DEV_20261028T0734Z'; Get-Content (Join-Pat
 git bundle verify D:\STARQ_BACKUPS\STARQ_COMMAND_DEV_20261028T0734Z\git\starq-command-final-allrefs.bundle
 git bundle verify D:\STARQ_BACKUPS\STARQ_COMMAND_DEV_20261028T0734Z\git\starqNexus-allrefs.bundle
 tar -tzf D:\STARQ_BACKUPS\STARQ_COMMAND_DEV_20261028T0734Z\starq-command-state.tar.gz > $null
+tar -tzf D:\STARQ_BACKUPS\STARQ_COMMAND_DEV_20261028T0734Z\herdr-runtime-profile.tar.gz > $null
 ```
 
-Restore Git history to a new path with `git clone <bundle-path> <checkout-path>`. Restore the state tar to D: with `tar -xzf <archive> -C D:\`; extract its `Users/Ali Musthaq/...` Herdr entries to C: with the same archive and `-C C:\`. Restore SQLite snapshots only after preserving the destination DB directory and verifying each with `PRAGMA quick_check`.
+Restore Git history to a new path with `git clone <bundle-path> <checkout-path>`. Restore the state tar to D: with `tar -xzf <archive> -C D:\`; extract the Herdr profile archive to C: with `tar -xzf <archive> -C C:\`. The 50 files listed in the skip manifest are not present in the backup and require access through the owning Windows account/service. Restore SQLite snapshots only after preserving the destination DB directory and verifying each with `PRAGMA quick_check`.
 
 ## Cold-start sequence
 
