@@ -3,34 +3,183 @@
  */
 import * as React from 'react';
 import { Chip, GoLink, Panel, SourceGap } from '@/components/console';
-import { PM_STATUS_LABELS, pmBoardHref, pmIsScratch, pmNexusSources, pmPort, pmPortfolio, pmQuery, type PmNexusSource, type PmNexusSourceRecord, type PmPortfolio, type PmStatus } from '@/lib/pm-client';
+import {
+  PM_STATUS_LABELS,
+  pmBoardHref,
+  pmIsScratch,
+  pmNexusSources,
+  pmPort,
+  pmPortfolio,
+  pmProjects,
+  pmQuery,
+  type PmNexusSource,
+  type PmNexusSourceRecord,
+  type PmPortfolio,
+  type PmProject,
+  type PmStatus,
+} from '@/lib/pm-client';
 import { OrgOperateSnapshot } from '@/surfaces/org-operate';
 
-const BOARD_NAV: { id: string; label: string }[] = [
-  { id: 'portfolio', label: 'All boards' },
-  { id: 'command', label: 'Command' },
-  { id: 'studio', label: 'Studio' },
-  { id: 'erp', label: 'starqERP' },
-  { id: 'hoadha', label: 'Hoadha' },
-  { id: 'founder-decisions', label: 'Decisions' },
+export interface ProjectGroup {
+  name: string;
+  ids: readonly string[];
+}
+
+export const PROJECT_GROUPS: readonly ProjectGroup[] = [
+  { name: 'Products', ids: ['erp', 'hoadha', 'hoadha-social', 'hoadha-concierge', 'buzzlab'] },
+  { name: 'Studio', ids: ['command', 'studio', 'devops'] },
+  { name: 'Governance', ids: ['foundation', 'founder-decisions'] },
+  { name: 'Services', ids: ['dynamics'] },
+  { name: 'Future Companies', ids: ['academy', 'pay'] },
+  { name: 'Personal', ids: ['antrac-erp', 'orgsync', 'biography'] },
+  { name: 'Historical Products', ids: ['portal', 'pos', 'starqbooks'] },
 ];
 
+const KNOWN_LABELS: Record<string, string> = {
+  erp: 'starqERP',
+  hoadha: 'Hoadha',
+  'hoadha-social': 'Hoadha Social',
+  'hoadha-concierge': 'Hoadha Concierge',
+  buzzlab: 'Buzzlab',
+  command: 'Command',
+  studio: 'Studio',
+  devops: 'DevOps',
+  foundation: 'Foundation',
+  'founder-decisions': 'Decisions',
+  dynamics: 'Dynamics',
+  academy: 'Academy',
+  pay: 'StarqPay',
+  'antrac-erp': 'Antrac ERP',
+  orgsync: 'OrgSync',
+  biography: 'Biography',
+  portal: 'Portal',
+  pos: 'StarqPOS',
+  starqbooks: 'StarqBooks',
+};
+
+export function getOperationalQualifier(
+  projectId: string,
+  holdState?: string | null,
+  customQualifier?: string | null,
+): { label: string; tone: 'hold' | 'stale' | 'muted' | 'room'; note?: string } {
+  if (customQualifier) {
+    return {
+      label: customQualifier,
+      tone: customQualifier.includes('HOLD') ? 'hold' : customQualifier.includes('HISTORICAL') ? 'muted' : 'stale',
+    };
+  }
+  if (projectId === 'erp') {
+    return {
+      label: 'ON HOLD (DEC-100)',
+      tone: 'hold',
+      note: 'DEC-100 Founder hold in effect. Production implementation suspended.',
+    };
+  }
+  if (projectId === 'hoadha') {
+    return {
+      label: 'PRE-ACTIVATION',
+      tone: 'stale',
+      note: 'Awaiting runtime initialization & identity binding.',
+    };
+  }
+  if (['portal', 'pos', 'starqbooks'].includes(projectId)) {
+    return {
+      label: 'HISTORICAL',
+      tone: 'muted',
+      note: 'Preserved archive. No active execution pipeline.',
+    };
+  }
+  if (holdState) {
+    return {
+      label: holdState,
+      tone: 'hold',
+    };
+  }
+  return {
+    label: 'ACTIVE',
+    tone: 'room',
+  };
+}
+
 export function PmNav({ current }: { current: string }) {
+  const [projects, setProjects] = React.useState<PmProject[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    void pmProjects().then((res) => {
+      if (active && res.ok && Array.isArray(res.data.projects)) {
+        setProjects(res.data.projects);
+      }
+    }).catch(() => { /* PM projects unavailable */ });
+    return () => { active = false; };
+  }, []);
+
+  const projectMap = React.useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const [id, name] of Object.entries(KNOWN_LABELS)) {
+      map.set(id, { id, name });
+    }
+    for (const p of projects) {
+      map.set(p.id, { id: p.id, name: p.name });
+    }
+    return map;
+  }, [projects]);
+
+  const knownGroupIds = React.useMemo(() => new Set<string>(PROJECT_GROUPS.flatMap((g) => g.ids)), []);
+  const extraProjects = React.useMemo(() => {
+    return projects.filter((p) => !knownGroupIds.has(p.id));
+  }, [projects, knownGroupIds]);
+
+  const allGroups = React.useMemo(() => {
+    const base: Array<{ name: string; ids: readonly string[] }> = PROJECT_GROUPS.map((g) => ({ name: g.name, ids: [...g.ids] }));
+    if (extraProjects.length > 0) {
+      base.push({ name: 'Other', ids: extraProjects.map((p) => p.id) });
+    }
+    return base;
+  }, [extraProjects]);
+
   return (
-    <nav className="flex flex-wrap gap-3 px-3 py-2 text-xs" aria-label="Project boards">
-      {BOARD_NAV.map((item) => {
-        const href = item.id === 'portfolio' ? '#studio/projects' : pmBoardHref(item.id);
-        return (
-          <a
-            key={item.id}
-            href={`${href}${pmQuery()}`}
-            aria-current={current === item.id ? 'page' : undefined}
-            className={current === item.id ? 'font-semibold underline' : 'underline-offset-2 hover:underline'}
-          >
-            {item.label}
-          </a>
-        );
-      })}
+    <nav className="flex flex-col gap-2 border-b border-border bg-card/10 px-3 py-2 text-xs" aria-label="Project boards">
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={`#studio/projects${pmQuery()}`}
+          aria-current={current === 'portfolio' ? 'page' : undefined}
+          className={`rounded px-2 py-0.5 font-medium transition-colors ${
+            current === 'portfolio'
+              ? 'bg-[hsl(var(--room))] text-white font-semibold underline'
+              : 'hover:bg-muted hover:underline'
+          }`}
+        >
+          All boards
+        </a>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2 text-2xs">
+        {allGroups.map((g) => (
+          <div key={g.name} className="flex flex-wrap items-center gap-1.5" data-nav-group={g.name}>
+            <span className="font-semibold uppercase tracking-wider text-muted-foreground">{g.name}:</span>
+            <div className="flex flex-wrap items-center gap-1">
+              {g.ids.map((id) => {
+                const item = projectMap.get(id) ?? { id, name: id };
+                const isCurrent = current === id;
+                return (
+                  <a
+                    key={id}
+                    href={`${pmBoardHref(id)}${pmQuery()}`}
+                    aria-current={isCurrent ? 'page' : undefined}
+                    className={`rounded px-1.5 py-0.5 transition-colors ${
+                      isCurrent
+                        ? 'bg-accent font-semibold text-accent-foreground underline'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground underline-offset-2 hover:underline'
+                    }`}
+                  >
+                    {item.name}
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </nav>
   );
 }
@@ -59,19 +208,25 @@ export function PmPortfolioSnapshot() {
         <div className="body grid gap-2">
           {problem ? <SourceGap reason="PM boards unavailable." detail={problem} /> : null}
           <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {(data?.projects ?? []).map((project) => (
-              <li key={project.id} className="rounded border border-border p-2" data-project-snapshot={project.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <strong className="text-xs leading-tight">
-                    <GoLink href={`${pmBoardHref(project.id)}${pmQuery()}`}>{project.name}</GoLink>
-                  </strong>
-                  <Chip value={`${project.open} open`} tone="room" />
-                </div>
-                <div className="mt-1 text-2xs text-muted-foreground">
-                  {project.total} cards · To do {project.counts.TODO ?? 0} · Next {project.counts.NEXT ?? 0} · In progress {project.counts.IN_PROGRESS ?? 0} · Blocked {project.counts.BLOCKED ?? 0} · Done {project.counts.DONE ?? 0}
-                </div>
-              </li>
-            ))}
+            {(data?.projects ?? []).map((project) => {
+              const qualifier = getOperationalQualifier(project.id, project.hold?.state, project.execution_qualifier);
+              return (
+                <li key={project.id} className="rounded border border-border p-2" data-project-snapshot={project.id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <strong className="text-xs leading-tight">
+                      <GoLink href={`${pmBoardHref(project.id)}${pmQuery()}`}>{project.name}</GoLink>
+                    </strong>
+                    <div className="flex items-center gap-1.5">
+                      <Chip value={qualifier.label} tone={qualifier.tone} />
+                      <Chip value={`${project.open} open`} tone="room" />
+                    </div>
+                  </div>
+                  <div className="mt-1 text-2xs text-muted-foreground">
+                    {project.total} cards · To do {project.counts.TODO ?? 0} · Next {project.counts.NEXT ?? 0} · In progress {project.counts.IN_PROGRESS ?? 0} · Blocked {project.counts.BLOCKED ?? 0} · Done {project.counts.DONE ?? 0}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
           {!data && !problem ? <p className="text-2xs text-muted-foreground">Loading boards…</p> : null}
         </div>
@@ -126,28 +281,63 @@ export function PmPortfolioSurface() {
             className="w-full rounded border border-border bg-surface-0 px-2 py-1.5 text-xs text-foreground"
           />
         </label>
+
+        {/* WP-4 / WP-5 Truthful Progress & Founder Oversight Notice Banner */}
+        <div role="status" className="mx-3 my-2 rounded border border-[hsl(var(--stale,_#eab308))]/40 bg-[hsl(var(--stale,_#eab308))]/10 p-3 text-xs text-foreground">
+          <div className="flex items-center gap-2 font-semibold text-[hsl(var(--stale,_#eab308))]">
+            <span className="chip" data-tone="stale">GOVERNANCE NOTICE</span>
+            <span>Truthful Progress & Operational Readiness</span>
+          </div>
+          <p className="mt-1 text-2xs text-muted-foreground leading-relaxed">
+            Historical ticket status does not indicate operational software readiness. Codebase audit, runtime verification, and Founder authorization are required before activation. Projects marked ON HOLD (DEC-100) or PRE-ACTIVATION cannot execute live tasks until authorized.
+          </p>
+        </div>
+
         {problem && !data ? (
           <SourceGap reason="PM service unavailable." detail={`${problem} Start it with: npm run os:start`} />
         ) : null}
         {data ? (
           <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3" data-project-grid="pm-portfolio">
             {visible.map((p) => {
+              const qualifier = getOperationalQualifier(p.id, p.hold?.state, p.execution_qualifier);
               const done = p.counts.DONE ?? 0;
+              const historicalClosed = p.done_historical ?? done;
               const completion = p.total > 0 ? Math.round((done / p.total) * 100) : null;
               return (
                 <article key={p.id} data-project={p.id} className="grid content-start gap-3 rounded-lg border border-border bg-card/40 p-3">
                   <header className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h3 className="font-semibold leading-tight">
-                        <GoLink href={`${pmBoardHref(p.id)}${pmQuery()}`}>{p.name}</GoLink>
-                      </h3>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <h3 className="font-semibold leading-tight">
+                          <GoLink href={`${pmBoardHref(p.id)}${pmQuery()}`}>{p.name}</GoLink>
+                        </h3>
+                        <Chip value={qualifier.label} tone={qualifier.tone} />
+                      </div>
                       <span className="mono text-2xs text-muted-foreground">{p.prefix} · {p.total} cards</span>
                     </div>
                     <Chip value={`${p.open} open`} tone="room" />
                   </header>
-                  <div className="h-1.5 overflow-hidden rounded bg-surface-0" aria-label={completion === null ? 'No cards' : `${completion}% done`}>
-                    <div className="h-full bg-accent" style={{ width: `${completion ?? 0}%` }} />
+
+                  {/* Multi-tier progress display */}
+                  <div className="grid gap-1.5 rounded border border-border/60 bg-surface-0/60 p-2 text-2xs">
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Historical tasks closed:</span>
+                      <span className="mono font-semibold text-foreground">{historicalClosed} / {p.total} historical tickets</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded bg-border" aria-label={completion === null ? 'No cards' : `${completion}% done`}>
+                      <div className="h-full bg-accent" style={{ width: `${completion ?? 0}%` }} />
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>{completion ?? 0}% tickets closed</span>
+                      <span>{p.open} open</span>
+                    </div>
+                    {qualifier.note ? (
+                      <p className="mt-0.5 border-t border-border/40 pt-1 text-[10px] text-muted-foreground">
+                        {qualifier.note}
+                      </p>
+                    ) : null}
                   </div>
+
                   <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs sm:grid-cols-3">
                     {data.statuses.map((status) => (
                       <div key={status} className="flex justify-between gap-2">
@@ -156,7 +346,7 @@ export function PmPortfolioSurface() {
                       </div>
                     ))}
                   </dl>
-                  {p.blocked ? <p className="text-2xs">{p.blocked} blocked</p> : null}
+                  {p.blocked ? <p className="text-2xs text-truth-drift font-medium">{p.blocked} blocked</p> : null}
                 </article>
               );
             })}

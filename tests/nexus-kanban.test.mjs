@@ -25,7 +25,8 @@ test('catalog covers the Nexus task JSON boards plus Command', () => {
   assert.ok(ids.includes('erp'));
   assert.ok(ids.includes('hoadha'));
   assert.ok(ids.includes('founder-decisions'));
-  assert.equal(NEXUS_BOARDS.filter((b) => b.file).length, 17);
+  assert.ok(ids.includes('starqbooks'));
+  assert.equal(NEXUS_BOARDS.filter((b) => b.file).length, 18);
 });
 
 test('import rows keep original ids and original status in notes', () => {
@@ -89,7 +90,7 @@ test('import retains full source payloads, relationships, hashes, and duplicate 
   assert.equal(repeated.skipped, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_tasks').get().n, 1);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_records').get().n, 2);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_import_source_versions').get().n, 17);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_import_source_versions').get().n, 18);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_record_versions').get().n, 2);
 });
 
@@ -124,8 +125,8 @@ test('legacy Command PM database is preserved as archived records without collid
   assert.equal(imported.projects, 1);
   const row = db.prepare('SELECT * FROM pm_source_records').get();
   assert.equal(row.source_system, 'starqCommand-pm-board-v1');
-  assert.equal(row.task_id, null);
-  assert.equal(row.resolution, 'ARCHIVED_ID_COLLISION');
+  assert.equal(row.task_id, 'PM-CMD-001');
+  assert.equal(row.resolution, 'IMPORTED');
   const raw = JSON.parse(row.raw_payload);
   assert.equal(raw.task.id, 'PM-CMD-001');
   assert.equal(raw.task.status, 'CLOSED');

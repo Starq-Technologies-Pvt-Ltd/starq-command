@@ -7,13 +7,16 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
+const RECOVERED_DATA_ROOT = path.resolve(fileURLToPath(new URL('../recovered/nexus/starqNexus/data', import.meta.url)));
 const DEFAULT_NEXUS_WORKSPACE = process.env.STARQ_NEXUS_WORKSPACE_ROOT
-  || (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus'));
+  || (fs.existsSync(RECOVERED_DATA_ROOT) ? path.dirname(path.dirname(RECOVERED_DATA_ROOT)) : (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus')));
 export const NEXUS_DATA_ROOT = path.resolve(
-  process.env.STARQ_NEXUS_DATA_ROOT || path.join(DEFAULT_NEXUS_WORKSPACE, 'starqNexus', 'data'),
+  process.env.STARQ_NEXUS_DATA_ROOT
+    || (fs.existsSync(RECOVERED_DATA_ROOT) ? RECOVERED_DATA_ROOT : path.join(DEFAULT_NEXUS_WORKSPACE, 'starqNexus', 'data')),
 );
 
 export const KANBAN_STATUSES = Object.freeze([
@@ -83,6 +86,7 @@ export const NEXUS_BOARDS = Object.freeze([
   { id: 'orgsync', name: 'OrgSync', prefix: 'ORG', file: 'orgsync-tasks.json', group: 'Personal', description: 'Personal OrgSync board.' },
   { id: 'biography', name: 'Biography', prefix: 'BIO', file: 'biography-tasks.json', group: 'Personal', description: 'Personal biography board.' },
   { id: 'devops', name: 'DevOps Control', prefix: 'DVC', file: 'devops-control-tasks.json', group: 'Studio', description: 'DevOps control board.' },
+  { id: 'starqbooks', name: 'starqBooks', prefix: 'SBK', file: 'starqbooks-tasks.json', group: 'Historical products', description: 'Historical starqBooks board (40 tasks). Superseded into starqERP per August 2026 supersession; retained as historical implementation evidence.' },
 ]);
 
 export function mapKanbanStatus(raw) {
@@ -148,7 +152,11 @@ export function nexusTaskToRow(task, board, ts) {
 }
 
 function readBoardFile(file, dataRoot = NEXUS_DATA_ROOT) {
-  const full = path.join(dataRoot, file);
+  let full = path.join(dataRoot, file);
+  if (!fs.existsSync(full)) {
+    const fallback = path.join(RECOVERED_DATA_ROOT, file);
+    if (fs.existsSync(fallback)) full = fallback;
+  }
   const bytes = fs.readFileSync(full);
   const parsed = JSON.parse(bytes.toString('utf8'));
   if (!Array.isArray(parsed.tasks)) throw new Error(`${file}: tasks is not an array`);
@@ -193,10 +201,17 @@ export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_
     `INSERT OR IGNORE INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const insTask = handle.prepare(
-    `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, closed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'UNASSIGNED', NULL, '[]', ?, ?, 'nexus-import', ?, ?, ?)`,
-  );
+  const taskCols = new Set(handle.prepare("SELECT name FROM pragma_table_info('pm_tasks')").all().map((r) => r.name));
+  const hasGated = taskCols.has('stage') && taskCols.has('provenance');
+  const insTask = hasGated
+    ? handle.prepare(
+        `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, stage, provenance, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'HISTORICAL_NEXUS', ?, 'UNASSIGNED', NULL, '[]', ?, ?, 'nexus-import', ?, ?, ?)`,
+      )
+    : handle.prepare(
+        `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, closed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'UNASSIGNED', NULL, '[]', ?, ?, 'nexus-import', ?, ?, ?)`,
+      );
   const insLog = handle.prepare(
     `INSERT INTO pm_status_log (task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync)
      VALUES (?, 'IMPORTED', NULL, ?, 'nexus-import', ?, ?, 'NOT_REQUIRED')`,
@@ -246,9 +261,17 @@ export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_
         skipped += 1;
         linkedTaskId = null;
       } else if (seenTaskIds.has(row.id)) {
-        resolution = 'DUPLICATE_TASK_ID';
-        skipped += 1;
-        linkedTaskId = null;
+        const disambiguatedKey = `${row.id}:${board.id}`;
+        const existingRestored = getTask.get(disambiguatedKey);
+        if (existingRestored) {
+          resolution = 'IMPORTED';
+          linkedTaskId = disambiguatedKey;
+          preserved += 1;
+        } else {
+          resolution = 'DUPLICATE_TASK_ID';
+          skipped += 1;
+          linkedTaskId = null;
+        }
       } else {
         seenTaskIds.add(row.id);
         const existingTask = getTask.get(row.id);
@@ -262,10 +285,18 @@ export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_
             linkedTaskId = null;
           }
         } else {
-          insTask.run(
-            row.id, row.project_id, row.title, row.description, row.priority, row.status, row.owner,
-            json(row.depends_on), row.notes, row.created_at, row.updated_at, row.closed_at,
-          );
+          if (hasGated) {
+            const stage = { TODO: 'BACKLOG', NEXT: 'READY', IN_PROGRESS: 'IN_PROGRESS', BLOCKED: 'BLOCKED', DONE: 'CLOSED' }[row.status] ?? 'BACKLOG';
+            insTask.run(
+              row.id, row.project_id, row.title, row.description, row.priority, row.status, stage, row.owner,
+              json(row.depends_on), row.notes, row.created_at, row.updated_at, row.closed_at,
+            );
+          } else {
+            insTask.run(
+              row.id, row.project_id, row.title, row.description, row.priority, row.status, row.owner,
+              json(row.depends_on), row.notes, row.created_at, row.updated_at, row.closed_at,
+            );
+          }
           insLog.run(row.id, row.status, json({ nexus_file: board.file, original_status: task.status ?? null, source_row_index: rowIndex }), ts);
           imported += 1;
         }
@@ -322,20 +353,33 @@ export function importLegacyPmSnapshot(handle, { dbPath, nowIso, json }) {
       'INSERT OR IGNORE INTO pm_import_source_versions (source_file, content_sha256, row_count, imported_at) VALUES (?, ?, ?, ?)',
     ).run(summary.source_file, contentHash, tasks.length, ts);
     const putVersion = handle.prepare(
-      `INSERT OR IGNORE INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
-       VALUES (?, ?, 'starqCommand-pm-board-v1', ?, ?, NULL, 'ARCHIVED_ID_COLLISION', ?, ?, ?)`,
+      `INSERT INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
+       VALUES (?, ?, 'starqCommand-pm-board-v1', ?, ?, ?, 'IMPORTED', ?, ?, ?)
+       ON CONFLICT(source_key, payload_sha256) DO UPDATE SET
+         task_id = excluded.task_id,
+         resolution = excluded.resolution,
+         raw_status = excluded.raw_status,
+         raw_payload = excluded.raw_payload,
+         imported_at = excluded.imported_at`,
     );
     const putRecord = handle.prepare(
       `INSERT INTO pm_source_records (source_key, source_system, source_file, source_row_index, task_id, resolution, raw_status, payload_sha256, raw_payload, imported_at)
-       VALUES (?, 'starqCommand-pm-board-v1', ?, ?, NULL, 'ARCHIVED_ID_COLLISION', ?, ?, ?, ?)
-       ON CONFLICT(source_key) DO UPDATE SET resolution = excluded.resolution, raw_status = excluded.raw_status, payload_sha256 = excluded.payload_sha256, raw_payload = excluded.raw_payload, imported_at = excluded.imported_at`,
+       VALUES (?, 'starqCommand-pm-board-v1', ?, ?, ?, 'IMPORTED', ?, ?, ?, ?)
+       ON CONFLICT(source_key) DO UPDATE SET
+         task_id = excluded.task_id,
+         resolution = excluded.resolution,
+         raw_status = excluded.raw_status,
+         payload_sha256 = excluded.payload_sha256,
+         raw_payload = excluded.raw_payload,
+         imported_at = excluded.imported_at`,
     );
     tasks.forEach((task, rowIndex) => {
       const sourceKey = `command-pm-v1:${task.id}`;
       const rawPayload = json({ task, history: historyByTask.get(task.id) ?? [] });
       const payloadHash = createHash('sha256').update(rawPayload).digest('hex');
-      putVersion.run(sourceKey, payloadHash, summary.source_file, rowIndex, String(task.status ?? ''), rawPayload, ts);
-      putRecord.run(sourceKey, summary.source_file, rowIndex, String(task.status ?? ''), payloadHash, rawPayload, ts);
+      const linkedTaskId = task.id;
+      putVersion.run(sourceKey, payloadHash, summary.source_file, rowIndex, linkedTaskId, String(task.status ?? ''), rawPayload, ts);
+      putRecord.run(sourceKey, summary.source_file, rowIndex, linkedTaskId, String(task.status ?? ''), payloadHash, rawPayload, ts);
       summary.preserved += 1;
     });
     summary.content_sha256 = contentHash;

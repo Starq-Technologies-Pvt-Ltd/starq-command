@@ -201,6 +201,10 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
       // If an earlier start already restored the task, relink provenance here.
       handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
         .run(key, row.source_key);
+      try {
+        handle.prepare("UPDATE pm_source_record_versions SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
+          .run(key, row.source_key);
+      } catch {}
       continue;
     }
 
@@ -216,9 +220,27 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
         created_by, created_at, updated_at, closed_at,
         nexus_task_id, nexus_source_file, nexus_source_key, nexus_status, nexus_project, nexus_attributes,
         phase, sprint, epic, lane, milestone, release_track, module, task_group,
-        workers_json, priority_raw, dispatched_at, dispatched_by
+        workers_json, priority_raw, dispatched_at, dispatched_by, started_at, claimed_at,
+        completed_at, completed_by, done_at, accepted_at, accepted_by,
+        parent_task, children_json, related_json, blocked_by_json,
+        requirements_json, from_decision_json, dependencies_json,
+        acceptance_json, evidence_json, verification_json,
+        branch, commit_sha, commits_json, merge_commit, pr_ref, pr_url, worktree,
+        reviewed_by, review_note, independent_reviewer, review_pending,
+        primary_contributor, contributors_json,
+        blocked_reason, blockers, notes_raw
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 'HISTORICAL_NEXUS', ?, 'UNASSIGNED', NULL, '[]', ?, ?, 'nexus-import-collision-restore', ?, ?, ?,
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?,
+        ?, ?, ?)
     `).run(
       key, projectId,
       String(p.title ?? originalId).slice(0, 800),
@@ -232,11 +254,23 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
       status === 'DONE' ? (typeof p.completed_at === 'string' ? p.completed_at : ts) : null,
       f.nexus_task_id, f.nexus_source_file, f.nexus_source_key, f.nexus_status, f.nexus_project, f.nexus_attributes,
       f.phase, f.sprint, f.epic, f.lane, f.milestone, f.release_track, f.module, f.task_group,
-      f.workers_json, f.priority_raw, f.dispatched_at, f.dispatched_by,
+      f.workers_json, f.priority_raw, f.dispatched_at, f.dispatched_by, f.started_at, f.claimed_at,
+      f.completed_at, f.completed_by, f.done_at, f.accepted_at, f.accepted_by,
+      f.parent_task, f.children_json, f.related_json, f.blocked_by_json,
+      f.requirements_json, f.from_decision_json, f.dependencies_json,
+      f.acceptance_json, f.evidence_json, f.verification_json,
+      f.branch, f.commit_sha, f.commits_json, f.merge_commit, f.pr_ref, f.pr_url, f.worktree,
+      f.reviewed_by, f.review_note, f.independent_reviewer, f.review_pending,
+      f.primary_contributor, f.contributors_json,
+      f.blocked_reason, f.blockers, f.notes_raw,
     );
 
     handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
       .run(key, row.source_key);
+    try {
+      handle.prepare("UPDATE pm_source_record_versions SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
+        .run(key, row.source_key);
+    } catch {}
 
     restored.push({ source_key: row.source_key, original_id: originalId, stored_as: key, project_id: projectId });
   }

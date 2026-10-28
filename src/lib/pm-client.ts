@@ -66,6 +66,12 @@ export interface PmProject {
   description: string;
   source_gap: string | null;
   hold: PmHold;
+  done_historical?: number;
+  open?: number;
+  stages?: Record<string, number>;
+  provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
+  provenance_counts?: { live: number; historical: number } | Record<string, number>;
+  execution_qualifier?: string | null;
 }
 
 export interface PmTask {
@@ -88,6 +94,22 @@ export interface PmTask {
   closed_at: string | null;
   allowed_next: PmStatus[];
   pending_room_sync: number;
+  stage: string;
+  prior_stage?: string | null;
+  provenance: string;
+  epic?: string | null;
+  sprint?: string | null;
+  milestone?: string | null;
+  release_track?: string | null;
+  workers: string[];
+  priority_raw?: string | null;
+  acceptance_json?: string | null;
+  evidence_json?: string | null;
+  verification_json?: string | null;
+  gated: boolean;
+  allowed_stage_next: string[];
+  nexus_attributes?: Record<string, unknown> | null;
+  board_column?: PmStatus;
 }
 
 export interface PmHistoryRow {
@@ -155,6 +177,11 @@ export interface PmPortfolioProject {
   blocked: number;
   pending_room_sync: number;
   unassigned: number;
+  done_historical?: number;
+  stages?: Record<string, number>;
+  provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
+  provenance_counts?: { live: number; historical: number } | Record<string, number>;
+  execution_qualifier?: string | null;
 }
 
 export interface PmPortfolio {
@@ -162,6 +189,13 @@ export interface PmPortfolio {
   pending_room_sync: number;
   statuses: PmStatus[];
   projects: PmPortfolioProject[];
+  done_historical?: number;
+  open?: number;
+  stages?: Record<string, number>;
+  provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
+  provenance_counts?: { live: number; historical: number } | Record<string, number>;
+  execution_qualifier?: string | null;
+  hold?: PmHold;
 }
 
 export interface PmHealth {
@@ -374,11 +408,57 @@ export const pmCreatePerson = (body: PmCreatePersonBody) => call<PmOrgPerson>('P
 export const pmCreateAppointment = (body: PmCreateAppointmentBody) =>
   call<PmOrgAppointment>('POST', '/api/pm/org/appointments', body);
 export const pmCreateProject = (body: PmCreateProjectBody) => call<PmProject>('POST', '/api/pm/projects', body);
+export interface PmLinkRoomInput {
+  token?: string;
+  sequence: number;
+  event_id?: string;
+  eventId?: string;
+  purpose?: string;
+  kind?: 'authorization' | 'evidence';
+  actor?: string;
+  expected_updated_at?: string;
+}
+
+export interface PmAddEvidenceInput {
+  path?: string;
+  sha256?: string;
+  description?: string;
+  actor?: string;
+  expected_updated_at?: string;
+  note?: string;
+}
+
 export const pmCreateTask = (body: Record<string, unknown>) => call<PmTaskDetail>('POST', '/api/pm/tasks', body);
 export const pmUpdateTask = (id: string, body: Record<string, unknown>) =>
   call<PmTaskDetail>('PATCH', `/api/pm/tasks/${encodeURIComponent(id)}`, body);
-export const pmLinkRoom = (id: string, body: Record<string, unknown>) =>
-  call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/room-link`, body);
+export const pmLinkRoom = (id: string, body: PmLinkRoomInput | Record<string, unknown>) => {
+  const b = body as Record<string, unknown>;
+  const eventId = String(b.eventId || b.event_id || b.token || '');
+  const payload: Record<string, unknown> = {
+    actor: (b.actor as string) || 'ali',
+    expected_updated_at: (b.expected_updated_at as string) || '',
+    sequence: Number(b.sequence),
+    eventId,
+    purpose: String(b.purpose || 'Room authorization linked'),
+    kind: (b.kind as string) || 'authorization',
+  };
+  return call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/room-link`, payload);
+};
+export const pmAddEvidence = (id: string, body: PmAddEvidenceInput | Record<string, unknown>) => {
+  const b = body as Record<string, unknown>;
+  const parts = [
+    b.description,
+    b.path ? `path: ${b.path}` : '',
+    b.sha256 ? `sha256: ${b.sha256}` : '',
+    b.note,
+  ].filter(Boolean);
+  const note = parts.join(' · ') || 'Evidence attached';
+  return call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/evidence`, {
+    actor: (b.actor as string) || 'ali',
+    expected_updated_at: (b.expected_updated_at as string) || '',
+    note,
+  });
+};
 export const pmLocalEvidence = (id: string, body: PmLocalEvidenceBody) =>
   call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/evidence`, body);
 export const pmRetryRoomSync = () => call<{ queued: boolean; pending_room_sync: number }>('POST', '/api/pm/room-sync/retry', {});

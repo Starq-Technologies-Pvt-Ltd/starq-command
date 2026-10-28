@@ -21,6 +21,8 @@
     { "id": "antrac-erp", "name": "Antrac ERP", "prefix": "AERP", "description": "Personal Antrac ERP board.", "hold_state": null, "source_gap": null },
     { "id": "orgsync", "name": "OrgSync", "prefix": "ORG", "description": "Personal OrgSync board.", "hold_state": null, "source_gap": null },
     { "id": "biography", "name": "Biography", "prefix": "BIO", "description": "Personal biography board.", "hold_state": null, "source_gap": null },
-    { "id": "devops", "name": "DevOps Control", "prefix": "DVC", "description": "DevOps control board.", "hold_state": null, "source_gap": null }
+    { "id": "devops", "name": "DevOps Control", "prefix": "DVC", "description": "DevOps control board.", "hold_state": null, "source_gap": null },
+    { "id": "starqbooks", "name": "starqBooks", "prefix": "SBK", "description": "Historical starqBooks board (40 tasks). Superseded into starqERP per August 2026 supersession; retained as historical implementation evidence.", "hold_state": null, "source_gap": null },
+    { "id": "buzzlab", "name": "BuzzLab", "prefix": "BUZZ", "description": "Agent sandbox, experimentation, delegation and safe collaboration testing.", "hold_state": null, "source_gap": null }
   ]
 }

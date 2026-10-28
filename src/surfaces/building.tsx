@@ -39,7 +39,6 @@ import { LibrarySurface } from '@/surfaces/library';
 import { CortexSurface } from '@/surfaces/cortex';
 import { CommsSurface } from '@/surfaces/comms';
 import { ErpRoom } from '@/surfaces/erp-room';
-import { ProjectBoard } from '@/surfaces/project-board';
 import { HoadhaRoom } from '@/surfaces/hoadha-room';
 import { IntegritySurface } from '@/surfaces/integrity';
 import { StaffSurface } from '@/surfaces/staff';
@@ -1357,7 +1356,7 @@ export function BuildingSurface({
   }
 
   const pmRoute = pmRouteFor(route);
-  if (pmRoute && (pmRoute.standalone || (!b && pmRoute.project !== null))) {
+  if (pmRoute) {
     return (
       <div className="room-root" data-room="studio" data-pm-route={pmRoute.project ?? 'portfolio'}>
         {pmRoute.project ? <PmBoardSurface projectId={pmRoute.project} /> : <PmPortfolioSurface />}
@@ -1514,19 +1513,6 @@ export function BuildingSurface({
         />
       </div>
     );
-
-  if (route.view === 'studio' && route.projectId) {
-    return (
-      <div className="room-root" data-room="studio" data-project-id={route.projectId}>
-        <ProjectBoard
-          building={b}
-          projectId={route.projectId}
-          label={`${route.projectId} project board`}
-          projectLabel={route.projectId}
-        />
-      </div>
-    );
-  }
 
   if (route.view === 'overview' || route.view === 'building') {
     if (!isProjectRoom)

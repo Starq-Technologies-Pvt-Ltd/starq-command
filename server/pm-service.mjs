@@ -26,6 +26,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
@@ -256,7 +257,7 @@ function findRoomByToken(token) {
   return null;
 }
 
-function effectiveHold(project) {
+export function effectiveHold(project) {
   if (project.id === 'erp' && ROOT) {
     try {
       const c = JSON.parse(fs.readFileSync(abs(ROOT, `${CANONICAL.controlBoard}/contract.json`), 'utf8'));
@@ -292,7 +293,7 @@ function integrity(handle) {
   return { ok: ok && fk.length === 0, detail: ok ? (fk.length ? 'foreign_key_check failed' : 'ok') : rows.map((r) => Object.values(r)[0]).slice(0, 5).join('; ') };
 }
 
-function initSchema(handle) {
+export function initSchema(handle) {
   handle.exec(`
     CREATE TABLE IF NOT EXISTS pm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS pm_projects (
@@ -433,7 +434,7 @@ function ensureGatedColumns(handle) {
 
   handle.exec(`
     UPDATE pm_tasks SET provenance = 'HISTORICAL_NEXUS'
-      WHERE created_by = 'nexus-import' AND provenance <> 'HISTORICAL_NEXUS';
+      WHERE (created_by = 'nexus-import' OR created_by = 'nexus-import-collision-restore') AND provenance <> 'HISTORICAL_NEXUS';
     UPDATE pm_tasks SET stage = CASE status
         WHEN 'TODO' THEN 'BACKLOG'
         WHEN 'NEXT' THEN 'READY'
@@ -538,7 +539,7 @@ function rebuildStatusLogParent(handle) {
   handle.exec('PRAGMA foreign_keys = ON');
 }
 
-function seedProjects(handle) {
+export function seedProjects(handle) {
   const drift = [];
   if (!ROOT) return drift;
   let seed;
@@ -562,7 +563,7 @@ function seedProjects(handle) {
   return drift;
 }
 
-function seedCurrentCommandWork(handle) {
+export function seedCurrentCommandWork(handle) {
   const open = handle.prepare("SELECT COUNT(*) AS n FROM pm_tasks WHERE project_id = 'command' AND status != 'DONE'").get();
   if (Number(open.n) > 0) return;
   const project = handle.prepare("SELECT * FROM pm_projects WHERE id = 'command'").get();
@@ -592,7 +593,7 @@ function seedCurrentCommandWork(handle) {
   handle.prepare('UPDATE pm_projects SET next_seq = ? WHERE id = ?').run(seq, 'command');
 }
 
-function startDatabase() {
+export function startDatabase() {
   let dbPath;
   try {
     dbPath = resolveDbPath();
@@ -617,6 +618,7 @@ function startDatabase() {
         nowIso,
         boardsById: Object.fromEntries(NEXUS_BOARDS.filter((b) => b.file).map((b) => [b.file, b.id])),
       });
+      ensureGatedColumns(handle);
       const fill = backfillNexusAttributes(handle);
       handle.exec('COMMIT');
       for (const r of restored) {
@@ -648,9 +650,14 @@ function startDatabase() {
   }
 }
 
-function requireDb() {
+export function requireDb() {
   if (!db) throw new HttpError(503, 'UNAVAILABLE', `PM database unavailable: ${dbState.reason}`);
   return db;
+}
+
+export function setDbForTesting(testDb) {
+  db = testDb;
+  dbState = { state: 'OK', reason: null, path: ':memory:', integrity: 'ok', seed_drift: [] };
 }
 
 function tx(fn) {
@@ -667,7 +674,7 @@ function tx(fn) {
 }
 
 // ── Row mapping ────────────────────────────────────────────────────────────
-function hydrate(row, pending = 0) {
+export function hydrate(row, pending = 0) {
   const task = {
     ...row,
     room_authorization_ref: row.room_authorization_ref ? JSON.parse(row.room_authorization_ref) : null,
@@ -687,6 +694,17 @@ function hydrate(row, pending = 0) {
   task.allowed_stage_next = task.gated ? allowedStageNext(task) : [...GATED_STAGES];
   task.assignment_locked = assignmentLocked(task);
   task.pending_room_sync = pending;
+
+  // Fidelity attributes ensured as first-class fields on returned task
+  task.epic = row.epic ?? null;
+  task.sprint = row.sprint ?? null;
+  task.milestone = row.milestone ?? null;
+  task.release_track = row.release_track ?? null;
+  task.priority_raw = row.priority_raw ?? null;
+  task.acceptance_json = row.acceptance_json ?? null;
+  task.evidence_json = row.evidence_json ?? null;
+  task.verification_json = row.verification_json ?? null;
+
   return task;
 }
 function pendingCounts() {
@@ -1131,7 +1149,7 @@ function attention() {
   };
 }
 
-function taskDetail(id) {
+export function taskDetail(id) {
   const row = getTaskRow(id);
   if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
   const d = requireDb();
@@ -1180,11 +1198,11 @@ function nexusSources(file = null) {
   return { sources, records };
 }
 
-function listProjects() {
+export function listProjects() {
   return requireDb().prepare('SELECT * FROM pm_projects ORDER BY rowid').all().map((p) => ({ ...p, hold: effectiveHold(p) }));
 }
 
-function listTasks(projectId) {
+export function listTasks(projectId) {
   const d = requireDb();
   const pend = pendingCounts();
   const rows = projectId
@@ -1193,7 +1211,64 @@ function listTasks(projectId) {
   return rows.map((r) => hydrate(r, pend.get(r.id) ?? 0));
 }
 
-function portfolio() {
+export function executionQualifier(project) {
+  if (project.hold?.state === 'ON_HOLD' || project.id === 'erp') return 'ON_HOLD';
+  if (['portal', 'pos', 'starqbooks'].includes(project.id)) return 'HISTORICAL';
+  if (['hoadha', 'hoadha-social', 'hoadha-concierge'].includes(project.id)) return 'PRE_ACTIVATION';
+  if (['academy', 'pay'].includes(project.id)) return 'FORMATION';
+  if (project.id === 'buzzlab') return 'SANDBOX';
+  if (['antrac-erp', 'orgsync', 'biography'].includes(project.id)) return 'PERSONAL';
+  if (['foundation', 'founder-decisions'].includes(project.id)) return 'GOVERNANCE';
+  return 'ACTIVE';
+}
+
+export function readRoadmapsData() {
+  let contract = null;
+  if (ROOT) {
+    try {
+      contract = JSON.parse(fs.readFileSync(abs(ROOT, `${CANONICAL.controlBoard}/contract.json`), 'utf8'));
+    } catch {
+      contract = null;
+    }
+  }
+  const families = contract?.process_families ?? {};
+  const gaps = contract?.convergence_gaps ?? [];
+  const chains = Object.entries(families).map(([k, v]) => ({
+    id: k,
+    name: v.name ?? `Chain ${k}`,
+    description: v.description ?? '',
+    target_maturity: v.target_maturity ?? '',
+    stages: v.stages ?? [],
+    stage_count: (v.stages ?? []).length,
+  }));
+  const totalStages = chains.reduce((acc, c) => acc + c.stage_count, 0);
+
+  const d = requireDb();
+  const milestones = d.prepare(`
+    SELECT project_id, milestone, COUNT(*) AS task_count,
+           SUM(CASE WHEN status = 'DONE' THEN 1 ELSE 0 END) AS done_count,
+           SUM(CASE WHEN status != 'DONE' THEN 1 ELSE 0 END) AS open_count
+      FROM pm_tasks
+     WHERE milestone IS NOT NULL AND TRIM(milestone) != ''
+     GROUP BY project_id, milestone
+     ORDER BY project_id, milestone
+  `).all();
+
+  return {
+    generated_at: nowIso(),
+    authority: 'starqerp-control-board/contract.json (5 chains, 49 stages, 8 gaps) · live PM milestones',
+    chains,
+    chains_count: chains.length,
+    stages_count: totalStages,
+    gaps,
+    gaps_count: gaps.length,
+    milestones,
+    process_families: families,
+    convergence_gaps: gaps,
+  };
+}
+
+export function portfolio() {
   const projects = listProjects();
   const tasks = listTasks(null);
   const syncRow = requireDb().prepare("SELECT COUNT(*) AS n FROM pm_status_log WHERE room_sync = 'PENDING'").get();
@@ -1201,14 +1276,32 @@ function portfolio() {
     generated_at: nowIso(),
     pending_room_sync: Number(syncRow.n),
     statuses: STATUSES,
+    stages: GATED_STAGES,
     projects: projects.map((p) => {
       const mine = tasks.filter((t) => t.project_id === p.id);
       const counts = Object.fromEntries(STATUSES.map((s) => [s, mine.filter((t) => t.status === s).length]));
+      const stages = Object.fromEntries(GATED_STAGES.map((s) => [s, mine.filter((t) => t.stage === s).length]));
+      const provenance = {
+        HISTORICAL_NEXUS: mine.filter((t) => t.provenance === PROVENANCE.HISTORICAL).length,
+        LIVE: mine.filter((t) => t.provenance === PROVENANCE.LIVE).length,
+      };
+      const done_historical = mine.filter((t) => t.status === 'DONE' && t.provenance === PROVENANCE.HISTORICAL).length;
+      const eq = executionQualifier(p);
       return {
-        id: p.id, name: p.name, prefix: p.prefix, hold: p.hold, source_gap: p.source_gap,
-        total: mine.length, counts,
+        id: p.id,
+        name: p.name,
+        prefix: p.prefix,
+        hold: p.hold,
+        source_gap: p.source_gap,
+        total: mine.length,
+        done_historical,
         open: mine.filter((t) => t.status !== 'DONE').length,
-        founder_gate: 0, blocked: counts.BLOCKED,
+        counts,
+        stages,
+        provenance,
+        execution_qualifier: eq,
+        founder_gate: stages.FOUNDER_GATE ?? 0,
+        blocked: counts.BLOCKED,
         pending_room_sync: mine.reduce((n, t) => n + t.pending_room_sync, 0),
         unassigned: mine.filter((t) => t.status !== 'DONE' && t.owner === 'UNASSIGNED').length,
       };
@@ -1324,6 +1417,7 @@ async function handle(req, res) {
     if (req.method === 'GET' && p === '/api/pm/projects') return send(res, 200, { projects: listProjects() }, origin);
     if (req.method === 'POST' && p === '/api/pm/projects') return send(res, 201, createProject(await readBody(req)), origin);
     if (req.method === 'GET' && p === '/api/pm/portfolio') return send(res, 200, portfolio(), origin);
+    if (req.method === 'GET' && p === '/api/pm/roadmaps') return send(res, 200, readRoadmapsData(), origin);
     if (req.method === 'GET' && p === '/api/pm/org') return send(res, 200, readOrg(requireDb(), { generatedAt: nowIso(), roomPost: ROOM_POST ? 'ON' : 'OFF' }), origin);
     if (req.method === 'GET' && p === '/api/pm/attention') return send(res, 200, attention(), origin);
     if (req.method === 'POST' && p === '/api/pm/org/companies') {
@@ -1455,18 +1549,24 @@ function cliVerify(file) {
   process.exit(check.ok ? 0 : 3);
 }
 
-const argv = process.argv.slice(2);
-if (argv.includes('--backup')) cliBackup();
-else if (argv.includes('--verify')) cliVerify(argv[argv.indexOf('--verify') + 1]);
-else {
-  if (ROOM_POST) requireExplicitRoomWriter();
-  startDatabase();
-  const server = http.createServer((req, res) => { void handle(req, res); });
-  server.listen(PORT, HOST, () => {
-    console.log(json({ service: 'starq-command-pm', listening: `${HOST}:${PORT}`, db_state: dbState.state, db: dbState.path, room_post: ROOM_POST ? 'ON' : 'OFF', reason: dbState.reason }));
-    setTimeout(enqueueRoomSync, 3000);
-  });
-  const shutdown = () => { server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+const isDirectRun = process.argv[1]
+  ? path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
+  : false;
+
+if (isDirectRun) {
+  const argv = process.argv.slice(2);
+  if (argv.includes('--backup')) cliBackup();
+  else if (argv.includes('--verify')) cliVerify(argv[argv.indexOf('--verify') + 1]);
+  else {
+    if (ROOM_POST) requireExplicitRoomWriter();
+    startDatabase();
+    const server = http.createServer((req, res) => { void handle(req, res); });
+    server.listen(PORT, HOST, () => {
+      console.log(json({ service: 'starq-command-pm', listening: `${HOST}:${PORT}`, db_state: dbState.state, db: dbState.path, room_post: ROOM_POST ? 'ON' : 'OFF', reason: dbState.reason }));
+      setTimeout(enqueueRoomSync, 3000);
+    });
+    const shutdown = () => { server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
+  }
 }
