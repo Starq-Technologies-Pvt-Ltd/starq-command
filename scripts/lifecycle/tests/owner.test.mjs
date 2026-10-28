@@ -225,6 +225,40 @@ test('RECOVERY resumes only the recorded exact historical exception when the bro
   } finally { w.cleanup(); }
 });
 
+test('RECOVERY does not record exception resumption or continue when JobGuardian cannot prove the broker tree closed', async () => {
+  const handoff = {
+    applied: true,
+    decision: { roomSequence: 15821, eventId: 'founder-event', recordHash: 'founder-record' },
+    session_ids: ['legacy-1', 'legacy-2', 'legacy-3', 'legacy-4', 'legacy-5', 'legacy-6'],
+    historical_closeout: 'UNKNOWN',
+    broker_boot_id: 'old-broker-boot',
+  };
+  const w = world({ recordedHistoricalCloseoutRecovery: handoff });
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const before = readState(w.statePath).state;
+    for (const child of before.children) w.kill(child.pid);
+    const { forceKill: _testForceKill, ...recoveryDeps } = w.deps;
+    const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: {
+      ...recoveryDeps,
+      brokerRequest: async () => ({ status: 0, error: 'ECONNREFUSED' }),
+      listListeners: async () => [],
+      recoverOwnedJob: async (containment) => {
+        w.calls.recoverOwnedJob.push(containment);
+        return { outcome: 'UNKNOWN', active: null, closed: false, owned: false };
+      },
+    } });
+    const result = await owner.recoverForce();
+    assert.equal(result.result, RESULT.STOP_INCOMPLETE);
+    assert.equal(result.phase, 'job-recovery');
+    assert.equal(w.calls.recoverOwnedJob.length, 1, 'the official contained recovery is attempted once for the broker job');
+    assert.deepEqual(w.calls.forceKill, []);
+    const state = readState(w.statePath).state;
+    assert.equal(state.events.some((event) => event.event === 'recover.historical_closeout_exception_resumed'), false);
+    assert.equal(state.children.find((child) => child.name === 'herdrBroker').status, 'READY');
+  } finally { w.cleanup(); }
+});
+
 test('RECOVERY refuses tree force without descendant ownership proof', async () => {
   const w = world();
   try {

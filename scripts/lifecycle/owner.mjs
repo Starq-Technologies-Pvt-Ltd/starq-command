@@ -582,6 +582,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       appendEvent(doc, 'recover.force.begin'); save(doc);
       if (doc.children.some((c) => c.status === 'EXITED' && c.tree_closeout_verified !== true)) return { result: RESULT.STOP_INCOMPLETE, phase: 'historical-closeout', note: 'historical EXITED roots lack descendant closeout proof; no forced signals' };
       const steps = [];
+      let recordedHistoricalCloseout = null;
       const brokerChild = doc.children.find((c) => c.name === 'herdrBroker' && c.status !== 'EXITED');
       if (brokerChild) {
         const v = (await classify(cfg, [brokerChild], { prove: false })).get('herdrBroker');
@@ -594,23 +595,12 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
             if (listeners.some((listener) => listener.port === brokerPort)) {
               return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker API is unavailable but its port has a listener; historical recovery cannot bypass the current broker owner' };
             }
-            if (!await d.treeClosed(brokerChild)) {
-              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker process is gone but its contained descendants are not proven closed' };
-            }
             const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
             const recorded = d.recordedHistoricalCloseoutRecovery({ stateDir, events: doc.events });
             if (recorded?.applied !== true) {
               return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: recorded?.reason ?? 'broker channel unavailable and no exact historical recovery evidence' };
             }
-            appendEvent(doc, 'recover.historical_closeout_exception_resumed', {
-              decision: recorded.decision,
-              session_ids: recorded.session_ids,
-              historical_closeout: 'UNKNOWN',
-              broker_boot_id: recorded.broker_boot_id,
-              broker_process: 'GONE',
-              broker_port_clear: true,
-            });
-            save(doc);
+            recordedHistoricalCloseout = recorded;
           } else if (view.status === 200 && view.body.running.length) {
             await broker(cfg, 'POST', '/api/lifecycle/drain');
             const r = await broker(cfg, 'POST', '/api/lifecycle/force-stop-agents', cfg.timeouts_ms.agent_stop);
@@ -659,6 +649,17 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
           const proof = await d.recoverOwnedJob(child.containment, cfg.timeouts_ms.graceful_exit);
           if (proof.outcome !== 'GONE' || proof.active !== 0 || !proof.closed) return { result: RESULT.STOP_INCOMPLETE, phase: 'job-recovery', steps, proof };
           Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: 'explicit owned-job recovery' });
+          if (name === 'herdrBroker' && recordedHistoricalCloseout) {
+            appendEvent(doc, 'recover.historical_closeout_exception_resumed', {
+              decision: recordedHistoricalCloseout.decision,
+              session_ids: recordedHistoricalCloseout.session_ids,
+              historical_closeout: 'UNKNOWN',
+              broker_boot_id: recordedHistoricalCloseout.broker_boot_id,
+              broker_process: 'GONE',
+              broker_port_clear: true,
+              broker_job_closeout: 'VERIFIED',
+            });
+          }
           steps.push({ name, outcome: 'GONE', proof }); save(doc); continue;
         }
         const v = (await classify(cfg, [child], { prove: false })).get(name);
