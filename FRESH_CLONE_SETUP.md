@@ -44,7 +44,7 @@ npx vitest run --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=do
 npm test -- --no-file-parallelism --maxWorkers=1 --minWorkers=1 --reporter=dot
 ```
 
-Use the exact returned SHA in the report when testing a later `main`. `npm ci` is intentional: it removes/recreates `node_modules` from `package-lock.json` and does not rewrite the lockfile. The `test:lifecycle` script now passes a quoted Node test-runner glob so it works through npm's Windows shell; Node documents glob arguments for `node --test` ([Node test runner](https://nodejs.org/download/release/v24.22.1/docs/api/test.html)).
+Use the exact returned SHA in the report when testing a later `main`. `npm ci` is intentional: it removes/recreates `node_modules` from `package-lock.json` and does not rewrite the lockfile. `npm run test:lifecycle` now performs a per-suite prerequisite preflight and reports the Node executable, OS, canonical workspace, companion module/export compatibility, and required runtime/fixture files. A skipped suite is not a pass.
 
 ### Clean-clone results
 
@@ -99,24 +99,26 @@ The following work updates selected findings from the historical `02402fb` clone
 
 - `server/external-components.mjs` resolves `agent-comms`, `starq-lifecycle`, and `herdr-floor` from `STARQ_AGENT_COMMS_ROOT`, `STARQ_LIFECYCLE_ROOT`, and `STARQ_HERDR_FLOOR_ROOT`, or from the verified workspace layout. Missing or invalid components return explicit unavailable/unresolved results. No external component version is pinned by this repository. Record each component's authorized remote URL and commit SHA locally before commissioning.
 - The external module/export contract and the exact revision manifest fields to retain are listed in [COMPANION_COMPATIBILITY.md](COMPANION_COMPATIBILITY.md). This documents the required interfaces; it does not claim an unrecorded version is compatible.
-- Lifecycle status/gates and the historical closeout evaluator now load external modules through that resolver. Missing dependencies cannot satisfy lifecycle gates. `npm run test:lifecycle` lists and skips only companion-dependent test files when their component is absent; a skip is not a pass. The hard-coded Room script path in the lifecycle infrastructure test is now resolved from the workspace.
+- Lifecycle status/gates and the historical closeout evaluator now load external modules through that resolver. Missing dependencies cannot satisfy lifecycle gates. `npm run test:lifecycle` lists exact companion compatibility and runtime prerequisites, then skips only suites that depend on unavailable inputs; if no suite can run, it exits nonzero. Lifecycle tests use configured companion roots for imports and fixtures, and child-host skips give their Windows and explicit-live-test requirements. The lifecycle infrastructure test uses inert Windows-shaped fixture paths rather than a specific user's Node/Herdr install paths.
 - Nexus roots accept `STARQ_NEXUS_WORKSPACE_ROOT`, `STARQ_NEXUS_DATA_ROOT`, `STARQ_NEXUS_FORBIDDEN_MIRROR_ROOT`, and `STARQ_HOADHA_SOURCE_ROOT`. The Command board fetches assets relative to the repository and retains the exact accepted manifest and artifact hashes; its historical absolute manifest paths are provenance, not runtime clone paths.
 - PM scratch bootstrap, schema version 3, backup, read-only verification, and migration steps are documented in [PM_DATABASE_SETUP.md](PM_DATABASE_SETUP.md). Current implementation and missing capabilities are classified in [COMMAND_CAPABILITY_GAP_INVENTORY.md](COMMAND_CAPABILITY_GAP_INVENTORY.md).
-- [`.env.example`](.env.example) provides non-secret reference settings. [`.github/workflows/portable-checks.yml`](.github/workflows/portable-checks.yml) runs Node 22 and 24 on Windows and Linux with `npm ci`, typecheck, build, resolver regressions, and real production entrypoint probes. It does not start the pinned production lifecycle.
+- [`.env.example`](.env.example) provides non-secret reference settings. [`.github/workflows/portable-checks.yml`](.github/workflows/portable-checks.yml) defines a Node 22/24 Windows/Linux matrix with `npm ci`, typecheck, build, Node tests, and focused external-component/production-entrypoint checks. GitHub currently fails to admit jobs: the active workflow's manual dispatch on final SHA `1429547da4cfb8e68b777b3a275d46e6a640392c` concluded `startup_failure` with zero jobs and no logs ([run 40685056465](https://github.com/Starq-Technologies-Pvt-Ltd/starq-command/actions/runs/40685056465)). The reason remains unresolved; hosted Linux/Windows execution is not verified. The workflow does not start the pinned production lifecycle.
 
 ### Remediation verification on the current workstation
 
 - `npm run typecheck` — passed.
 - `npm run build` — passed.
-- Focused resolver, board integrity, and actual production-entrypoint tests — **19/19 passed**. The data, Building, PM scratch DB, and Herdr entrypoints each started and answered their health route.
+- Production-entrypoint tests — **4/4 passed** under the configured Node loader, including service health or explicit missing-companion behavior.
 - `npm run test:node` — **69 passed, 0 failed** across the 12 Node built-in `.mjs` test files. This command brings the historical PM, Building, Room snapshot, Kanban, Library, Cortex, and PM fidelity tests into the documented test workflow; the prior default Vitest include did not discover those `.mjs` files.
-- `npm run test:lifecycle` — **119 passed, 0 failed, 2 skipped**. The two skips are pre-existing child-host platform-conditional tests. Companion-dependent lifecycle suites ran because the companions were available on this workstation.
-- Full Vitest — **1,083 passed, 32 failed, 1,115 total across 53 files**. Eleven files retain failures in legacy Phase 3/Phase 7 UI and surface expectations, Building/route fixture behavior, external floor fixture evidence, PM portfolio archive fixture handling, and projection contract states. The suite remains red and is not marked accepted. See [KNOWN_TEST_FAILURES_20261028.md](KNOWN_TEST_FAILURES_20261028.md) for the exact 32 test names.
+- `npm run test:lifecycle` — **119 passed, 0 failed, 2 skipped** on the canonical Windows workspace; the skips require explicit authorization to launch a real child host. All 12 suites had their declared prerequisites available. A missing-companion rehearsal ran 8 independent suites and explicitly skipped only 4 dependent suites.
+- Full Vitest — **1,118 passed, 0 failed across 53 files** with the canonical serial command. This supersedes the earlier 1,083/32/1,115 workstation result, whose exact test names are retained as the remediation starting point in [KNOWN_TEST_FAILURES_20261028.md](KNOWN_TEST_FAILURES_20261028.md).
 - Dispatch integration — **5/5 passed** in the full run: exclusive lease, worker/session evidence, contention, Room delivery failure, dirty-work recovery, fresh worktree retry, evidence, review, acceptance, and closure.
+
+The final remediation commits are `83adc30`, `4f5f59a`, and `1429547`; final GitHub `main` is `1429547da4cfb8e68b777b3a275d46e6a640392c`. Repository Actions are enabled with all actions allowed, but the active workflow run produced no jobs. Organization Actions policy remains inaccessible to the connected identity, so the hosted-runner admission cause is unresolved.
 
 The measurements above are from the local canonical-workspace checkout, not a second computer or a clean clone of the resulting SHA. The earlier independent clone result remains separately identified at the top of this file.
 
-### Clean-clone recheck of current `main`
+### Earlier clean-clone recheck (SHA `a71d3e0`)
 
 After pushing the portability changes, a new HTTPS clone at `C:\starq-command-portability-check-20261028` fetched `main` at **`a71d3e08b6e1478661aa17cd327650ab683ee0fc`**. This was an isolated checkout outside the Starq workspaces; `STARQ_WORKSPACE` was unset and the companion roots were absent.
 
