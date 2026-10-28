@@ -83,5 +83,5 @@ Restore Git history to a new path with `git clone <bundle-path> <checkout-path>`
 
 ## Room records
 
-Handover and backup status will be posted in Room after the final checks. Previous recovery report is #15896 and verification addendum #15897.
+Final checkpoint and backup report is Room #15899; the continuity record is #15898. Previous recovery report is #15896 and verification addendum #15897.
 
