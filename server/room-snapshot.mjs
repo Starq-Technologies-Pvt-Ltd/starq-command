@@ -96,7 +96,6 @@ export function readRoomBoundSnapshot(root = workspace.root, { recordCount, expe
  */
 export function readRoomSnapshot(root = workspace.root, { roomPath: requestedPath = null, fixturePath = false } = {}) {
   if (!root) return unavailable(`Workspace unresolved; Room reader ${loadError ?? 'not loaded'}.`);
-  if (!reader?.readRoomSnapshot) return unavailable(`Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.`);
 
   const expectedPath = abs(root, CANONICAL.roomLedger);
   const protectedPaths = workspace.root ? [abs(workspace.root, CANONICAL.roomLedger)] : [];
@@ -107,9 +106,11 @@ export function readRoomSnapshot(root = workspace.root, { roomPath: requestedPat
   if (requestedPath && !samePath(requestedPath, expectedPath)) {
     if (!fixturePath || !safeTempFixturePath(requestedPath, [...protectedPaths, expectedPath]))
       return unavailable('Non-canonical Room path refused; only a direct temp fixture is supported.');
+    if (!reader?.readRoomSnapshot) return unavailable(`Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.`);
     return reader.readRoomSnapshot({ roomPath: requestedPath });
   }
   if (workspace.root && samePath(root, workspace.root)) {
+    if (!reader?.readRoomSnapshot) return unavailable(`Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.`);
     if (!samePath(reader.ROOM_PATH, expectedPath)) {
       return unavailable('Configured Room reader path does not match the canonical workspace ledger.');
     }
@@ -117,5 +118,6 @@ export function readRoomSnapshot(root = workspace.root, { roomPath: requestedPat
   }
   if (!safeTempFixturePath(expectedPath, protectedPaths))
     return unavailable('Non-canonical Room path refused; only a direct temp fixture is supported.');
+  if (!reader?.readRoomSnapshot) return unavailable(`Sanctioned Room reader unavailable: ${loadError ?? 'export missing'}.`);
   return reader.readRoomSnapshot({ roomPath: expectedPath });
 }

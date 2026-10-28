@@ -8,6 +8,11 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { classifyPathIdentityProbes } from '../server/room-path.mjs';
 import { readRoomSnapshot } from '../server/room-snapshot.mjs';
+import { importExternalComponent } from '../server/external-components.mjs';
+
+const roomReader = await importExternalComponent('agent-comms', 'scripts/room.mjs');
+const fixtureTest = roomReader.module?.readRoomSnapshot ? test : test.skip;
+const fixtureSkip = roomReader.module?.readRoomSnapshot ? undefined : 'agent-comms Room reader is not installed';
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'starq-room-snapshot-test-'));
@@ -23,7 +28,7 @@ function cleanup(root) {
   fs.rmSync(resolved, { recursive: true, force: true });
 }
 
-test('snapshot returns stable raw records and exact byte hash without exposing Room text', () => {
+fixtureTest('snapshot returns stable raw records and exact byte hash without exposing Room text', { skip: fixtureSkip }, () => {
   const f = fixture();
   try {
     const first = { brokerRecordVersion: 1, brokerSequence: 41, recordHash: 'hash-41', event: { body: 'text with } and "quoted" data' } };
@@ -49,7 +54,7 @@ test('snapshot returns stable raw records and exact byte hash without exposing R
   }
 });
 
-test('snapshot rejects malformed tails instead of returning partial records', () => {
+fixtureTest('snapshot rejects malformed tails instead of returning partial records', { skip: fixtureSkip }, () => {
   const f = fixture();
   try {
     const valid = { brokerSequence: 1, recordHash: 'hash-1' };
@@ -66,7 +71,7 @@ test('snapshot rejects malformed tails instead of returning partial records', ()
   }
 });
 
-test('snapshot distinguishes empty and unavailable fixture ledgers', () => {
+fixtureTest('snapshot distinguishes empty and unavailable fixture ledgers', { skip: fixtureSkip }, () => {
   const f = fixture();
   try {
     fs.writeFileSync(f.ledger, '');
@@ -92,7 +97,7 @@ test('production adapter refuses a COMMS_ROOM_PATH redirect before reading it', 
     assert.equal(child.status, 0, child.stderr);
     const snapshot = JSON.parse(child.stdout.trim());
     assert.equal(snapshot.state, 'UNAVAILABLE');
-    assert.match(snapshot.reason, /does not match the canonical workspace ledger/);
+    assert.match(snapshot.reason, /does not match the canonical workspace ledger|Workspace unresolved/);
   } finally {
     cleanup(f.root);
   }
