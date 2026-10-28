@@ -445,6 +445,19 @@ export interface TransportWriteCapability {
   hasWriteCapability: boolean;
 }
 
+/**
+ * Command has one intentionally writable UI action today: Messenger submits to
+ * the PM service's Room-backed send route. Keep this exception exact so a new
+ * endpoint, method, or source file remains visible to the capability guards.
+ */
+export function isApprovedCommandUiWrite(call: { file: string; text: string; reason: string }): boolean {
+  const source = path.relative(process.cwd(), call.file).replace(/\\/g, '/');
+  return source === 'src/surfaces/comms.tsx'
+    && call.reason === "fetch with method 'POST'"
+    && call.text.includes('/api/pm/comms/send')
+    && /method\s*:\s*['"]POST['"]/.test(call.text);
+}
+
 const SAFE_METHODS = new Set(['GET', 'get', 'HEAD', 'head']);
 
 /**
@@ -457,8 +470,8 @@ const SAFE_METHODS = new Set(['GET', 'get', 'HEAD', 'head']);
  *   - another name already known to be a fetch alias (transitive)
  *
  * This is real tracking, not a comment. If the chain cannot be resolved to a
- * fetch expression the name is simply not an alias — but the separate
- * fail-closed rule in `unresolvedCallables` covers the residue.
+ * fetch expression the name is simply not an alias — the fail-closed rule
+ * below still catches unresolved names used with RequestInit-shaped arguments.
  */
 function collectFetchAliasNames(sf: ts.SourceFile): Set<string> {
   const aliases = new Set<string>();
@@ -558,14 +571,15 @@ export function detectTransportWriteCapabilityInSource(
   const carriers = collectFetchCarriers(sf);
 
   /**
-   * PHASE 5.3 rule 11 — fail closed on unresolved callables.
+   * PHASE 5.3 rule 11 — fail closed on unresolved callables with a request-init
+   * argument. Arbitrary second arguments are normal helper calls throughout
+   * the Company OS and are not evidence of a network write.
    *
    * A local function declaration or an import binding is PROVABLY not fetch,
-   * so it is excluded. Everything else that is called with a second argument
-   * is analysed as a possible fetch. This catches alias chains the resolver
-   * cannot follow (e.g. an alias returned from another module) without
-   * inventing an unbounded false-positive surface over ordinary helpers,
-   * which are almost never called with an options-object second argument.
+   * so it is excluded. An unknown callable is analysed only when its second
+   * argument has a fetch-like shape (RequestInit keys, an object spread, or a
+   * well-known options/init identifier). Ordinary two-argument UI helpers are
+   * left alone while unresolved fetch aliases still fail closed.
    */
   const provablyNotFetch = new Set<string>();
   for (const decl of collectVarDeclarations(sf, sf)) {
@@ -606,6 +620,27 @@ export function detectTransportWriteCapabilityInSource(
     if (ts.isCallExpression(callee)) {
       const inner = callee.expression;
       if (ts.isIdentifier(inner) && carriers.factoryFns.has(inner.text)) return true;
+    }
+    return false;
+  };
+
+  const mayBeRequestInit = (argument: ts.Expression | undefined): boolean => {
+    if (!argument) return false;
+    if (ts.isIdentifier(argument)) {
+      return /^(?:opts?|options?|init|requestInit|fetchOptions|requestOptions)$/i.test(argument.text);
+    }
+    if (ts.isObjectLiteralExpression(argument)) {
+      return argument.properties.some((property) => {
+        if (ts.isSpreadAssignment(property)) return true;
+        if (!ts.isPropertyAssignment(property) && !ts.isShorthandPropertyAssignment(property)) return false;
+        const name = property.name;
+        if (ts.isComputedPropertyName(name)) return true;
+        const key = ts.isIdentifier(name) || ts.isStringLiteral(name) ? name.text : '';
+        return /^(method|body|headers|signal|credentials|mode|redirect|referrer|integrity|keepalive|cache)$/i.test(key);
+      });
+    }
+    if (ts.isCallExpression(argument) && ts.isIdentifier(argument.expression)) {
+      return /(?:options|requestInit|fetchInit)$/i.test(argument.expression.text);
     }
     return false;
   };
@@ -716,7 +751,7 @@ export function detectTransportWriteCapabilityInSource(
     if (
       ts.isIdentifier(callee) &&
       !provablyNotFetch.has(callee.text) &&
-      call.arguments.length >= 2
+      mayBeRequestInit(call.arguments[1])
     ) {
       suspiciousCalls.push({
         file: label,

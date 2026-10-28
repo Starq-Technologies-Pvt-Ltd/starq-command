@@ -77,6 +77,7 @@ import {
   detectFsWriteCapability,
   detectTransportWriteCapability,
   detectTransportWriteCapabilityInSource,
+  isApprovedCommandUiWrite,
   parseSource,
   sourceText,
 } from './support/application-capability';
@@ -226,23 +227,25 @@ describe('PROOF 3 — fs/promises is not imported anywhere in application source
   });
 });
 
-// ── PROOF 4 — no client-side write-capable transport (literal method) ──────────
+// ── PROOF 4 — no unapproved client-side write-capable transport ───────────────
 
-describe('PROOF 4 — no application source module calls fetch with a write method literal', () => {
+describe('PROOF 4 — all client-side writes are explicitly authorized', () => {
   const result = detectTransportWriteCapability(allAppSrc);
+  const approved = result.suspiciousCalls.filter(isApprovedCommandUiWrite);
+  const unapproved = result.suspiciousCalls.filter(c => !isApprovedCommandUiWrite(c));
 
-  it('scan returned no suspicious transport calls', () => {
-    const violations = result.suspiciousCalls.filter(c =>
-      // Only literal write methods here; variable/spread is PROOF 5
-      c.reason.startsWith("fetch with method '"),
-    );
-    if (violations.length > 0) {
-      const detail = violations
+  it('permits only the PM-backed Room Messenger send route', () => {
+    expect(approved).toHaveLength(1);
+    expect(approved[0].file.replace(/\\/g, '/')).toMatch(/src\/surfaces\/comms\.tsx$/);
+    expect(approved[0].text).toContain('/api/pm/comms/send');
+    expect(approved[0].reason).toBe("fetch with method 'POST'");
+    if (unapproved.length > 0) {
+      const detail = unapproved
         .map(v => `${path.relative(SRC, v.file)}: ${v.reason} — ${v.text.slice(0, 80)}`)
         .join('\n');
-      expect.fail(`Write-capable fetch calls found:\n${detail}`);
+      expect.fail(`Unapproved write-capable transports found:\n${detail}`);
     }
-    expect(violations).toHaveLength(0);
+    expect(unapproved).toHaveLength(0);
   });
 });
 
@@ -258,9 +261,10 @@ describe('PROOF 4 — no application source module calls fetch with a write meth
 
 describe('PROOF 5 — no application source module hides a write method via variable or spread', () => {
   const result = detectTransportWriteCapability(allAppSrc);
+  const unapproved = result.suspiciousCalls.filter(c => !isApprovedCommandUiWrite(c));
 
   it('no fetch call uses a non-literal method value', () => {
-    const violations = result.suspiciousCalls.filter(
+    const violations = unapproved.filter(
       c => !c.reason.startsWith("fetch with method '"),
     );
     if (violations.length > 0) {
@@ -562,6 +566,29 @@ export function g(url: string) { return f(url, { method: 'GET' }); }`;
 export function g(a: string) { return add(a, 'x'); }`;
     const sf = ts.createSourceFile('fake-helper-call.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
     expect(detectTransportWriteCapabilityInSource(sf, 'fake-helper-call.ts').hasWriteCapability).toBe(false);
+  });
+
+  it('ordinary helper calls with string, boolean, numeric, or domain options are not transport writes', () => {
+    const code = `function loadMessages(channel: string, hideCoordination: boolean) {}
+function neighborhood(focus: string, depth: number) {}
+function search(query: string, domain: string) {}
+export function run() { loadMessages('common', true); neighborhood('root', 2); search('policy', 'library'); }`;
+    const sf = ts.createSourceFile('fake-domain-helpers.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    expect(detectTransportWriteCapabilityInSource(sf, 'fake-domain-helpers.ts').hasWriteCapability).toBe(false);
+  });
+
+  it('an unresolved callable with a request-init-shaped object remains fail-closed', () => {
+    const code = `export function run(url: string) { unknownTransport(url, { method: 'POST', body: 'x' }); }`;
+    const sf = ts.createSourceFile('fake-unresolved-request.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const result = detectTransportWriteCapabilityInSource(sf, 'fake-unresolved-request.ts');
+    expect(result.hasWriteCapability).toBe(true);
+    expect(result.suspiciousCalls[0].reason).toMatch(/unresolved callable/);
+  });
+
+  it('an unresolved callable with an options/init variable remains fail-closed', () => {
+    const code = `export function run(url: string, requestInit: RequestInit) { unknownTransport(url, requestInit); }`;
+    const sf = ts.createSourceFile('fake-unresolved-init.ts', code, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    expect(detectTransportWriteCapabilityInSource(sf, 'fake-unresolved-init.ts').hasWriteCapability).toBe(true);
   });
 
   it('an imported helper call is NOT flagged as transport', () => {

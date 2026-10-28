@@ -21,11 +21,16 @@ import { cn } from '@/lib/utils';
 /**
  * STARQ // COMMAND — application root.
  *
- * Structure of truth, outermost first:
+ * Command combines read-only projections with separately owned writable
+ * operating workflows. PM, Room messaging, organizational records, and task
+ * execution write through their owning backend services; projection surfaces
+ * remain read-only and preserve unavailable, stale, and drift states.
+ *
+ * For the canonical truth views, the display order is:
  *   1. Hold banner        — persistent, non-dismissible, from canonical state
  *   2. Drift banner       — projection disagrees with its canonical provenance
  *   3. Stale banner       — projection older than its source
- *   4. Surface            — only rendered once the above have been declared
+ *   4. Surface            — rendered after the relevant truth state is declared
  *
  * A value is never visible without its honesty state having been declared
  * above it.

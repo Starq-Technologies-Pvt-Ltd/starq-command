@@ -25,8 +25,9 @@
  *
  * WHAT THIS FILE PROVES
  *
- *   Part A — the real tree is CLEAN. Baseline: no write capability anywhere in
- *            src/** before this file touches anything.
+ *   Part A — no filesystem writer or unapproved transport exists in src/**.
+ *            Command's explicitly approved Messenger send is recorded and
+ *            checked separately rather than misclassified as read-only.
  *   Part B — each mutant, placed in a REAL src/lib/** or src/components/** path,
  *            turns the guard RED.
  *   Part C — the guard returns to GREEN after byte-for-byte cleanup.
@@ -58,6 +59,7 @@ import {
   collectTs,
   detectFsWriteCapability,
   detectTransportWriteCapability,
+  isApprovedCommandUiWrite,
   parseSource,
 } from './support/application-capability';
 
@@ -71,10 +73,11 @@ const SRC = path.join(root, 'src');
  * This is the same composition PROOF 2/3/4/5 use — a mutant anywhere under
  * src/ must make this return a violation list.
  */
-function scanRealTree(): { fs: string[]; transport: string[] } {
+function scanRealTree(): { fs: string[]; transport: string[]; approvedTransport: string[] } {
   const files = collectTs(SRC);
   const fsViolations: string[] = [];
   const transportViolations: string[] = [];
+  const approvedTransport: string[] = [];
 
   for (const file of files) {
     const rel = path.relative(SRC, file);
@@ -118,10 +121,12 @@ function scanRealTree(): { fs: string[]; transport: string[] } {
 
   const transport = detectTransportWriteCapability(files);
   for (const c of transport.suspiciousCalls) {
-    transportViolations.push(`${path.relative(SRC, c.file)}: ${c.reason} — ${c.text.slice(0, 90)}`);
+    const detail = `${path.relative(SRC, c.file).replace(/\\/g, '/')}: ${c.reason} — ${c.text.slice(0, 90)}`;
+    if (isApprovedCommandUiWrite(c)) approvedTransport.push(detail);
+    else transportViolations.push(detail);
   }
 
-  return { fs: fsViolations, transport: transportViolations };
+  return { fs: fsViolations, transport: transportViolations, approvedTransport };
 }
 
 /** Digest of the entire real src/** tree — file paths + contents. */
@@ -354,12 +359,20 @@ describe('PART A — real application tree is clean before mutation', () => {
     expect(fs, `FS write capability in the real tree:\n${fs.join('\n')}`).toEqual([]);
   });
 
-  it('no write-capable transport anywhere in src/**', () => {
+  it('no unapproved write-capable transport anywhere in src/**', () => {
     const { transport } = scanRealTree();
     expect(
       transport,
-      `write-capable transport in the real tree:\n${transport.join('\n')}`,
+      `unapproved write-capable transport in the real tree:\n${transport.join('\n')}`,
     ).toEqual([]);
+  });
+
+  it('records only the specifically authorized PM-backed Messenger write', () => {
+    const { approvedTransport } = scanRealTree();
+    expect(approvedTransport).toHaveLength(1);
+      expect(approvedTransport[0]).toContain('surfaces/comms.tsx');
+    expect(approvedTransport[0]).toContain("fetch with method 'POST'");
+    expect(approvedTransport[0]).toContain('/api/pm/comms/send');
   });
 
   it('the mutant target paths do not pre-exist in the real tree', () => {
@@ -435,6 +448,7 @@ describe('PART B/C — real-tree mutation: guard goes red per mutant, green afte
         after.transport,
         `transport guard did not return to green after removing ${m.target}:\n${after.transport.join('\n')}`,
       ).toEqual([]);
+      expect(after.approvedTransport).toHaveLength(1);
     });
   }
 });
