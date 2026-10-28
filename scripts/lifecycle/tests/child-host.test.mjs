@@ -14,8 +14,13 @@ import { proveInstance, requestShutdown, pipePath } from '../control.mjs';
 import { inspectProcesses, osVerdict } from '../inspect.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const childHostPrerequisite = process.platform !== 'win32'
+  ? `requires Windows named pipes and process inspection (current OS: ${process.platform})`
+  : process.env.STARQ_AUTHORIZED_LIVE_TESTS !== '1'
+    ? 'requires explicit STARQ_AUTHORIZED_LIVE_TESTS=1 because this test launches a real child host'
+    : false;
 
-test('child host: pipe identity proof, unauthenticated shutdown refused, authenticated shutdown exits gracefully', { skip: process.platform !== 'win32' || process.env.STARQ_AUTHORIZED_LIVE_TESTS !== '1' }, async () => {
+test('child host: pipe identity proof, unauthenticated shutdown refused, authenticated shutdown exits gracefully', { skip: childHostPrerequisite }, async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'starq-child-'));
   const entry = path.join(dir, 'svc.mjs');
   // Mimics a component with a direct-run guard, like data-service.mjs.
@@ -66,7 +71,7 @@ test('child host: pipe identity proof, unauthenticated shutdown refused, authent
   }
 });
 
-test('child host refuses to run without its launch environment', { skip: process.platform !== 'win32' || process.env.STARQ_AUTHORIZED_LIVE_TESTS !== '1' }, async () => {
+test('child host refuses to run without its launch environment', { skip: childHostPrerequisite }, async () => {
   const child = spawn(process.execPath, [CHILD_HOST], { env: { ...process.env, STARQ_LC_NAME: '' }, stdio: 'ignore', windowsHide: true });
   const code = await new Promise((r) => child.on('exit', r));
   assert.equal(code, 64);

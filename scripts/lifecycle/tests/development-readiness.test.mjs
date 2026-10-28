@@ -3,21 +3,22 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { createHmac } from 'node:crypto';
-import {
+import { resolveWorkspace } from '../../../server/paths.mjs';
+import { importTestComponent } from '../external-test-components.mjs';
+const {
   compatibilityGate,
   developmentContainmentGate,
   probeDevelopmentRuntimeContainment,
   containmentOptions,
   containmentDependencyPaths,
-} from '../../../../herdr-floor/src/containment-config.mjs';
+} = await importTestComponent('herdr-floor', 'src/containment-config.mjs');
 import { readGates, readDevelopmentGates, evaluateDevelopmentRule0Gate } from '../gates.mjs';
-import { checkDevelopmentRule0, developmentOperationalSpecs } from '../../../../starq-lifecycle/runtime-policy.mjs';
+const { checkDevelopmentRule0, developmentOperationalSpecs } = await importTestComponent('starq-lifecycle', 'runtime-policy.mjs');
 import { createOwner, RESULT } from '../owner.mjs';
 
-const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const WORKSPACE_ROOT = path.resolve(PACKAGE_ROOT, '..', '..', '..');
+const WORKSPACE_ROOT = resolveWorkspace().root;
+assert.ok(WORKSPACE_ROOT, 'canonical STARQ workspace must be available for native lifecycle readiness tests');
 
 // Helper to write simulated authenticated receipts for probe failure mock tests
 function writeMockReceipt(configPath, { rootPid = 12345, assignedBeforeResume = true } = {}) {

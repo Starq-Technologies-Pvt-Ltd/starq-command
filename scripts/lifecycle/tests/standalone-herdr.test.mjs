@@ -9,7 +9,8 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { validateConfig, componentEnv, findEnvOverrides, standaloneHerdr } from '../config.mjs';
 import { evaluateStandaloneHerdrOwner, readStandaloneHerdrGate } from '../gates.mjs';
-import { runtimeSpecs } from '../../../../starq-lifecycle/runtime-policy.mjs';
+import { importTestComponent } from '../external-test-components.mjs';
+const { runtimeSpecs } = await importTestComponent('starq-lifecycle', 'runtime-policy.mjs');
 
 const ENTRY = {
   id: 'standalone-herdr', owner_protocol: 'OPERATOR_INTERACTIVE', command_actuation: 'NONE',

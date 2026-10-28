@@ -4,8 +4,9 @@ import path from 'node:path';
 import { classifyInfrastructureProcess, inspectDeclaredInfrastructure, osVerdict } from '../inspect.mjs';
 import { resolveExternalComponent } from '../../../server/external-components.mjs';
 
-const HERDR = 'C:\\Users\\Ali Musthaq\\.herdr\\packages\\standalone\\releases\\0.9.5-x86_64-pc-windows-msvc\\herdr.exe';
-const NODE = 'C:\\Program Files\\nodejs\\node.exe';
+// These are inert Windows-shaped fixture identities, not expected machine paths.
+const HERDR = String.raw`C:\fixture\herdr\herdr.exe`;
+const NODE = String.raw`C:\fixture\node\node.exe`;
 const SCRIPTS = resolveExternalComponent('agent-comms').root
   ? path.join(resolveExternalComponent('agent-comms').root, 'scripts')
   : path.join(process.cwd(), 'agent-comms', 'scripts');

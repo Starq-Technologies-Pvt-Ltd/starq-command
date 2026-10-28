@@ -6,10 +6,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { REQUIRED_CASES } from '../../../../herdr-floor/src/containment-config.mjs';
-import { judge } from '../../../../starq-lifecycle/native-fixtures/oracles.mjs';
+import { importTestComponent, resolveTestComponentPath } from '../external-test-components.mjs';
+const { REQUIRED_CASES } = await importTestComponent('herdr-floor', 'src/containment-config.mjs');
+const { judge } = await importTestComponent('starq-lifecycle', 'native-fixtures/oracles.mjs');
 
-const DIR = path.resolve(import.meta.dirname, '../../../../starq-lifecycle/native-fixtures');
+const DIR = resolveTestComponentPath('starq-lifecycle', 'native-fixtures');
 const src = (rel) => readFileSync(path.join(DIR, rel), 'utf8');
 const code = (text) => text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\/\/[^\n'"]*$/gm, '');
 

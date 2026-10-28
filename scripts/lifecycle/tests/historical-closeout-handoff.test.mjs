@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from '../historical-closeout-handoff.mjs';
-import { HISTORICAL_CLOSEOUT_EXCEPTION } from '../../../../herdr-floor/src/historical-closeout-exception.mjs';
+import { importTestComponent, resolveTestComponentPath } from '../external-test-components.mjs';
+const { HISTORICAL_CLOSEOUT_EXCEPTION } = await importTestComponent('herdr-floor', 'src/historical-closeout-exception.mjs');
 
-const FIXTURE_DIR = fileURLToPath(new URL('../../../../herdr-floor/state/', import.meta.url));
+const FIXTURE_DIR = resolveTestComponentPath('herdr-floor', 'state');
 const MANIFEST = 'historical-closeout-exception-20261027.json';
 const ARCHIVE = 'registry.pre-option-b-15821.json';
 
