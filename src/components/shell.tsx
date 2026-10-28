@@ -7,10 +7,12 @@ import {
   FileSearch,
   Fingerprint,
   Gauge,
+  Library,
   LayoutDashboard,
   Network,
   Settings2,
   Users,
+  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Separator } from './ui/separator';
@@ -21,6 +23,9 @@ import type { Health } from '@/lib/contracts';
 export type ViewId =
   | 'building'
   | 'company'
+  | 'library'
+  | 'cortex'
+  | 'comms'
   | 'studio'
   | 'overview'
   | 'attention'
@@ -77,9 +82,30 @@ export const NAV: NavItem[] = [
     live: true,
   },
   {
+    id: 'library',
+    label: 'Library',
+    hint: 'Nexus records and documents',
+    icon: Library,
+    live: true,
+  },
+  {
+    id: 'cortex',
+    label: 'Cortex',
+    hint: 'Connected work and evidence',
+    icon: Network,
+    live: true,
+  },
+  {
+    id: 'comms',
+    label: 'Comms',
+    hint: 'Room messenger',
+    icon: MessageSquare,
+    live: true,
+  },
+  {
     id: 'studio',
     label: 'Dev Studio',
-    hint: 'Staff · projects · evidence',
+    hint: 'Project boards',
     icon: Users,
     live: true,
   },

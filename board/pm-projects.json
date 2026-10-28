@@ -1,32 +1,26 @@
 {
   "registry_id": "STARQ-COMMAND-PM-PROJECTS",
-  "schema_version": "1.0.0",
-  "authority": "Founder #9497 (CMD-PM-MIN FINAL EXECUTION AUTHORIZATION), scope #9493 / #9494",
-  "note": "Static project metadata only. Tasks live in data/pm-board.db and are created by humans through the PM interface. Nothing here is a task source. Seed is insert-only: an existing project row is never overwritten; drift is reported by GET /api/pm/health.",
+  "schema_version": "2.0.0",
+  "authority": "Founder 27 Oct 2026 — Command is the new Nexus. Boards are writable kanbans.",
+  "note": "Project catalog for Command kanban boards. Tasks live in the PM SQLite database. Nexus JSON is the import source only and is never written.",
   "projects": [
-    {
-      "id": "command",
-      "name": "Starq Command",
-      "prefix": "CMD",
-      "description": "Starq Command / MODS programme. Human-operated PM board.",
-      "hold_state": null,
-      "source_gap": "33 historical CMD-DI rows exist in board/command-board.json (pinned, CANDIDATE_NOT_ACCEPTED, STALE at Room #9455). They are NOT imported. Transfer of any row requires per-task Founder authorization carrying a Room reference."
-    },
-    {
-      "id": "erp",
-      "name": "starqERP",
-      "prefix": "ERP",
-      "description": "starqERP convergence programme. Implementation hold is read live from the control-board contract (DEC-100), not copied here.",
-      "hold_state": null,
-      "source_gap": "Canonical task source starqNexus/data/starq-erp-tasks.json is absent from this workspace and the 437-vs-407 task discrepancy (D2) is unresolved. No ERP tasks were imported or invented. Tasks may be added by a human with a Room authorization reference."
-    },
-    {
-      "id": "hoadha",
-      "name": "Hoadhaa",
-      "prefix": "HOA",
-      "description": "Hoadhaa Dev Studio programme. Human-operated PM board.",
-      "hold_state": null,
-      "source_gap": "Task sources starqNexus/data/hoadha-*.json and 03_PROJECTS/hoadha/HOADHA_DEV_STUDIO/ are absent from this workspace. No Hoadhaa tasks were imported or invented. Tasks may be added by a human with a Room authorization reference."
-    }
+    { "id": "command", "name": "Starq Command", "prefix": "CMD", "description": "Command itself — current operating work.", "hold_state": null, "source_gap": null },
+    { "id": "studio", "name": "Starq Studio", "prefix": "STU", "description": "AI-native coding studio capability.", "hold_state": null, "source_gap": null },
+    { "id": "web", "name": "Starq Web", "prefix": "SQW", "description": "Enterprise website and commercial launch.", "hold_state": null, "source_gap": null },
+    { "id": "erp", "name": "starqERP", "prefix": "SERP", "description": "AI-native multi-tenant SME ERP. Implementation remains on hold (DEC-100); the board is still the working record.", "hold_state": null, "source_gap": null },
+    { "id": "hoadha", "name": "Hoadha", "prefix": "DHIV", "description": "Hoadha core marketplace board.", "hold_state": null, "source_gap": null },
+    { "id": "hoadha-social", "name": "Hoadha Social", "prefix": "HSOC", "description": "Hoadha commercial social standard.", "hold_state": null, "source_gap": null },
+    { "id": "hoadha-concierge", "name": "Hoadha HIE", "prefix": "HIE", "description": "Hoadha intelligence engine / concierge.", "hold_state": null, "source_gap": null },
+    { "id": "academy", "name": "Starq Academy", "prefix": "ACA", "description": "Company #3 — education formation board.", "hold_state": null, "source_gap": null },
+    { "id": "pay", "name": "starqPay", "prefix": "PAY", "description": "Company #4 — payments formation board.", "hold_state": null, "source_gap": null },
+    { "id": "dynamics", "name": "Starq Dynamics", "prefix": "SD", "description": "Client-facing solutions and services arm.", "hold_state": null, "source_gap": null },
+    { "id": "foundation", "name": "Starq Foundation", "prefix": "SF", "description": "Registrations, resolutions and controls.", "hold_state": null, "source_gap": null },
+    { "id": "founder-decisions", "name": "Founder Decisions", "prefix": "FD", "description": "Questions waiting on Ali — the Nexus decisions board.", "hold_state": null, "source_gap": null },
+    { "id": "portal", "name": "Starq Portal", "prefix": "SP", "description": "Nexus-era portal board. Preserved, writable.", "hold_state": null, "source_gap": null },
+    { "id": "pos", "name": "STARQ POS", "prefix": "SPOS", "description": "Nexus-era POS board. Capability now sits inside starqERP; cards kept.", "hold_state": null, "source_gap": null },
+    { "id": "antrac-erp", "name": "Antrac ERP", "prefix": "AERP", "description": "Personal Antrac ERP board.", "hold_state": null, "source_gap": null },
+    { "id": "orgsync", "name": "OrgSync", "prefix": "ORG", "description": "Personal OrgSync board.", "hold_state": null, "source_gap": null },
+    { "id": "biography", "name": "Biography", "prefix": "BIO", "description": "Personal biography board.", "hold_state": null, "source_gap": null },
+    { "id": "devops", "name": "DevOps Control", "prefix": "DVC", "description": "DevOps control board.", "hold_state": null, "source_gap": null }
   ]
 }

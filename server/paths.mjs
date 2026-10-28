@@ -76,7 +76,8 @@ export const CANONICAL = {
   // evidence-drawer ALLOWLIST, not an inventory of what the service can see, and
   // nothing asked to serve the registry's bytes.
   companySeats: 'company-seats.json',
-  pmBoardDb: '00_STARQ_HQ/operations/starq-command/data/pm-board.db',
+  pmBoardDb: '00_STARQ_HQ/operations/starq-command/data/pm-operating.db',
+  pmBoardLegacyDb: '00_STARQ_HQ/operations/starq-command/data/pm-board.db',
   pmProjects: '00_STARQ_HQ/operations/starq-command/board/pm-projects.json',
 };
 

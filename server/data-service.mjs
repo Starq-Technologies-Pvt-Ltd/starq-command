@@ -38,6 +38,12 @@ import { buildSnapshot } from './snapshot.mjs';
 import { runReadOnlyGates } from './gates.mjs';
 import { readRoomVisibility } from './room-work.mjs';
 import { readRoomSnapshot, readRoomBoundSnapshot } from './room-snapshot.mjs';
+import {
+  channelMessages,
+  listChannels,
+  peopleDirectory,
+  searchMessages,
+} from './comms.mjs';
 import { classifyFilesystemPath } from './room-path.mjs';
 import { classifyRoomLedgerRelation } from './room-ledger-relation.mjs';
 
@@ -883,6 +889,243 @@ export async function buildPhase3Surface() {
   return surface;
 }
 
+
+// -- PROJECTION CACHE -------------------------------------------------------
+/**
+ * The assembled surface is a PURE FUNCTION of a fixed set of canonical files.
+ * Re-deriving it per request measured 2.1-2.8s and 2.0MB, four times a minute,
+ * for facts that change a few times an hour. Because the client aborts at
+ * 4000ms, that cost was itself producing false "DATA SERVICE UNREACHABLE"
+ * banners for a service that was healthy.
+ *
+ * WHAT THIS DOES NOT CHANGE
+ *
+ * Nothing about derivation, provenance, drift detection or the honesty states.
+ * A cache hit returns the surface that WAS derived, carrying the assembled_at
+ * it was derived at - never a fresh timestamp over older content. The honesty
+ * rule is unchanged: a value is never shown without its state, and
+ * assembled_at IS that state. The added projection_cache block says, in the
+ * payload, whether this response was served or re-derived, and from when.
+ *
+ * TORN READS ARE NOT CACHED
+ *
+ * The fingerprint is taken before AND after assembly. If a source changed
+ * while we were reading, the result is a torn read: it is returned to the
+ * caller that asked for it, marked as such, and NOT stored.
+ */
+const CACHE_SOURCE_FILES = [
+  CANONICAL.frontDoor,
+  CANONICAL.onboarding,
+  CANONICAL.decisions,
+  CANONICAL.identities,
+  CANONICAL.staffState,
+  CANONICAL.roomLedger,
+  CANONICAL.herdrManifest,
+  CANONICAL.companySeats,
+  CANONICAL.controlBoard + '/' + CONTROL_BOARD_FILES.contract,
+  CANONICAL.controlBoard + '/' + CONTROL_BOARD_FILES.activity,
+  CANONICAL.controlBoard + '/' + CONTROL_BOARD_FILES.workModel,
+  CANONICAL.controlBoard + '/' + CONTROL_BOARD_FILES.state,
+  CANONICAL.controlBoard + '/' + CONTROL_BOARD_FILES.reclassification,
+  CANONICAL.controlBoard + '/' + CANONICAL.companySeats,
+];
+
+/** Directories whose ENTRIES are read; every entry is fingerprinted by name. */
+const CACHE_SOURCE_DIRS = [CANONICAL.identityLeases, CANONICAL.protocol];
+
+function statPart(absPath) {
+  try {
+    const st = fs.statSync(absPath);
+    return st.size + ':' + Math.trunc(st.mtimeMs);
+  } catch {
+    // An absent source is a stable fact and caches correctly as one: if it
+    // appears later its part stops being ABSENT and the cache drops.
+    return 'ABSENT';
+  }
+}
+
+/**
+ * (size, mtime) over every canonical source. Deliberately NOT a content hash:
+ * hashing a 35MB ledger per request would reintroduce the cost this exists to
+ * remove. stat() is microseconds and changes whenever a writer touches a file.
+ */
+function sourceFingerprint(root) {
+  const parts = [];
+  for (const rel of CACHE_SOURCE_FILES) parts.push(rel + '=' + statPart(abs(root, rel)));
+  for (const rel of CACHE_SOURCE_DIRS) {
+    const dir = abs(root, rel);
+    let names;
+    try {
+      names = fs.readdirSync(dir).sort();
+    } catch {
+      parts.push(rel + '=ABSENT');
+      continue;
+    }
+    for (const name of names) parts.push(rel + '/' + name + '=' + statPart(path.join(dir, name)));
+  }
+  return {
+    key: crypto.createHash('sha256').update(parts.join('\n')).digest('hex'),
+    sources: parts.length,
+  };
+}
+
+let projectionCache = null;
+
+export function invalidateProjectionCache() {
+  projectionCache = null;
+}
+
+export function projectionCacheStats() {
+  if (!projectionCache) return { state: 'EMPTY' };
+  return {
+    state: 'WARM',
+    assembled_at: projectionCache.assembled_at,
+    hits: projectionCache.hits,
+    build_ms: projectionCache.build_ms,
+    sources_fingerprinted: projectionCache.sources,
+  };
+}
+
+/**
+ * Phase 3 is a superset of Phase 1 and Phase 2, so ONE cached object serves
+ * /api/surface, /api/health, /api/health-floor and /api/floor. Caching them
+ * apart would assemble the same surface up to four times.
+ */
+/**
+ * The cached Phase 3 surface, for other origins in this process family.
+ *
+ * The Building origin needs the ERP hold state and nothing else, but it was
+ * paying for a full uncached assembly to get it. This is the same object the
+ * HTTP layer serves, with the same honesty guarantees.
+ */
+export async function cachedPhase3Surface() {
+  const { surface } = await cachedSurface();
+  return surface;
+}
+
+async function cachedSurface() {
+  const root = resolveWorkspace().root;
+  if (!root) return { surface: await buildPhase3Surface(), hit: false, entry: null };
+
+  const before = sourceFingerprint(root);
+  if (projectionCache && projectionCache.key === before.key) {
+    projectionCache.hits += 1;
+    return { surface: projectionCache.surface, hit: true, entry: projectionCache };
+  }
+
+  const startedAt = Date.now();
+  const surface = await buildPhase3Surface();
+  const buildMs = Date.now() - startedAt;
+  const after = sourceFingerprint(root);
+
+  if (after.key !== before.key) {
+    surface.projection_cache = {
+      state: 'NOT_CACHED_TORN_READ',
+      reason: 'a canonical source changed during assembly; this response was not stored',
+      build_ms: buildMs,
+    };
+    projectionCache = null;
+    return { surface, hit: false, entry: null };
+  }
+
+  projectionCache = {
+    key: before.key,
+    surface,
+    etag: 'W/"sfc-' + before.key.slice(0, 32),
+    sources: before.sources,
+    assembled_at: surface.assembled_at,
+    hits: 0,
+    build_ms: buildMs,
+    bodies: new Map(),
+  };
+  return { surface, hit: false, entry: projectionCache };
+}
+
+/**
+ * Attach the cache's own honesty state, then serve with an ETag so a repeat
+ * poll costs a 304 and no body at all.
+ *
+ * The serialized body is memoised per route: stringifying a 2MB surface on
+ * every poll is itself measurable, and it is the same bytes every time.
+ */
+function sendCachedJson(req, res, route, payload, entry, hit, status = 200) {
+  if (entry) {
+    payload.projection_cache = {
+      state: hit ? 'HIT' : 'MISS',
+      assembled_at: entry.assembled_at,
+      served_at: new Date().toISOString(),
+      build_ms: entry.build_ms,
+      hits_since_assembly: entry.hits,
+      sources_fingerprinted: entry.sources,
+      note: hit
+        ? 'Served from the assembled projection. No canonical source has changed since assembled_at.'
+        : 'Assembled now from canonical sources.',
+    };
+  }
+
+  const etag = entry ? entry.etag + '-' + route + '"' : null;
+
+  if (etag && req.headers['if-none-match'] === etag) {
+    res.writeHead(304, {
+      etag,
+      'cache-control': 'no-cache',
+      'x-starq-command-authority': 'DERIVED_PROJECTION',
+      'x-starq-command-access': 'READ_ONLY',
+      'x-starq-command-projection': 'NOT_MODIFIED',
+    });
+    return res.end();
+  }
+
+  let body;
+  if (entry && hit && entry.bodies.has(route)) {
+    body = entry.bodies.get(route);
+  } else {
+    body = JSON.stringify(payload, null, 2);
+    if (entry && hit) entry.bodies.set(route, body);
+  }
+
+  res.writeHead(status, {
+    'content-type': 'application/json; charset=utf-8',
+    // no-cache, not no-store: the client MAY revalidate with If-None-Match and
+    // receive a 304. It may never serve this from its own cache without asking.
+    'cache-control': 'no-cache',
+    ...(etag ? { etag } : {}),
+    'x-starq-command-authority': 'DERIVED_PROJECTION',
+    'x-starq-command-access': 'READ_ONLY',
+    'x-starq-command-projection': hit ? 'CACHE_HIT' : 'ASSEMBLED',
+  });
+  res.end(body);
+}
+
+
+// -- COMMS PROJECTION CACHE -------------------------------------------------
+/**
+ * The messenger reads the whole 15.8k-record ledger, which is exactly the
+ * O(entire history) cost the projection cache exists to avoid paying per
+ * request. The Room snapshot already reports a tailSequence and tailHash, so
+ * the records are cached on those: a poll that finds the same tail does no
+ * re-read of the ledger at all. Appends change the tail and drop the cache.
+ */
+let commsCache = null;
+
+function commsRecords() {
+  const snap = readRoomSnapshot();
+  if (snap.state !== 'OK' || !Array.isArray(snap.records)) {
+    return { ok: false, state: snap.state ?? 'UNAVAILABLE', reason: snap.reason ?? 'Room unavailable', records: [] };
+  }
+  const key = (snap.tailSequence ?? snap.recordCount ?? 0) + ':' + (snap.tailHash ?? '');
+  if (!commsCache || commsCache.key !== key) {
+    commsCache = {
+      key,
+      records: snap.records,
+      tail_sequence: snap.tailSequence ?? null,
+      record_count: snap.recordCount ?? snap.records.length,
+      assembled_at: new Date().toISOString(),
+    };
+  }
+  return { ok: true, ...commsCache };
+}
+
 // ── HTTP: thin, local, read-only. GET only. ────────────────────────────────
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -926,15 +1169,15 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/health') {
     try {
-      const surface = await buildPhase2Surface();
+      const { surface, hit, entry } = await cachedSurface();
       const isHealthy = surface.health?.overall === STATE.OK;
-      return sendJson(res, isHealthy ? 200 : 503, {
+      return sendCachedJson(req, res, 'health', {
         assembled_at: surface.assembled_at,
         workspace: surface.workspace,
         health: surface.health,
         health_floor_summary: surface.health_floor_summary ?? null,
         authority_note: surface.authority_note,
-      });
+      }, entry, hit, isHealthy ? 200 : 503);
     } catch (err) {
       return sendJson(res, 500, { error: err.message });
     }
@@ -942,13 +1185,13 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/health-floor') {
     try {
-      const surface = await buildPhase2Surface();
-      return sendJson(res, 200, {
+      const { surface, hit, entry } = await cachedSurface();
+      return sendCachedJson(req, res, 'health-floor', {
         generated_at: surface.assembled_at,
         summary: surface.health_floor_summary ?? null,
         floor: surface.health_floor ?? null,
         authority_note: surface.authority_note,
-      });
+      }, entry, hit);
     } catch (err) {
       return sendJson(res, 500, { error: err.message, state: STATE.UNREADABLE });
     }
@@ -956,7 +1199,8 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/surface') {
     try {
-      return sendJson(res, 200, await buildPhase3Surface());
+      const { surface, hit, entry } = await cachedSurface();
+      return sendCachedJson(req, res, 'surface', surface, entry, hit);
     } catch (err) {
       return sendJson(res, 500, { error: err.message, state: STATE.UNREADABLE });
     }
@@ -969,13 +1213,13 @@ const server = http.createServer(async (req, res) => {
   // payloads along. Still GET-only, still read-only, still the same assembly.
   if (url.pathname === '/api/floor') {
     try {
-      const surface = await buildPhase3Surface();
-      return sendJson(res, 200, {
+      const { surface, hit, entry } = await cachedSurface();
+      return sendCachedJson(req, res, 'floor', {
         generated_at: surface.floor.generated_at,
         authority_note: surface.authority_note,
         phase3: surface.phase3,
         floor: surface.floor,
-      });
+      }, entry, hit);
     } catch (err) {
       return sendJson(res, 500, { error: err.message, state: STATE.UNREADABLE });
     }
@@ -988,6 +1232,44 @@ const server = http.createServer(async (req, res) => {
     const project = url.searchParams.get('project_id');
     return sendJson(res, 200, visibility.work === null ? null :
       project ? visibility.work.filter(row => row.project_id === project) : visibility.work);
+  }
+
+  // ── Communications (the messenger). Read-only projection of the Room. ──────
+  if (url.pathname === '/api/comms/channels') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    return sendJson(res, 200, {
+      state: 'OK', tail_sequence: c.tail_sequence, record_count: c.record_count,
+      assembled_at: c.assembled_at, channels: listChannels(c.records),
+    });
+  }
+
+  if (url.pathname === '/api/comms/messages') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const channel = url.searchParams.get('channel') || 'common';
+    const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 100)));
+    const before = url.searchParams.get('before') ? Number(url.searchParams.get('before')) : null;
+    const includeCoordination = url.searchParams.get('coordination') !== 'exclude';
+    const page = channelMessages(c.records, channel, { limit, before, includeCoordination });
+    return sendJson(res, 200, { state: 'OK', tail_sequence: c.tail_sequence, assembled_at: c.assembled_at, ...page });
+  }
+
+  if (url.pathname === '/api/comms/search') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const q = url.searchParams.get('q') || '';
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+    const from = url.searchParams.get('from') || null;
+    const project = url.searchParams.get('project') || null;
+    return sendJson(res, 200, { state: 'OK', ...searchMessages(c.records, q, { limit, from, project }) });
+  }
+
+  if (url.pathname === '/api/comms/people') {
+    const c = commsRecords();
+    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
+    return sendJson(res, 200, { state: 'OK', people: peopleDirectory(identitiesSource.data, c.records) });
   }
 
   // Phase 2: the versioned, transport-agnostic envelope.
@@ -1119,4 +1401,5 @@ export { server, PORT, HOST };
 // future route until it is reviewed for observation-only safety.
 export const OBSERVATION_READ_ROUTES = new Set([
   '/api/health', '/api/surface', '/api/work-packages',
+  '/api/comms/channels', '/api/comms/messages', '/api/comms/search', '/api/comms/people',
 ]);

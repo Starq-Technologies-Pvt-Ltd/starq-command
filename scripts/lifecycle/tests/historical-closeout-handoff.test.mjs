@@ -4,7 +4,8 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from '
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { evaluateHistoricalCloseoutHandoff } from '../historical-closeout-handoff.mjs';
+import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from '../historical-closeout-handoff.mjs';
+import { HISTORICAL_CLOSEOUT_EXCEPTION } from '../../../../herdr-floor/src/historical-closeout-exception.mjs';
 
 const FIXTURE_DIR = fileURLToPath(new URL('../../../../herdr-floor/state/', import.meta.url));
 const MANIFEST = 'historical-closeout-exception-20261027.json';
@@ -30,7 +31,14 @@ function fixture() {
     pending_launches: 0, unresolved_launches: 0, orphaned_sessions: 0,
     historical_closeout_unverified: 6, drained: false,
   };
-  return { stateDir, registryProjection, lifecycleView, cleanup: () => rmSync(stateDir, { recursive: true, force: true }) };
+  const events = [{
+    event: 'recover.historical_closeout_exception_verified',
+    decision: HISTORICAL_CLOSEOUT_EXCEPTION.decision,
+    session_ids: [...HISTORICAL_CLOSEOUT_EXCEPTION.sessionIds],
+    historical_closeout: 'UNKNOWN',
+    broker_boot_id: 'boot-after-handoff',
+  }];
+  return { stateDir, registryProjection, lifecycleView, events, cleanup: () => rmSync(stateDir, { recursive: true, force: true }) };
 }
 
 test('historical handoff accepts only the exact quiescent legacy broker projection', () => {
@@ -79,5 +87,36 @@ test('historical handoff refuses current registry drift and a corrupted preserve
       writeFileSync(path.join(f.stateDir, target), '{broken');
       assert.equal(evaluateHistoricalCloseoutHandoff(f).applied, false, target);
     } finally { f.cleanup(); }
+  }
+});
+
+test('recorded closeout recovery resumes only the prior exact broker-verified six-session exception', () => {
+  const f = fixture();
+  try {
+    const result = evaluateRecordedHistoricalCloseoutRecovery(f);
+    assert.equal(result.applied, true);
+    assert.equal(result.historical_closeout, 'UNKNOWN');
+    assert.equal(result.broker_boot_id, 'boot-after-handoff');
+    assert.deepEqual(result.session_ids, [...HISTORICAL_CLOSEOUT_EXCEPTION.sessionIds].sort());
+  } finally { f.cleanup(); }
+});
+
+test('recorded closeout recovery refuses missing, altered, or expanded exception evidence', () => {
+  const mutations = [
+    (f) => { f.events = []; },
+    (f) => { f.events[0].decision = { ...f.events[0].decision, roomSequence: 15822 }; },
+    (f) => { f.events[0].session_ids.pop(); },
+    (f) => { f.events[0].historical_closeout = 'VERIFIED'; },
+    (f) => { f.events[0].broker_boot_id = null; },
+    (f) => {
+      const registry = JSON.parse(readFileSync(path.join(f.stateDir, 'registry.json'), 'utf8'));
+      registry.records.push({ session_id: 'hrd-unrelated-live-session', state: 'RUNNING' });
+      writeFileSync(path.join(f.stateDir, 'registry.json'), JSON.stringify(registry));
+    },
+  ];
+  for (const mutate of mutations) {
+    const f = fixture();
+    try { mutate(f); assert.equal(evaluateRecordedHistoricalCloseoutRecovery(f).applied, false); }
+    finally { f.cleanup(); }
   }
 });

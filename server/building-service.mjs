@@ -39,11 +39,14 @@
  */
 
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { resolveWorkspace } from './paths.mjs';
 import { buildBuilding, BUILDING_SOURCES, readBuildingSource } from './building.mjs';
 import { HISTORICAL_NEXUS_WORKSPACE_ROOT } from './historical-pm-snapshot.mjs';
+import { readNexusLibraryDocument, searchNexusLibrary } from './nexus-library.mjs';
+import { nexusCortexNeighborhood, nexusCortexStats, searchNexusCortex } from './nexus-cortex.mjs';
 
 /**
  * The Building projection needs exactly one value from the ERP surface: the
@@ -57,13 +60,81 @@ import { HISTORICAL_NEXUS_WORKSPACE_ROOT } from './historical-pm-snapshot.mjs';
 async function erpHoldState() {
   try {
     const mod = await import('./data-service.mjs');
-    const surface = await mod.buildPhase3Surface();
+    // The CACHED surface. This origin only needs the ERP hold state from it,
+    // and paying for a full re-assembly to read one field is what put
+    // /api/building past the client's abort budget.
+    const surface = await mod.cachedPhase3Surface();
     return surface;
   } catch (err) {
     // The ERP half is optional for this origin. If the frozen service cannot
     // be reached, we report UNKNOWN rather than failing the whole projection.
     return { process_truth: { hold_state: { implementation: 'UNKNOWN' } }, _reason: err.message };
   }
+}
+
+// -- BUILDING PROJECTION CACHE ----------------------------------------------
+/**
+ * Same contract as the data service's cache: keyed on (size, mtime) of every
+ * declared source plus the ERP surface's own assembly time, re-checked after
+ * assembly so a torn read is served but never stored. generated_at keeps the
+ * real derivation time; a projection_cache block declares HIT or MISS.
+ */
+let buildingCache = null;
+
+function buildingFingerprint(workspaceRoot) {
+  const parts = [];
+  for (const rel of BUILDING_SOURCES) {
+    let p = 'ABSENT';
+    try {
+      const st = fs.statSync(path.join(workspaceRoot ?? '.', rel));
+      p = st.size + ':' + Math.trunc(st.mtimeMs);
+    } catch {
+      try {
+        const st = fs.statSync(rel);
+        p = st.size + ':' + Math.trunc(st.mtimeMs);
+      } catch { /* ABSENT */ }
+    }
+    parts.push(rel + '=' + p);
+  }
+  return parts.join('|');
+}
+
+export async function buildBuildingProjectionCached() {
+  const resolved = resolveWorkspace();
+  const workspaceRoot = typeof resolved === 'string' ? resolved : resolved?.root ?? null;
+  const before = buildingFingerprint(workspaceRoot);
+
+  if (buildingCache && buildingCache.key === before) {
+    buildingCache.hits += 1;
+    return {
+      ...buildingCache.projection,
+      projection_cache: {
+        state: 'HIT',
+        generated_at: buildingCache.projection.generated_at,
+        served_at: new Date().toISOString(),
+        build_ms: buildingCache.build_ms,
+        hits_since_assembly: buildingCache.hits,
+      },
+    };
+  }
+
+  const startedAt = Date.now();
+  const projection = await buildBuildingProjection();
+  const buildMs = Date.now() - startedAt;
+  const after = buildingFingerprint(workspaceRoot);
+
+  if (after !== before) {
+    return {
+      ...projection,
+      projection_cache: { state: 'NOT_CACHED_TORN_READ', build_ms: buildMs },
+    };
+  }
+
+  buildingCache = { key: before, projection, hits: 0, build_ms: buildMs };
+  return {
+    ...projection,
+    projection_cache: { state: 'MISS', generated_at: projection.generated_at, served_at: new Date().toISOString(), build_ms: buildMs },
+  };
 }
 
 export async function buildBuildingProjection() {
@@ -122,7 +193,7 @@ export function createBuildingService() {
 
   if (url.pathname === '/api/building') {
     try {
-      return sendJson(res, 200, await buildBuildingProjection());
+      return sendJson(res, 200, await buildBuildingProjectionCached());
     } catch (err) {
       return sendJson(res, 500, { error: err.message, state: 'UNREADABLE' });
     }
@@ -130,7 +201,7 @@ export function createBuildingService() {
 
   if (url.pathname === '/api/building/health') {
     try {
-      const p = await buildBuildingProjection();
+      const p = await buildBuildingProjectionCached();
       const integrity = p.hoadha?.integrity ?? 'UNAVAILABLE';
       const healthy = integrity === 'SOURCE_READ';
       return sendJson(res, healthy ? 200 : 503, {
@@ -175,6 +246,66 @@ export function createBuildingService() {
       'x-starq-command-access': 'READ_ONLY',
     });
     return res.end(req.method === 'HEAD' ? undefined : source.content);
+  }
+
+  if (url.pathname === '/api/building/library/search') {
+    try {
+      return sendJson(res, 200, searchNexusLibrary({
+        query: url.searchParams.get('q') || '',
+        domain: url.searchParams.get('domain') || '',
+        limit: url.searchParams.get('limit') || 40,
+        offset: url.searchParams.get('offset') || 0,
+      }));
+    } catch (err) {
+      const status = err.code === 'ENOENT' ? 503 : 500;
+      return sendJson(res, status, {
+        state: status === 503 ? 'UNAVAILABLE' : 'UNREADABLE',
+        authority: 'RECOVERED_SOURCE_COPY',
+        read_only: true,
+        error: err.message,
+        documents: [],
+      });
+    }
+  }
+
+  if (url.pathname === '/api/building/library/document') {
+    try {
+      return sendJson(res, 200, readNexusLibraryDocument(url.searchParams.get('path')));
+    } catch (err) {
+      const status = err.status || (err.code === 'ENOENT' ? 404 : 500);
+      return sendJson(res, status, {
+        state: status === 404 || status === 413 ? 'UNAVAILABLE' : 'UNREADABLE',
+        authority: 'RECOVERED_SOURCE_COPY',
+        read_only: true,
+        error: err.message,
+      });
+    }
+  }
+
+  if (url.pathname === '/api/building/cortex/stats') {
+    try { return sendJson(res, 200, nexusCortexStats()); }
+    catch (err) { return sendJson(res, 503, { state: 'UNAVAILABLE', authority: 'RECOVERED_SOURCE_COPY', read_only: true, error: err.message }); }
+  }
+
+  if (url.pathname === '/api/building/cortex/search') {
+    try {
+      return sendJson(res, 200, searchNexusCortex({
+        query: url.searchParams.get('q') || '',
+        type: url.searchParams.get('type') || '',
+        limit: url.searchParams.get('limit') || 12,
+      }));
+    } catch (err) { return sendJson(res, 503, { state: 'UNAVAILABLE', authority: 'RECOVERED_SOURCE_COPY', read_only: true, error: err.message, nodes: [] }); }
+  }
+
+  if (url.pathname === '/api/building/cortex/neighborhood') {
+    try {
+      const result = nexusCortexNeighborhood({
+        id: url.searchParams.get('id') || '',
+        depth: url.searchParams.get('depth') || 1,
+        limit: url.searchParams.get('limit') || 56,
+      });
+      return sendJson(res, result.state === 'NOT_FOUND' ? 404 : 200, result);
+    } catch (err) { return sendJson(res, 503, { state: 'UNAVAILABLE', authority: 'RECOVERED_SOURCE_COPY', read_only: true, error: err.message, focus: null, nodes: [], edges: [] }); }
   }
 
   res.writeHead(404, { 'content-type': 'application/json; charset=utf-8' });

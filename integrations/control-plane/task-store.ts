@@ -52,9 +52,12 @@ export interface TaskTransitionLog {
 }
 
 export class TaskStore {
-  private db: DatabaseSync;
+  private db!: DatabaseSync;
+  private pmBackend: any;
 
-  constructor(dbPath: string = ':memory:') {
+  constructor(dbPath: string = ':memory:', pmBackend?: any) {
+    this.pmBackend = pmBackend;
+    if (pmBackend) return;
     if (dbPath !== ':memory:') {
       const dir = path.dirname(dbPath);
       if (!fs.existsSync(dir)) {
@@ -63,6 +66,11 @@ export class TaskStore {
     }
     this.db = new DatabaseSync(dbPath);
     this.initSchema();
+  }
+
+  /** Use the existing TaskStore API over PM-owned task rows and their execution extension. */
+  public static forPmExecutionStore(pmBackend: any): TaskStore {
+    return new TaskStore(':memory:', pmBackend);
   }
 
   private initSchema(): void {
@@ -115,6 +123,7 @@ export class TaskStore {
   }
 
   public createTask(contract: TaskContract): TaskRecord {
+    if (this.pmBackend) throw new Error('PM owns task creation; create the task through the PM service.');
     const val = validateTaskContract(contract);
     if (!val.valid) {
       throw new Error(`Invalid TaskContract: ${val.errors.join('; ')}`);
@@ -174,12 +183,14 @@ export class TaskStore {
   }
 
   public getTask(taskId: string): TaskRecord | null {
+    if (this.pmBackend) return this.pmBackend.getTask(taskId);
     const stmt = this.db.prepare(`SELECT * FROM tasks WHERE taskId = ?`);
     const row = stmt.get(taskId) as unknown;
     return row ? (row as TaskRecord) : null;
   }
 
   public listTasks(filter?: { state?: TaskState; project?: string; builder?: string }): TaskRecord[] {
+    if (this.pmBackend) return this.pmBackend.listTasks(filter);
     let sql = `SELECT * FROM tasks WHERE 1=1`;
     const params: (string | number | bigint | null | Uint8Array)[] = [];
 
@@ -208,6 +219,7 @@ export class TaskStore {
     reason?: string,
     updates?: Partial<TaskRecord>
   ): TaskRecord {
+    if (this.pmBackend) return this.pmBackend.transition(taskId, nextState, actor, { reason, ...(updates ?? {}) });
     const task = this.getTask(taskId);
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
@@ -269,6 +281,7 @@ export class TaskStore {
   }
 
   public attachBuilderArtifact(taskId: string, artifact: BuilderArtifact): TaskRecord {
+    if (this.pmBackend) return this.pmBackend.attachBuilderArtifact(taskId, artifact);
     const task = this.getTask(taskId);
     if (!task) throw new Error(`Task ${taskId} not found`);
 
@@ -303,6 +316,7 @@ export class TaskStore {
   }
 
   public attachVerifierArtifact(taskId: string, artifact: VerifierArtifact): TaskRecord {
+    if (this.pmBackend) return this.pmBackend.attachVerifierArtifact(taskId, artifact);
     const task = this.getTask(taskId);
     if (!task) throw new Error(`Task ${taskId} not found`);
 
@@ -340,6 +354,7 @@ export class TaskStore {
   }
 
   public getTransitionHistory(taskId: string): TaskTransitionLog[] {
+    if (this.pmBackend) return this.pmBackend.getHistory(taskId);
     const stmt = this.db.prepare(
       `SELECT * FROM task_transitions WHERE taskId = ? ORDER BY id ASC`
     );
@@ -361,6 +376,7 @@ export class TaskStore {
   }
 
   public close(): void {
+    if (this.pmBackend) return;
     this.db.close();
   }
 }

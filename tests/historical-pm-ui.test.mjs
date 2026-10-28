@@ -25,7 +25,6 @@ test('Building router mounts historical view without feeding records into PmBoar
   const router = read('src', 'surfaces', 'building.tsx');
   assert.match(router, /HistoricalPmSurface/);
   assert.match(router, /historical=\{b\.historical_pm\}/);
-  assert.match(router, /Historical Nexus records \(HISTORICAL_SNAPSHOT · READ_ONLY · not native tasks\)/);
   const pmMounts = [...router.matchAll(/<PmBoardSurface projectId="([^"]+)" \/>/g)].map((m) => m[1]);
   assert.deepEqual(pmMounts.sort(), ['erp', 'hoadha']);
   assert.doesNotMatch(router, /<PmBoardSurface[^>]*historical/);

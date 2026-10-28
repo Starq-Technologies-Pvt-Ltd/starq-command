@@ -13,14 +13,9 @@
  *   - strict input validation, unknown fields rejected, body size capped
  *   - optimistic concurrency (expected_updated_at) so edits are never lost
  *   - append-only history (SQLite triggers), WAL, synchronous=FULL
- *   - Room references are VERIFIED against readRoomSnapshot(), not self-asserted
- *   - Room posting is failure-safe: a failed post stays PENDING and visible
- *   - Room authority (Founder #9503, R1-R3): an authorization reference must be an
- *     authenticated ROOT_GENESIS Room record; acceptance and closure are proven by
- *     verified Room sender evidence (hash + chain checked), never by the UI actor
- *   - DEC-072: verifier != owner; the verifier's own Room record is the proof
- *   - an ON_HOLD project (ERP, DEC-100) cannot progress past READY
- *   - no task is ever imported or invented
+ *   - five Nexus kanban columns: TODO, NEXT, IN_PROGRESS, BLOCKED, DONE
+ *   - any column to any column; no review/accept/gate lifecycle
+ *   - Nexus boards are imported once into this database; StarqNexus is never written
  *
  * RESIDUAL LIMITATION (recorded per #9503): identity here is the Room's identity.
  * Anyone who can post to the Room as a handle (send.mjs identity lease on this
@@ -36,6 +31,42 @@ import { DatabaseSync } from 'node:sqlite';
 import { pathToFileURL } from 'node:url';
 import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
 import { readRoomSnapshot } from '../../../../agent-comms/scripts/room.mjs';
+import {
+  initOrgSchema,
+  seedOperatingOrg,
+  readOrg,
+  createCompany as orgCreateCompany,
+  createUnit as orgCreateUnit,
+  createPosition as orgCreatePosition,
+  createPerson as orgCreatePerson,
+  createAppointment as orgCreateAppointment,
+  orgPeopleHandles,
+} from './operating-org.mjs';
+import { buildSendArgs } from './comms.mjs';
+import {
+  backfillNexusAttributes,
+  ensureFidelityColumns,
+  restoreCollidedRecords,
+  workersOf,
+} from './nexus-fidelity.mjs';
+import {
+  GATED_STAGES,
+  PROVENANCE,
+  allowedStageNext,
+  assignmentLocked,
+  columnDragToStage,
+  evaluateStageTransition,
+  nextPriorStage,
+  stageToColumn,
+} from './gated-lifecycle.mjs';
+import {
+  KANBAN_STATUSES,
+  NEXUS_BOARDS,
+  allowedKanbanNext,
+  importNexusBoards,
+  importLegacyPmSnapshot,
+  mapKanbanStatus,
+} from './nexus-kanban.mjs';
 
 // Production is always 5176. A disposable verification instance (PM_DB_PATH set)
 // may use one unused loopback port in 5190-5199 and nothing else.
@@ -48,28 +79,12 @@ if (process.env.PM_PORT && PORT !== WANT_PORT) {
 }
 const HOST = '127.0.0.1';
 const MAX_BODY = 64 * 1024;
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 3;
+const TASK_ID_RE = /^[A-Za-z0-9._:-]{2,40}$/;
 
-export const STATUSES = [
-  'BACKLOG', 'READY', 'IN_PROGRESS', 'REVIEW', 'VERIFICATION',
-  'ACCEPTANCE', 'CLOSED', 'BLOCKED', 'FOUNDER_GATE',
-];
+export const STATUSES = [...KANBAN_STATUSES];
 const PRIORITIES = ['P0', 'P1', 'P2', 'P3'];
-const FORWARD = {
-  BACKLOG: 'READY', READY: 'IN_PROGRESS', IN_PROGRESS: 'REVIEW',
-  REVIEW: 'VERIFICATION', VERIFICATION: 'ACCEPTANCE', ACCEPTANCE: 'CLOSED',
-};
-const STATIC_NEXT = {
-  BACKLOG: ['READY', 'BLOCKED', 'FOUNDER_GATE'],
-  READY: ['IN_PROGRESS', 'BACKLOG', 'BLOCKED', 'FOUNDER_GATE'],
-  IN_PROGRESS: ['REVIEW', 'READY', 'BLOCKED', 'FOUNDER_GATE'],
-  REVIEW: ['VERIFICATION', 'READY', 'BLOCKED', 'FOUNDER_GATE'],
-  VERIFICATION: ['ACCEPTANCE', 'READY', 'BLOCKED', 'FOUNDER_GATE'],
-  ACCEPTANCE: ['CLOSED', 'READY', 'BLOCKED', 'FOUNDER_GATE'],
-  CLOSED: [],
-};
-const REJECTABLE = new Set(['REVIEW', 'VERIFICATION', 'ACCEPTANCE']);
-const HOLD_BLOCKED_TARGETS = new Set(['IN_PROGRESS', 'REVIEW', 'VERIFICATION', 'ACCEPTANCE', 'CLOSED']);
+const FORWARD = {};
 const ALLOWED_ORIGINS = new Set([
   'http://127.0.0.1:5173', 'http://localhost:5173',
   'http://127.0.0.1:4173', 'http://localhost:4173',
@@ -78,12 +93,7 @@ const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 export function allowedNext(task) {
-  if (task.status === 'BLOCKED') return [task.prior_status || 'BACKLOG'];
-  if (task.status === 'FOUNDER_GATE') {
-    const prior = task.prior_status || 'BACKLOG';
-    return [...new Set([prior, FORWARD[prior], 'BLOCKED'].filter(Boolean))];
-  }
-  return STATIC_NEXT[task.status] ?? [];
+  return allowedKanbanNext(task.status);
 }
 
 // ── Configuration ──────────────────────────────────────────────────────────
@@ -143,7 +153,34 @@ function identityLevels() {
     throw new HttpError(503, 'UNAVAILABLE', 'Identity registry unreadable; writes refused (fail closed).');
   }
 }
-const knownHandles = () => new Set(identityLevels().keys());
+const FOUNDER_LEVELS = new Set(['ROOT_GENESIS', 'FOUNDER', 'OWNER']);
+function isFounderHandle(handle) {
+  const level = identityLevels().get(handle);
+  return FOUNDER_LEVELS.has(level) || handle === 'ali' || handle === 'mustarq';
+}
+function knownHandles() {
+  const ids = new Set(identityLevels().keys());
+  if (db) for (const h of orgPeopleHandles(db)) ids.add(h);
+  return ids;
+}
+function localLedgerRef({ actor, purpose, kind, taskId }) {
+  const eventId = crypto.createHash('sha256').update(`local:${kind}:${actor}:${taskId ?? ''}:${nowIso()}:${crypto.randomUUID()}`).digest('hex');
+  return {
+    authority: 'LOCAL_LEDGER',
+    kind,
+    sequence: 0,
+    eventId,
+    recordHash: null,
+    senderHandle: actor,
+    purpose,
+    verified_at: nowIso(),
+    received_at: nowIso(),
+    authority_level: identityLevels().get(actor) ?? 'LOCAL_COMMAND',
+    root_authority: isFounderHandle(actor),
+    mentions_task: true,
+    task_id: taskId ?? null,
+  };
+}
 
 // The Room's own hash function, read-only. If it cannot be loaded, Room references
 // cannot be authenticated and every one is refused (fail closed).
@@ -267,7 +304,7 @@ function initSchema(handle) {
       title TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       priority TEXT NOT NULL DEFAULT 'P2' CHECK (priority IN ('P0','P1','P2','P3')),
-      status TEXT NOT NULL DEFAULT 'BACKLOG' CHECK (status IN ('BACKLOG','READY','IN_PROGRESS','REVIEW','VERIFICATION','ACCEPTANCE','CLOSED','BLOCKED','FOUNDER_GATE')),
+      status TEXT NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO','NEXT','IN_PROGRESS','BLOCKED','DONE')),
       prior_status TEXT,
       owner TEXT NOT NULL DEFAULT 'UNASSIGNED',
       verifier TEXT NOT NULL DEFAULT 'UNASSIGNED',
@@ -296,6 +333,49 @@ function initSchema(handle) {
       room_error TEXT,
       room_attempts INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS pm_import_sources (
+      source_file TEXT PRIMARY KEY,
+      source_system TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      row_count INTEGER NOT NULL CHECK (row_count >= 0),
+      imported_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pm_source_records (
+      source_key TEXT PRIMARY KEY,
+      source_system TEXT NOT NULL,
+      source_file TEXT NOT NULL REFERENCES pm_import_sources(source_file),
+      source_row_index INTEGER NOT NULL CHECK (source_row_index >= 0),
+      task_id TEXT,
+      resolution TEXT NOT NULL CHECK (resolution IN ('IMPORTED','DUPLICATE_TASK_ID','INVALID_ID','ARCHIVED_ID_COLLISION')),
+      raw_status TEXT,
+      payload_sha256 TEXT NOT NULL,
+      raw_payload TEXT NOT NULL,
+      imported_at TEXT NOT NULL,
+      UNIQUE(source_file, source_row_index)
+    );
+    CREATE TABLE IF NOT EXISTS pm_import_source_versions (
+      source_file TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      row_count INTEGER NOT NULL CHECK (row_count >= 0),
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY(source_file, content_sha256)
+    );
+    CREATE TABLE IF NOT EXISTS pm_source_record_versions (
+      source_key TEXT NOT NULL,
+      payload_sha256 TEXT NOT NULL,
+      source_system TEXT NOT NULL,
+      source_file TEXT NOT NULL,
+      source_row_index INTEGER NOT NULL,
+      task_id TEXT,
+      resolution TEXT NOT NULL,
+      raw_status TEXT,
+      raw_payload TEXT NOT NULL,
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY(source_key, payload_sha256)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pm_source_records_task ON pm_source_records(task_id);
+    CREATE INDEX IF NOT EXISTS idx_pm_source_records_file ON pm_source_records(source_file, source_row_index);
+    CREATE INDEX IF NOT EXISTS idx_pm_source_versions_file ON pm_source_record_versions(source_file, source_row_index);
     CREATE INDEX IF NOT EXISTS idx_pm_log_task ON pm_status_log(task_id);
     CREATE INDEX IF NOT EXISTS idx_pm_log_sync ON pm_status_log(room_sync);
     CREATE TRIGGER IF NOT EXISTS pm_log_no_delete BEFORE DELETE ON pm_status_log
@@ -304,15 +384,156 @@ function initSchema(handle) {
       task_id, event_type, from_status, to_status, actor, detail, timestamp ON pm_status_log
       BEGIN SELECT RAISE(ABORT, 'pm_status_log history columns are immutable'); END;
     CREATE TRIGGER IF NOT EXISTS pm_tasks_no_delete BEFORE DELETE ON pm_tasks
-      BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; close them'); END;
+      BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; move them to DONE'); END;
   `);
+  initOrgSchema(handle);
+  ensureGatedColumns(handle);
+  // Founder 28 Oct: promote the full original Nexus record out of raw_payload
+  // back into queryable columns, and restore the records the importer's global
+  // id guard discarded. Both steps are idempotent and run on every start.
+  ensureFidelityColumns(handle);
   const has = handle.prepare('SELECT value FROM pm_meta WHERE key = ?');
   if (!has.get('schema_version')) {
     const put = handle.prepare('INSERT INTO pm_meta (key, value) VALUES (?, ?)');
     put.run('schema_version', String(SCHEMA_VERSION));
     put.run('db_id', crypto.randomUUID());
     put.run('created_at', nowIso());
+  } else {
+    migrateKanbanSchema(handle);
+    handle.prepare("UPDATE pm_meta SET value = ? WHERE key = 'schema_version'").run(String(SCHEMA_VERSION));
   }
+  rebuildStatusLogParent(handle);
+}
+
+/**
+ * The governance axis (Founder D1).
+ *
+ * Added by ALTER TABLE rather than a table rebuild: the five-column `status`
+ * contract, the append-only history and the no-delete triggers all keep
+ * working untouched, and a half-applied migration cannot lose a row.
+ *
+ * Backfill rule, and the reason for it:
+ *
+ *   created_by = 'nexus-import'  ->  HISTORICAL_NEXUS
+ *   anything else                ->  LIVE
+ *
+ * Gating history is meaningless - nobody can produce a June verifier
+ * attestation for a card that closed in June - and the import had to
+ * synthesise a LOCAL_LEDGER authorisation to satisfy the gate's shape, which
+ * is the very thing the gate exists to refuse. So history is marked as history
+ * and moves freely; only live work is governed.
+ */
+function ensureGatedColumns(handle) {
+  const cols = new Set(handle.prepare("SELECT name FROM pragma_table_info('pm_tasks')").all().map((r) => r.name));
+  if (!cols.has('stage')) handle.exec("ALTER TABLE pm_tasks ADD COLUMN stage TEXT");
+  if (!cols.has('prior_stage')) handle.exec('ALTER TABLE pm_tasks ADD COLUMN prior_stage TEXT');
+  if (!cols.has('provenance')) handle.exec("ALTER TABLE pm_tasks ADD COLUMN provenance TEXT NOT NULL DEFAULT 'LIVE'");
+
+  handle.exec(`
+    UPDATE pm_tasks SET provenance = 'HISTORICAL_NEXUS'
+      WHERE created_by = 'nexus-import' AND provenance <> 'HISTORICAL_NEXUS';
+    UPDATE pm_tasks SET stage = CASE status
+        WHEN 'TODO' THEN 'BACKLOG'
+        WHEN 'NEXT' THEN 'READY'
+        WHEN 'IN_PROGRESS' THEN 'IN_PROGRESS'
+        WHEN 'BLOCKED' THEN 'BLOCKED'
+        WHEN 'DONE' THEN 'CLOSED'
+        ELSE 'BACKLOG' END
+      WHERE stage IS NULL;
+  `);
+  handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_stage ON pm_tasks(stage)');
+  handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_provenance ON pm_tasks(provenance)');
+}
+
+function migrateKanbanSchema(handle) {
+  const row = handle.prepare("SELECT value FROM pm_meta WHERE key = 'schema_version'").get();
+  const version = Number(row?.value || 0);
+  if (version >= 3) return;
+  handle.exec('PRAGMA foreign_keys = OFF');
+  handle.exec('DROP TRIGGER IF EXISTS pm_tasks_no_delete');
+  handle.exec('ALTER TABLE pm_tasks RENAME TO pm_tasks_v2');
+  handle.exec(`
+    CREATE TABLE pm_tasks (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES pm_projects(id),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      priority TEXT NOT NULL DEFAULT 'P2' CHECK (priority IN ('P0','P1','P2','P3')),
+      status TEXT NOT NULL DEFAULT 'TODO' CHECK (status IN ('TODO','NEXT','IN_PROGRESS','BLOCKED','DONE')),
+      prior_status TEXT,
+      owner TEXT NOT NULL DEFAULT 'UNASSIGNED',
+      verifier TEXT NOT NULL DEFAULT 'UNASSIGNED',
+      room_authorization_ref TEXT,
+      evidence_refs TEXT NOT NULL DEFAULT '[]',
+      depends_on TEXT NOT NULL DEFAULT '[]',
+      notes TEXT NOT NULL DEFAULT '',
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      closed_at TEXT
+    );
+  `);
+  const old = handle.prepare('SELECT * FROM pm_tasks_v2').all();
+  const ins = handle.prepare(
+    `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, prior_status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, closed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const t of old) {
+    const status = mapKanbanStatus(t.status);
+    ins.run(
+      t.id, t.project_id, t.title, t.description, t.priority, status,
+      t.prior_status ? mapKanbanStatus(t.prior_status) : null,
+      t.owner, t.verifier, t.room_authorization_ref, t.evidence_refs, t.depends_on, t.notes,
+      t.created_by, t.created_at, t.updated_at, status === 'DONE' ? (t.closed_at ?? t.updated_at) : null,
+    );
+  }
+  handle.exec('DROP TABLE pm_tasks_v2');
+  handle.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_tasks_project ON pm_tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_pm_tasks_status ON pm_tasks(status);
+    CREATE TRIGGER IF NOT EXISTS pm_tasks_no_delete BEFORE DELETE ON pm_tasks
+      BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; move them to DONE'); END;
+  `);
+  rebuildStatusLogParent(handle);
+  handle.exec('PRAGMA foreign_keys = ON');
+}
+
+function rebuildStatusLogParent(handle) {
+  const fk = handle.prepare('PRAGMA foreign_key_check').all();
+  if (!fk.some((row) => row.parent === 'pm_tasks_v2')) return;
+  handle.exec('PRAGMA foreign_keys = OFF');
+  handle.exec('DROP TRIGGER IF EXISTS pm_log_no_delete');
+  handle.exec('DROP TRIGGER IF EXISTS pm_log_immutable');
+  handle.exec('ALTER TABLE pm_status_log RENAME TO pm_status_log_v2');
+  handle.exec(`
+    CREATE TABLE pm_status_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id TEXT NOT NULL REFERENCES pm_tasks(id),
+      event_type TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT,
+      actor TEXT NOT NULL,
+      detail TEXT NOT NULL DEFAULT '{}',
+      timestamp TEXT NOT NULL,
+      room_sync TEXT NOT NULL DEFAULT 'NOT_REQUIRED' CHECK (room_sync IN ('NOT_REQUIRED','DISABLED','PENDING','POSTED')),
+      room_ref TEXT,
+      room_error TEXT,
+      room_attempts INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+  handle.exec(`INSERT INTO pm_status_log (id, task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync, room_ref, room_error, room_attempts)
+    SELECT id, task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync, room_ref, room_error, room_attempts FROM pm_status_log_v2`);
+  handle.exec('DROP TABLE pm_status_log_v2');
+  handle.exec(`
+    CREATE INDEX IF NOT EXISTS idx_pm_log_task ON pm_status_log(task_id);
+    CREATE INDEX IF NOT EXISTS idx_pm_log_sync ON pm_status_log(room_sync);
+    CREATE TRIGGER IF NOT EXISTS pm_log_no_delete BEFORE DELETE ON pm_status_log
+      BEGIN SELECT RAISE(ABORT, 'pm_status_log is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS pm_log_immutable BEFORE UPDATE OF
+      task_id, event_type, from_status, to_status, actor, detail, timestamp ON pm_status_log
+      BEGIN SELECT RAISE(ABORT, 'pm_status_log history columns are immutable'); END;
+  `);
+  handle.exec('PRAGMA foreign_keys = ON');
 }
 
 function seedProjects(handle) {
@@ -339,20 +560,85 @@ function seedProjects(handle) {
   return drift;
 }
 
+function seedCurrentCommandWork(handle) {
+  const open = handle.prepare("SELECT COUNT(*) AS n FROM pm_tasks WHERE project_id = 'command' AND status != 'DONE'").get();
+  if (Number(open.n) > 0) return;
+  const project = handle.prepare("SELECT * FROM pm_projects WHERE id = 'command'").get();
+  if (!project) return;
+  const seeds = [
+    { title: 'Operate Starq Technologies in Command', description: 'Establish the writable operating org (company, units, positions, appointments) and use it as the management record. Canonical seats stay on Company OS Structure/Seats.', owner: 'ali', verifier: 'cursor', notes: 'Current work. Not a historical Nexus import.' },
+    { title: 'Keep every project board usable as a Nexus-style kanban', description: 'Command is the working board surface. Move cards freely. Do not reintroduce review/accept/gate lifecycle.', owner: 'cursor', verifier: 'claude', notes: 'Nexus JSON is the import source only.' },
+    { title: 'Founder daily dashboard: next actions and blockers', description: 'Overview must show real open/blocked/unassigned Command work from PM, not empty native boards plus a frozen archive.', owner: 'cursor', verifier: 'ali', notes: 'Acceptance: Founder can see next actions from Overview.' },
+    { title: 'Reliable Command start and stop for management use', description: 'Founder opens Command and manages the company without editing source or chasing leftover JobGuardian jobs.', owner: 'cursor', verifier: 'ali', notes: 'Lifecycle recover remains a remaining defect if containment still blocks this session.' },
+  ];
+  const ins = handle.prepare(
+    `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at)
+     VALUES (?, 'command', ?, ?, 'P1', 'NEXT', ?, ?, NULL, '[]', '[]', ?, 'ali', ?, ?)`,
+  );
+  const log = handle.prepare(
+    `INSERT INTO pm_status_log (task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync)
+     VALUES (?, 'CREATED', NULL, 'NEXT', 'ali', ?, ?, 'DISABLED')`,
+  );
+  let seq = project.next_seq;
+  const ts = nowIso();
+  for (const seed of seeds) {
+    const id = `PM-CMD-${String(seq).padStart(3, '0')}`;
+    seq += 1;
+    ins.run(id, seed.title, seed.description, seed.owner, seed.verifier, seed.notes, ts, ts);
+    log.run(id, json({ title: seed.title, seeded: true, historical_import: false }), ts);
+  }
+  handle.prepare('UPDATE pm_projects SET next_seq = ? WHERE id = ?').run(seq, 'command');
+}
+
 function startDatabase() {
   let dbPath;
   try {
     dbPath = resolveDbPath();
     if (!dbPath) throw new Error('Workspace unresolved.');
     const handle = openDatabase(dbPath);
+    initSchema(handle);
+    const drift = seedProjects(handle);
+    seedOperatingOrg(handle, nowIso);
+    seedCurrentCommandWork(handle);
+    try {
+      handle.exec('BEGIN IMMEDIATE');
+      const nexus = importNexusBoards(handle, { nowIso, json });
+      const legacyPm = importLegacyPmSnapshot(handle, {
+        dbPath: ROOT ? abs(ROOT, CANONICAL.pmBoardLegacyDb) : null,
+        nowIso,
+        json,
+      });
+      // Fidelity runs AFTER the import, inside the same transaction. The
+      // importer rebuilds pm_source_records from the board files on every
+      // start, so anything written before it is overwritten.
+      const restored = restoreCollidedRecords(handle, {
+        nowIso,
+        boardsById: Object.fromEntries(NEXUS_BOARDS.filter((b) => b.file).map((b) => [b.file, b.id])),
+      });
+      const fill = backfillNexusAttributes(handle);
+      handle.exec('COMMIT');
+      for (const r of restored) {
+        console.error('[pm] restored collided Nexus record ' + r.original_id + ' from ' + r.source_key + ' as ' + r.stored_as);
+      }
+      if (restored.length) {
+        drift.push('Nexus id collisions restored: ' + restored.map((r) => r.original_id + ' -> ' + r.stored_as).join(', '));
+      }
+      if (fill.updated) console.error('[pm] Nexus fidelity backfill: ' + fill.updated + ' updated, ' + fill.skipped + ' already current');
+      drift.push('Nexus attribute fidelity: ' + fill.considered + ' records carry their full original payload');
+      if (nexus.errors.length) drift.push(...nexus.errors);
+      if (legacyPm.errors.length) drift.push(...legacyPm.errors);
+      drift.push(`legacy PM history preserved as archived source: ${legacyPm.preserved} tasks, ${legacyPm.history_rows ?? 0} status entries`);
+      drift.push(`Nexus import reconciliation: ${nexus.imported} new, ${nexus.preserved} linked, ${nexus.skipped} duplicate or invalid rows`);
+    } catch (error) {
+      try { handle.exec('ROLLBACK'); } catch { /* transaction did not begin */ }
+      drift.push(`nexus import failed: ${error.message}`);
+    }
     const check = integrity(handle);
     if (!check.ok) {
       handle.close();
-      dbState = { state: 'UNAVAILABLE', reason: `integrity_check failed: ${check.detail}`, path: dbPath, integrity: check.detail, seed_drift: [] };
+      dbState = { state: 'UNAVAILABLE', reason: `integrity_check failed: ${check.detail}`, path: dbPath, integrity: check.detail, seed_drift: drift };
       return;
     }
-    initSchema(handle);
-    const drift = seedProjects(handle);
     db = handle;
     dbState = { state: 'OK', reason: null, path: dbPath, integrity: 'ok', seed_drift: drift };
   } catch (e) {
@@ -387,6 +673,17 @@ function hydrate(row, pending = 0) {
     depends_on: JSON.parse(row.depends_on),
   };
   task.allowed_next = allowedNext(task);
+  // The multi-agent assignment the first import flattened to its first element.
+  task.workers = workersOf(row);
+  // Both axes travel together, and board_column is DERIVED on read. A derived
+  // value that is also stored is a value that can disagree with itself.
+  task.provenance = row.provenance ?? PROVENANCE.LIVE;
+  task.stage = row.stage ?? 'BACKLOG';
+  task.prior_stage = row.prior_stage ?? null;
+  task.board_column = stageToColumn(task.stage);
+  task.gated = task.provenance !== PROVENANCE.HISTORICAL;
+  task.allowed_stage_next = task.gated ? allowedStageNext(task) : [...GATED_STAGES];
+  task.assignment_locked = assignmentLocked(task);
   task.pending_room_sync = pending;
   return task;
 }
@@ -419,10 +716,11 @@ function str(body, key, { min = 0, max, required = false } = {}) {
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(t)) throw bad(`${key} contains control characters.`, [`${key} has control characters`]);
   return t;
 }
-function handleField(body, key, { required = false, allowUnassigned = true } = {}) {
+function handleField(body, key, { required = false, allowUnassigned = true, freeform = false } = {}) {
   const v = str(body, key, { min: required ? 2 : 0, max: 40, required });
   if (v === undefined) return undefined;
   if (allowUnassigned && v === 'UNASSIGNED') return v;
+  if (freeform) return v;
   if (!knownHandles().has(v)) throw bad(`${key} is not a known active identity.`, [`${key}: ${v} is not an active identity handle`]);
   return v;
 }
@@ -462,7 +760,7 @@ function dependsField(body, project, selfId) {
   if (!Array.isArray(v) || v.length > 20) throw bad('depends_on must be an array of at most 20 task ids.', ['depends_on invalid']);
   const ids = [...new Set(v.map((x) => (typeof x === 'string' ? x.trim() : '')))];
   for (const id of ids) {
-    if (!/^PM-[A-Z]{2,4}-\d{3,}$/.test(id)) throw bad('depends_on contains an invalid id.', [`invalid task id: ${id}`]);
+    if (!TASK_ID_RE.test(id)) throw bad('depends_on contains an invalid id.', [`invalid task id: ${id}`]);
     if (id === selfId) throw bad('A task cannot depend on itself.', ['self-dependency']);
     const row = getTaskRow(id);
     if (!row) throw new HttpError(422, 'DEPENDENCY_NOT_FOUND', `Dependency ${id} does not exist.`);
@@ -502,6 +800,32 @@ function roomBody(row, task, dbId) {
     `pm-event-id: pm-${dbId.slice(0, 8)}-${row.id}`,
     'Source: Starq Command PM board (human-operated). This record reports an event; it does not itself authorize work.',
   ].filter(Boolean).join('\n');
+}
+
+function postCommsMessage({ from, body, channel, replyTo, subject, actionRequired, taskId }) {
+  if (!SEND_SCRIPT) throw new HttpError(503, 'ROOM_UNAVAILABLE', 'Room send script is not resolved.');
+  if (!knownHandles().has(from)) {
+    throw new HttpError(422, 'UNKNOWN_SENDER', from + ' is not a known active identity.');
+  }
+  let args;
+  try {
+    args = buildSendArgs({ from, body, channel, replyTo, subject, actionRequired, taskId });
+  } catch (e) {
+    throw new HttpError(422, 'COMPOSE_INVALID', e.message);
+  }
+  const instance = from + '-command-comms';
+  const full = [SEND_SCRIPT, '--instance', instance, ...args];
+  return new Promise((resolve, reject) => {
+    execFile(process.execPath, full, { cwd: path.dirname(path.dirname(SEND_SCRIPT)), timeout: 45000, windowsHide: true, maxBuffer: 1 << 20 }, (err, stdout, stderr) => {
+      const out = String(stdout || '');
+      const m = /Broker Record #(\d+) posted/.exec(out) || /Record #(\d+)/.exec(out);
+      if (!err && m) return resolve({ sequence: Number(m[1]), raw: out.trim().slice(0, 300) });
+      // send.mjs refuses a Founder impersonation attempt with a clear message;
+      // surface it verbatim rather than as a generic failure.
+      const detail = String(stderr || out || (err && err.message) || 'send failed').trim().slice(0, 400);
+      reject(new HttpError(/REFUSED/i.test(detail) ? 403 : 502, 'SEND_FAILED', detail));
+    });
+  });
 }
 
 function postToRoom(body) {
@@ -548,18 +872,26 @@ async function flushRoomSync() {
 
 // ── Task operations ────────────────────────────────────────────────────────
 function createTask(body) {
-  only(body, ['project_id', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'actor', 'room_authorization_ref']);
-  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
+  only(body, ['project_id', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'actor', 'status', 'stage']);
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
   const projectId = str(body, 'project_id', { min: 2, max: 40, required: true });
-  const title = str(body, 'title', { min: 3, max: 200, required: true });
-  const description = str(body, 'description', { max: 4000 }) ?? '';
-  const notes = str(body, 'notes', { max: 4000 }) ?? '';
+  const title = str(body, 'title', { min: 3, max: 800, required: true });
+  const description = str(body, 'description', { max: 20000 }) ?? '';
+  const notes = str(body, 'notes', { max: 8000 }) ?? '';
   const priority = body.priority === undefined ? 'P2' : body.priority;
   if (!PRIORITIES.includes(priority)) throw bad('priority invalid.', ['priority must be P0-P3']);
-  const owner = handleField(body, 'owner') ?? 'UNASSIGNED';
-  const verifier = handleField(body, 'verifier') ?? 'UNASSIGNED';
-  if (owner !== 'UNASSIGNED' && owner === verifier) throw new HttpError(409, 'DEC_072', 'Owner and verifier must be different identities (DEC-072).');
-  const auth = body.room_authorization_ref === undefined ? null : parseRoomRef({ ...body.room_authorization_ref, kind: 'authorization' });
+  const owner = handleField(body, 'owner', { freeform: true }) ?? 'UNASSIGNED';
+  const verifier = handleField(body, 'verifier', { freeform: true }) ?? 'UNASSIGNED';
+  const startStatus = body.status === undefined ? 'TODO' : body.status;
+  if (!STATUSES.includes(startStatus)) throw bad('status invalid.', [`status must be one of ${STATUSES.join(', ')}`]);
+  // New work is LIVE and therefore gated from its first moment. A task cannot
+  // be created already accepted: the furthest a new card may start is READY.
+  const startStage = body.stage === undefined
+    ? (startStatus === 'NEXT' ? 'READY' : 'BACKLOG')
+    : body.stage;
+  if (!['BACKLOG', 'READY'].includes(startStage)) {
+    throw bad('stage invalid for a new task.', ['a new task starts at BACKLOG or READY; later stages must be earned']);
+  }
 
   const created = tx((d) => {
     const project = getProjectRow(projectId);
@@ -570,37 +902,34 @@ function createTask(body) {
     d.prepare('UPDATE pm_projects SET next_seq = next_seq + 1 WHERE id = ?').run(projectId);
     const ts = nowIso();
     d.prepare(
-      `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'BACKLOG', ?, ?, ?, '[]', ?, ?, ?, ?, ?)`,
-    ).run(id, projectId, title, description, priority, owner, verifier, auth ? json(auth) : null, json(dependsOn), notes, actor, ts, ts);
-    logEvent(d, { taskId: id, type: 'CREATED', to: 'BACKLOG', actor, detail: { title, priority, owner, verifier, room_ref: auth }, post: true });
+      `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, stage, provenance, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at, closed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'LIVE', ?, ?, NULL, '[]', ?, ?, ?, ?, ?, ?)`,
+    ).run(id, projectId, title, description, priority, startStatus, startStage, owner, verifier, json(dependsOn), notes, actor, ts, ts, startStatus === 'DONE' ? ts : null);
+    logEvent(d, { taskId: id, type: 'CREATED', to: startStatus, actor, detail: { title, priority, owner }, post: false });
     return id;
   });
-  enqueueRoomSync();
   return taskDetail(created);
 }
 
 function updateTask(id, body) {
-  only(body, ['expected_updated_at', 'actor', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'status', 'note', 'room_ref']);
-  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
+  only(body, ['expected_updated_at', 'actor', 'title', 'description', 'priority', 'owner', 'verifier', 'notes', 'depends_on', 'status', 'stage', 'note']);
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
   const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
   const note = str(body, 'note', { max: 1000 });
-  const title = str(body, 'title', { min: 3, max: 200 });
-  const description = str(body, 'description', { max: 4000 });
-  const notes = str(body, 'notes', { max: 4000 });
+  const title = str(body, 'title', { min: 3, max: 800 });
+  const description = str(body, 'description', { max: 20000 });
+  const notes = str(body, 'notes', { max: 8000 });
   if (body.priority !== undefined && !PRIORITIES.includes(body.priority)) throw bad('priority invalid.', ['priority must be P0-P3']);
   if (body.status !== undefined && !STATUSES.includes(body.status)) throw bad('status invalid.', [`status must be one of ${STATUSES.join(', ')}`]);
-  const owner = handleField(body, 'owner');
-  const verifier = handleField(body, 'verifier');
-  const roomRef = body.room_ref === undefined ? null : parseRoomRef(body.room_ref, { taskId: id });
+  if (body.stage !== undefined && !GATED_STAGES.includes(body.stage)) throw bad('stage invalid.', [`stage must be one of ${GATED_STAGES.join(', ')}`]);
+  const owner = handleField(body, 'owner', { freeform: true });
+  const verifier = handleField(body, 'verifier', { freeform: true });
 
   tx((d) => {
     const row = getTaskRow(id);
     if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
     if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Task changed since you loaded it; reload before editing. Nothing was saved.', { current_updated_at: row.updated_at });
-    if (row.status === 'CLOSED') throw new HttpError(409, 'TASK_CLOSED', 'Closed tasks are immutable.');
     const task = hydrate(row);
-    const project = getProjectRow(task.project_id);
     const dependsOn = dependsField(body, task.project_id, id);
     const next = { ...task };
     const changed = {};
@@ -611,81 +940,86 @@ function updateTask(id, body) {
     const assignment = {};
     if (owner !== undefined && owner !== task.owner) { next.owner = owner; assignment.owner = { from: task.owner, to: owner }; }
     if (verifier !== undefined && verifier !== task.verifier) { next.verifier = verifier; assignment.verifier = { from: task.verifier, to: verifier }; }
-    if (next.owner !== 'UNASSIGNED' && next.owner === next.verifier) throw new HttpError(409, 'DEC_072', 'Owner and verifier must be different identities (DEC-072).');
-    if (Object.keys(assignment).length && ['VERIFICATION', 'ACCEPTANCE'].includes(task.status)) {
-      throw new HttpError(409, 'ASSIGNMENT_LOCKED', 'Owner and verifier cannot change once the task is in VERIFICATION or ACCEPTANCE.');
+
+    // Owner and verifier freeze once the work is being judged, so a failing
+    // review cannot be reassigned to a friendlier verifier.
+    if (Object.keys(assignment).length && assignmentLocked(task)) {
+      throw new HttpError(409, 'ASSIGNMENT_LOCKED',
+        `Owner and verifier cannot change once the task is in ${task.stage}.`);
+    }
+    if (next.owner !== 'UNASSIGNED' && next.owner === next.verifier) {
+      throw new HttpError(409, 'DEC_072', 'Owner and verifier must be different identities (DEC-072).');
     }
 
     const events = [];
-    if (roomRef) {
-      if (roomRef.kind === 'authorization') next.room_authorization_ref = roomRef;
-      else next.evidence_refs = [...task.evidence_refs.filter((r) => r.sequence !== roomRef.sequence), roomRef];
+
+    /*
+      ONE intent, two ways of expressing it.
+
+      `stage` is an explicit governance move. `status` is a five-column drag,
+      which is read as an INTENT and translated into the stage it implies -
+      dragging to Done asks for the NEXT gate, never for closure. Either way the
+      same adjudication runs, so there is no path to acceptance that skips it.
+    */
+    let targetStage;
+    if (body.stage !== undefined) {
+      targetStage = body.stage;
+    } else if (body.status !== undefined && body.status !== task.board_column) {
+      targetStage = columnDragToStage(task, body.status);
+      if (targetStage === null) {
+        throw new HttpError(409, 'TRANSITION_NOT_ALLOWED',
+          `${task.stage} is terminal; the Done column cannot advance further.`);
+      }
     }
-    const to = body.status;
-    if (to !== undefined && to !== task.status) {
-      const allowed = allowedNext(task);
-      if (!allowed.includes(to)) throw new HttpError(409, 'TRANSITION_NOT_ALLOWED', `${task.status} -> ${to} is not allowed. Allowed: ${allowed.join(', ') || 'none'}.`);
-      const hold = effectiveHold(project);
-      if (holdBlocks(hold) && HOLD_BLOCKED_TARGETS.has(to)) {
-        throw new HttpError(409, 'PROJECT_ON_HOLD', `${project.name} is ${hold.state}${hold.authority ? ` (${hold.authority})` : ''}; tasks cannot progress past READY until the Founder lifts the hold.`);
-      }
-      const rejecting = to === 'READY' && REJECTABLE.has(task.status);
-      if ((rejecting || to === 'BLOCKED' || to === 'FOUNDER_GATE') && (!note || note.length < 5)) {
-        throw bad('A note of at least 5 characters is required for this transition.', [`note required for ${rejecting ? 'rejection' : to}`]);
-      }
-      if (to === 'IN_PROGRESS') {
-        if (!next.room_authorization_ref) throw new HttpError(409, 'AUTHORIZATION_REQUIRED', 'A verified Room authorization reference is required before work starts.');
-        const open = next.depends_on.filter((dep) => getTaskRow(dep)?.status !== 'CLOSED');
-        if (open.length) throw new HttpError(409, 'DEPENDENCY_OPEN', `Dependencies not closed: ${open.join(', ')}.`);
-      }
-      if (to === 'REVIEW' && next.owner === 'UNASSIGNED') throw new HttpError(409, 'OWNER_REQUIRED', 'Assign an owner before review.');
-      if (to === 'VERIFICATION' && (next.verifier === 'UNASSIGNED' || next.verifier === next.owner)) {
-        throw new HttpError(409, 'VERIFIER_REQUIRED', 'Assign an independent verifier (different from the owner) before verification.');
-      }
-      // R2: the proof is the Room-authenticated sender of a linked record, never the
-      // self-declared actor. The record must name this task and post-date the stage entry.
-      const enteredAt = (stage) => d.prepare('SELECT timestamp FROM pm_status_log WHERE task_id = ? AND to_status = ? ORDER BY id DESC LIMIT 1').get(id, stage)?.timestamp ?? null;
-      const attests = (ref, stage, senderOk) => {
-        const since = enteredAt(stage);
-        return ref.kind === 'evidence' && senderOk(ref) && ref.mentions_task === true && since !== null
-          && Date.parse(ref.received_at) > Date.parse(since);
-      };
-      if (to === 'ACCEPTANCE') {
-        if (next.verifier === 'UNASSIGNED' || next.verifier === next.owner) {
-          throw new HttpError(409, 'VERIFIER_REQUIRED', 'An independent verifier (different from the owner) is required.');
-        }
-        if (!next.evidence_refs.some((r) => attests(r, 'VERIFICATION', (x) => x.senderHandle === next.verifier))) {
-          throw new HttpError(409, 'VERIFIER_ATTESTATION_REQUIRED', `Acceptance needs a linked Room record sent by the assigned verifier (${next.verifier}), naming ${id}, posted after the task entered VERIFICATION. The actor field is not accepted as proof.`);
-        }
-      }
-      if (to === 'CLOSED') {
-        if (!next.room_authorization_ref) throw new HttpError(409, 'AUTHORIZATION_REQUIRED', 'Closure needs a Room authorization reference.');
-        if (!next.evidence_refs.some((r) => attests(r, 'ACCEPTANCE', (x) => x.root_authority === true))) {
-          throw new HttpError(409, 'FOUNDER_CLOSURE_REQUIRED', `Closure needs a linked authenticated ROOT_GENESIS (Founder) Room record naming ${id}, posted after the task entered ACCEPTANCE.`);
-        }
-      }
-      next.prior_status = (to === 'BLOCKED' || to === 'FOUNDER_GATE')
-        ? (task.status === 'BLOCKED' || task.status === 'FOUNDER_GATE' ? task.prior_status : task.status)
+
+    if (targetStage !== undefined && targetStage !== task.stage) {
+      const verdict = evaluateStageTransition({
+        task: { ...task, owner: next.owner, verifier: next.verifier, depends_on: next.depends_on, evidence_refs: next.evidence_refs, room_authorization_ref: next.room_authorization_ref },
+        to: targetStage,
+        note,
+        project: getProjectRow(task.project_id) ?? { name: task.project_id },
+        hold: effectiveHold(getProjectRow(task.project_id) ?? { id: task.project_id }),
+        holdBlocks: holdBlocks(effectiveHold(getProjectRow(task.project_id) ?? { id: task.project_id })),
+        stageOf: (dep) => getTaskRow(dep)?.stage ?? null,
+        enteredAt: (stage) => d.prepare(
+          'SELECT timestamp FROM pm_status_log WHERE task_id = ? AND to_status = ? ORDER BY id DESC LIMIT 1',
+        ).get(id, stage)?.timestamp ?? null,
+      });
+      if (!verdict.ok) throw new HttpError(verdict.status, verdict.code, verdict.message, verdict.extra);
+
+      next.prior_stage = nextPriorStage(task, targetStage);
+      next.stage = targetStage;
+      next.status = stageToColumn(targetStage);
+      next.prior_status = next.status === 'BLOCKED'
+        ? (task.status === 'BLOCKED' ? task.prior_status : task.status)
         : null;
-      next.status = to;
-      next.closed_at = to === 'CLOSED' ? nowIso() : null;
-      events.push({ type: rejecting ? 'REJECTED' : 'STATUS_CHANGED', from: task.status, to, detail: { note: note ?? null, room_ref: roomRef }, post: true });
+      next.closed_at = targetStage === 'CLOSED' ? nowIso() : null;
+      events.push({
+        type: verdict.rejecting ? 'REJECTED' : 'STAGE_CHANGED',
+        from: task.stage,
+        to: targetStage,
+        detail: { note: note ?? null, board_column: next.status, ungated: verdict.ungated === true },
+        post: false,
+      });
+    } else if (body.status !== undefined && body.status !== task.status) {
+      // A column correction that implies no stage change (history reshuffling
+      // inside one column). Recorded, never gated.
+      next.status = body.status;
+      events.push({ type: 'STATUS_CHANGED', from: task.status, to: body.status, detail: { note: note ?? null }, post: false });
     }
-    if (Object.keys(assignment).length) events.push({ type: 'ASSIGNED', detail: { ...assignment, note: note ?? null }, post: true });
+    if (Object.keys(assignment).length) events.push({ type: 'ASSIGNED', detail: { ...assignment, note: note ?? null }, post: false });
     if (Object.keys(changed).length) events.push({ type: 'FIELDS_UPDATED', detail: changed, post: false });
-    if (roomRef && !events.some((e) => e.detail?.room_ref)) events.push({ type: 'ROOM_LINKED', detail: { room_ref: roomRef, note: note ?? null }, post: true });
     if (!events.length) throw bad('Nothing to change.', ['no changes supplied']);
 
     const ts = nowIso();
     d.prepare(
-      `UPDATE pm_tasks SET title = ?, description = ?, priority = ?, status = ?, prior_status = ?, owner = ?, verifier = ?,
+      `UPDATE pm_tasks SET title = ?, description = ?, priority = ?, status = ?, prior_status = ?, stage = ?, prior_stage = ?, owner = ?, verifier = ?,
          room_authorization_ref = ?, evidence_refs = ?, depends_on = ?, notes = ?, updated_at = ?, closed_at = ? WHERE id = ?`,
-    ).run(next.title, next.description, next.priority, next.status, next.prior_status ?? null, next.owner, next.verifier,
+    ).run(next.title, next.description, next.priority, next.status, next.prior_status ?? null, next.stage, next.prior_stage ?? null, next.owner, next.verifier,
       next.room_authorization_ref ? json(next.room_authorization_ref) : null, json(next.evidence_refs), json(next.depends_on),
       next.notes, ts, next.closed_at ?? null, id);
     for (const e of events) logEvent(d, { taskId: id, type: e.type, from: e.from ?? null, to: e.to ?? null, actor, detail: e.detail, post: e.post });
   });
-  enqueueRoomSync();
   return taskDetail(id);
 }
 
@@ -698,6 +1032,103 @@ function linkRoom(id, body) {
   });
 }
 
+function addLocalEvidence(id, body) {
+  only(body, ['actor', 'expected_updated_at', 'note']);
+  if (ROOM_POST) {
+    throw new HttpError(409, 'ROOM_POST_ON', 'Room posting is ON; link a verified Room record instead of local evidence.');
+  }
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
+  const note = str(body, 'note', { min: 5, max: 1000, required: true });
+  tx((d) => {
+    const row = getTaskRow(id);
+    if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
+    if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Task changed since you loaded it; reload before editing. Nothing was saved.', { current_updated_at: row.updated_at });
+    if (row.status === 'CLOSED') throw new HttpError(409, 'TASK_CLOSED', 'Closed tasks are immutable.');
+    const task = hydrate(row);
+    const ev = localLedgerRef({ actor, purpose: note, kind: 'evidence', taskId: id });
+    const nextRefs = [...task.evidence_refs, ev];
+    const ts = nowIso();
+    d.prepare('UPDATE pm_tasks SET evidence_refs = ?, updated_at = ? WHERE id = ?').run(json(nextRefs), ts, id);
+    logEvent(d, { taskId: id, type: 'LOCAL_EVIDENCE', actor, detail: { room_ref: ev, note }, post: false });
+  });
+  return taskDetail(id);
+}
+
+function mapOrgError(e) {
+  const code = e.code || 'VALIDATION';
+  const status = code.endsWith('NOT_FOUND') ? 404 : code.endsWith('EXISTS') || code === 'POSITION_OCCUPIED' ? 409 : 400;
+  throw new HttpError(status, code, e.message);
+}
+
+function orgWrite(fn) {
+  try {
+    return tx((d) => fn(d));
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    mapOrgError(e);
+  }
+}
+
+function createProject(body) {
+  only(body, ['actor', 'id', 'name', 'prefix', 'description']);
+  handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const id = str(body, 'id', { min: 2, max: 40, required: true }).toLowerCase();
+  if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw bad('Project id invalid.', ['id must be lowercase letters, digits and hyphen']);
+  const name = str(body, 'name', { min: 2, max: 80, required: true });
+  const prefix = str(body, 'prefix', { min: 2, max: 4, required: true }).toUpperCase();
+  if (!/^[A-Z]{2,4}$/.test(prefix)) throw bad('prefix invalid.', ['prefix must be 2-4 letters']);
+  const description = str(body, 'description', { max: 400 }) ?? '';
+  return tx((d) => {
+    if (getProjectRow(id)) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
+    if (d.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix)) {
+      throw new HttpError(409, 'PREFIX_EXISTS', `Prefix already in use: ${prefix}.`);
+    }
+    d.prepare(
+      'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
+    ).run(id, name, prefix, description, nowIso());
+    return { ...getProjectRow(id), hold: effectiveHold(getProjectRow(id)) };
+  });
+}
+
+function attention() {
+  const tasks = listTasks(null).filter((t) => t.status !== 'DONE');
+  const href = (t) => {
+    const routes = { command: '#studio/command', erp: '#studio/erp/tasks', hoadha: '#studio/hoadha/board' };
+    return `${routes[t.project_id] ?? `#studio/${t.project_id}`}?task=${encodeURIComponent(t.id)}`;
+  };
+  const reason = (t) => {
+    if (t.status === 'BLOCKED') return 'blocked';
+    if (t.owner === 'UNASSIGNED') return 'unassigned';
+    if (t.status === 'IN_PROGRESS') return 'in_progress';
+    if (t.status === 'NEXT') return 'next';
+    return 'open';
+  };
+  const ranked = [...tasks].sort((a, b) => {
+    const rank = { BLOCKED: 0, IN_PROGRESS: 1, NEXT: 2, TODO: 3 };
+    return (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
+  });
+  return {
+    generated_at: nowIso(),
+    room_post: ROOM_POST ? 'ON' : 'OFF',
+    next_actions: ranked.slice(0, 12).map((t) => ({
+      task_id: t.id,
+      project_id: t.project_id,
+      title: t.title,
+      status: t.status,
+      owner: t.owner,
+      verifier: t.verifier,
+      priority: t.priority,
+      reason: reason(t),
+      href: href(t),
+    })),
+    blocked: tasks.filter((t) => t.status === 'BLOCKED').length,
+    founder_gate: tasks.filter((t) => t.status === 'FOUNDER_GATE').length,
+    unassigned: tasks.filter((t) => t.owner === 'UNASSIGNED').length,
+    in_progress: tasks.filter((t) => t.status === 'IN_PROGRESS').length,
+  };
+}
+
 function taskDetail(id) {
   const row = getTaskRow(id);
   if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
@@ -707,7 +1138,44 @@ function taskDetail(id) {
   }));
   const pending = history.filter((h) => h.room_sync === 'PENDING').length;
   const project = getProjectRow(row.project_id);
-  return { task: hydrate(row, pending), history, hold: effectiveHold(project) };
+  const source = d.prepare(
+    `SELECT r.source_system, r.source_file, r.source_row_index, r.resolution, r.raw_status, r.payload_sha256,
+            r.raw_payload, s.content_sha256 AS source_file_sha256
+       FROM pm_source_records r JOIN pm_import_sources s ON s.source_file = r.source_file
+      WHERE r.task_id = ? AND r.resolution = 'IMPORTED' ORDER BY r.source_file, r.source_row_index LIMIT 1`,
+  ).get(id);
+  const source_record = source ? {
+    source_system: source.source_system,
+    source_file: source.source_file,
+    source_row_index: source.source_row_index,
+    resolution: source.resolution,
+    raw_status: source.raw_status,
+    payload_sha256: source.payload_sha256,
+    source_file_sha256: source.source_file_sha256,
+    raw_payload: JSON.parse(source.raw_payload),
+  } : null;
+  return { task: hydrate(row, pending), history, hold: effectiveHold(project), source_record };
+}
+
+function nexusSources(file = null) {
+  const d = requireDb();
+  const sources = d.prepare(
+    `SELECT s.source_file, s.source_system, s.content_sha256, s.row_count, s.imported_at,
+            COUNT(r.source_key) AS preserved_rows,
+            COALESCE(SUM(CASE WHEN r.resolution = 'DUPLICATE_TASK_ID' THEN 1 ELSE 0 END), 0) AS duplicate_rows,
+            COALESCE(SUM(CASE WHEN r.resolution = 'INVALID_ID' THEN 1 ELSE 0 END), 0) AS invalid_rows,
+            COALESCE(SUM(CASE WHEN r.resolution = 'ARCHIVED_ID_COLLISION' THEN 1 ELSE 0 END), 0) AS archived_rows
+       FROM pm_import_sources s LEFT JOIN pm_source_records r ON r.source_file = s.source_file
+      GROUP BY s.source_file ORDER BY s.source_file`,
+  ).all();
+  if (!file) return { sources };
+  const known = sources.find((s) => s.source_file === file);
+  if (!known) throw new HttpError(404, 'SOURCE_NOT_FOUND', `No imported Nexus source file: ${file}.`);
+  const records = d.prepare(
+    `SELECT source_row_index, task_id, resolution, raw_status, payload_sha256, raw_payload
+       FROM pm_source_records WHERE source_file = ? ORDER BY source_row_index`,
+  ).all(file).map((r) => ({ ...r, raw_payload: JSON.parse(r.raw_payload) }));
+  return { sources, records };
 }
 
 function listProjects() {
@@ -737,10 +1205,10 @@ function portfolio() {
       return {
         id: p.id, name: p.name, prefix: p.prefix, hold: p.hold, source_gap: p.source_gap,
         total: mine.length, counts,
-        open: mine.filter((t) => t.status !== 'CLOSED').length,
-        founder_gate: counts.FOUNDER_GATE, blocked: counts.BLOCKED,
+        open: mine.filter((t) => t.status !== 'DONE').length,
+        founder_gate: 0, blocked: counts.BLOCKED,
         pending_room_sync: mine.reduce((n, t) => n + t.pending_room_sync, 0),
-        unassigned: mine.filter((t) => t.status !== 'CLOSED' && t.owner === 'UNASSIGNED').length,
+        unassigned: mine.filter((t) => t.status !== 'DONE' && t.owner === 'UNASSIGNED').length,
       };
     }),
   };
@@ -832,28 +1300,120 @@ async function handle(req, res) {
     }
 
     if (req.method === 'GET' && p === '/api/pm/health') return send(res, 200, health(), origin);
+    if (req.method === 'GET' && p === '/api/pm/nexus/sources') {
+      return send(res, 200, nexusSources(url.searchParams.get('file') || null), origin);
+    }
     if (req.method === 'GET' && p === '/api/pm/meta') {
-      return send(res, 200, { statuses: STATUSES, priorities: PRIORITIES, forward: FORWARD, handles: [...knownHandles()].sort() }, origin);
+      return send(res, 200, {
+        statuses: STATUSES,
+        stages: GATED_STAGES,
+        lifecycle: {
+          authority: 'Founder D1 2026-10-28',
+          governance_axis: 'stage',
+          view_axis: 'board_column (derived from stage)',
+          gated_provenance: 'LIVE',
+          ungated_provenance: PROVENANCE.HISTORICAL,
+        },
+        priorities: PRIORITIES,
+        forward: FORWARD,
+        handles: [...knownHandles()].sort(),
+      }, origin);
     }
     if (req.method === 'GET' && p === '/api/pm/projects') return send(res, 200, { projects: listProjects() }, origin);
+    if (req.method === 'POST' && p === '/api/pm/projects') return send(res, 201, createProject(await readBody(req)), origin);
     if (req.method === 'GET' && p === '/api/pm/portfolio') return send(res, 200, portfolio(), origin);
+    if (req.method === 'GET' && p === '/api/pm/org') return send(res, 200, readOrg(requireDb(), { generatedAt: nowIso(), roomPost: ROOM_POST ? 'ON' : 'OFF' }), origin);
+    if (req.method === 'GET' && p === '/api/pm/attention') return send(res, 200, attention(), origin);
+    if (req.method === 'POST' && p === '/api/pm/org/companies') {
+      const body = await readBody(req);
+      only(body, ['actor', 'name', 'legal_name', 'notes']);
+      handleField(body, 'actor', { required: true, allowUnassigned: false });
+      return send(res, 201, orgWrite((d) => orgCreateCompany(d, {
+        name: str(body, 'name', { min: 2, max: 80, required: true }),
+        legal_name: str(body, 'legal_name', { max: 120 }),
+        notes: str(body, 'notes', { max: 400 }),
+        nowIso,
+      })), origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/org/units') {
+      const body = await readBody(req);
+      only(body, ['actor', 'company_id', 'parent_id', 'kind', 'name', 'description']);
+      handleField(body, 'actor', { required: true, allowUnassigned: false });
+      return send(res, 201, orgWrite((d) => orgCreateUnit(d, {
+        company_id: str(body, 'company_id', { min: 2, max: 64, required: true }),
+        parent_id: str(body, 'parent_id', { max: 64 }),
+        kind: str(body, 'kind', { min: 4, max: 20, required: true }),
+        name: str(body, 'name', { min: 2, max: 80, required: true }),
+        description: str(body, 'description', { max: 400 }),
+        nowIso,
+      })), origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/org/positions') {
+      const body = await readBody(req);
+      only(body, ['actor', 'unit_id', 'title', 'job_description', 'reports_to_position_id']);
+      handleField(body, 'actor', { required: true, allowUnassigned: false });
+      return send(res, 201, orgWrite((d) => orgCreatePosition(d, {
+        unit_id: str(body, 'unit_id', { min: 2, max: 64, required: true }),
+        title: str(body, 'title', { min: 2, max: 80, required: true }),
+        job_description: str(body, 'job_description', { max: 400 }),
+        reports_to_position_id: str(body, 'reports_to_position_id', { max: 64 }),
+        nowIso,
+      })), origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/org/people') {
+      const body = await readBody(req);
+      only(body, ['actor', 'handle', 'display_name', 'kind']);
+      handleField(body, 'actor', { required: true, allowUnassigned: false });
+      return send(res, 201, orgWrite((d) => orgCreatePerson(d, {
+        handle: str(body, 'handle', { min: 2, max: 40, required: true }),
+        display_name: str(body, 'display_name', { min: 2, max: 80, required: true }),
+        kind: str(body, 'kind', { min: 5, max: 10, required: true }),
+        nowIso,
+      })), origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/org/appointments') {
+      const body = await readBody(req);
+      only(body, ['actor', 'position_id', 'person_id']);
+      handleField(body, 'actor', { required: true, allowUnassigned: false });
+      return send(res, 201, orgWrite((d) => orgCreateAppointment(d, {
+        position_id: str(body, 'position_id', { min: 2, max: 64, required: true }),
+        person_id: str(body, 'person_id', { min: 2, max: 64, required: true }),
+        nowIso,
+      })), origin);
+    }
     if (req.method === 'GET' && p === '/api/pm/export') return send(res, 200, exportAll(), origin);
     if (req.method === 'GET' && p === '/api/pm/tasks') {
       const pid = url.searchParams.get('project_id');
       if (pid && !getProjectRow(pid)) throw new HttpError(404, 'PROJECT_NOT_FOUND', `Unknown project: ${pid}.`);
       return send(res, 200, { project_id: pid, tasks: listTasks(pid || null) }, origin);
     }
-    let m = /^\/api\/pm\/tasks\/(PM-[A-Z]{2,4}-\d{3,})$/.exec(p);
-    if (m && req.method === 'GET') return send(res, 200, taskDetail(m[1]), origin);
-    if (m && req.method === 'PATCH') return send(res, 200, updateTask(m[1], await readBody(req)), origin);
-    m = /^\/api\/pm\/tasks\/(PM-[A-Z]{2,4}-\d{3,})\/room-link$/.exec(p);
-    if (m && req.method === 'POST') return send(res, 200, linkRoom(m[1], await readBody(req)), origin);
+    let m = /^\/api\/pm\/tasks\/([A-Za-z0-9._:-]{2,40})$/.exec(p);
+    if (m && req.method === 'GET') return send(res, 200, taskDetail(decodeURIComponent(m[1])), origin);
+    if (m && req.method === 'PATCH') return send(res, 200, updateTask(decodeURIComponent(m[1]), await readBody(req)), origin);
+    m = /^\/api\/pm\/tasks\/([A-Za-z0-9._:-]{2,40})\/room-link$/.exec(p);
+    if (m && req.method === 'POST') return send(res, 200, linkRoom(decodeURIComponent(m[1]), await readBody(req)), origin);
+    m = /^\/api\/pm\/tasks\/([A-Za-z0-9._:-]{2,40})\/evidence$/.exec(p);
+    if (m && req.method === 'POST') return send(res, 200, addLocalEvidence(decodeURIComponent(m[1]), await readBody(req)), origin);
     if (req.method === 'POST' && p === '/api/pm/tasks') return send(res, 201, createTask(await readBody(req)), origin);
     if (req.method === 'POST' && p === '/api/pm/room-sync/retry') {
       await readBody(req);
       requireDb();
       enqueueRoomSync();
       return send(res, 202, { queued: true, pending_room_sync: health().pending_room_sync }, origin);
+    }
+    if (req.method === 'POST' && p === '/api/pm/comms/send') {
+      const body = await readBody(req);
+      only(body, ['from', 'body', 'channel', 'reply_to', 'subject', 'action_required', 'task_id']);
+      const result = await postCommsMessage({
+        from: str(body, 'from', { min: 2, max: 40, required: true }),
+        body: str(body, 'body', { min: 1, max: 7800, required: true }),
+        channel: str(body, 'channel', { max: 80 }),
+        replyTo: str(body, 'reply_to', { max: 80 }),
+        subject: str(body, 'subject', { max: 120 }),
+        actionRequired: str(body, 'action_required', { max: 300 }),
+        taskId: str(body, 'task_id', { max: 40 }),
+      });
+      return send(res, 201, { posted: true, ...result }, origin);
     }
     throw new HttpError(404, 'NOT_FOUND', 'No such route.');
   } catch (e) {

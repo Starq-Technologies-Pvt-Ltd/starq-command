@@ -9,7 +9,19 @@
 import * as React from 'react';
 import type { CommandSurface } from '@/lib/contracts';
 import { Chip, GoLink, Panel, SourceGap } from '@/components/console';
-import { pmPortfolio, type PmPortfolio, type PmPortfolioProject } from '@/lib/pm-client';
+import {
+  pmAttention,
+  pmPortfolio,
+  pmQuery,
+  pmTaskHref,
+  type PmAttention,
+  type PmPortfolio,
+  type PmPortfolioProject,
+} from '@/lib/pm-client';
+
+function forwardedCount(value: unknown): string {
+  return typeof value === 'number' ? String(value) : 'UNKNOWN';
+}
 
 type NeedCard = {
   id: string;
@@ -23,7 +35,7 @@ type NeedCard = {
 
 function pmBoardLine(project: PmPortfolioProject | undefined, id: string): string {
   if (!project) return `${id}: no PM project row`;
-  return `${project.id} open ${project.open}/${project.total} · blocked ${project.blocked} · founder gate ${project.founder_gate} (PM records, not acceptance)`;
+  return `${project.id} open ${project.open}/${project.total} · blocked ${project.blocked}`;
 }
 
 function buildCards(surface: CommandSurface | null, pm: PmPortfolio | null, pmProblem: string | null, pmTried: boolean): NeedCard[] {
@@ -85,7 +97,7 @@ function buildCards(surface: CommandSurface | null, pm: PmPortfolio | null, pmPr
         ? [pmBoardLine(command, 'command'), `${pmBoardLine(erpPm, 'erp')} · ${pmBoardLine(hoadhaPm, 'hoadha')}`]
         : [
             pmTried ? (pmProblem ?? 'PM boards UNAVAILABLE') : 'PM board request in flight',
-            'Nexus ERP/Hoadha task JSON is HISTORICAL_SNAPSHOT, not a native PM board',
+            'Nexus JSON is the import source; Command boards are the writable kanbans',
           ],
     },
     {
@@ -177,10 +189,77 @@ function buildCards(surface: CommandSurface | null, pm: PmPortfolio | null, pmPr
   ];
 }
 
+function NextActionsCard({
+  attention,
+  problem,
+  tried,
+}: {
+  attention: PmAttention | null;
+  problem: string | null;
+  tried: boolean;
+}) {
+  const actions = Array.isArray(attention?.next_actions) ? attention.next_actions : null;
+  const state = !tried ? 'LOADING' : attention ? 'PM RECORDS' : 'UNAVAILABLE';
+  return (
+    <Panel title="Next actions" count={state} className="pm-next-actions">
+      <div className="body grid gap-2" data-pm-attention="">
+        <p className="text-2xs text-muted-foreground">
+          Forwarded from GET /api/pm/attention (:5176). Counts are payload fields, not scored
+          priority. Empty next_actions is a recorded empty list, not an invented all-clear.
+        </p>
+        {problem ? <SourceGap reason="PM attention unavailable." detail={problem} /> : null}
+        {attention ? (
+          <>
+            <div className="flex flex-wrap gap-2 text-2xs">
+              <span>Blocked {forwardedCount(attention.blocked)}</span>
+              <span>Founder gate {forwardedCount(attention.founder_gate)}</span>
+              <span>Unassigned {forwardedCount(attention.unassigned)}</span>
+              <span>In progress {forwardedCount(attention.in_progress)}</span>
+              {attention.room_post ? <Chip value={`ROOM POST ${attention.room_post}`} /> : null}
+            </div>
+            {actions ? (
+              actions.length ? (
+                <ul className="grid gap-2">
+                  {actions.map((action) => {
+                    const href = action.href || pmTaskHref(action.project_id, action.task_id);
+                    return (
+                      <li key={`${action.project_id}:${action.task_id}:${action.reason}`} className="rounded border border-border p-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <GoLink href={href}>{action.task_id} · {action.title}</GoLink>
+                          <Chip value={action.status} />
+                        </div>
+                        <p className="mt-1 text-2xs text-muted-foreground">
+                          {action.priority} · {action.project_id} · owner {action.owner} · verifier {action.verifier}
+                        </p>
+                        <p className="mt-1 text-2xs">{action.reason}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="text-2xs text-muted-foreground">next_actions is an empty list in this payload.</p>
+              )
+            ) : (
+              <p className="text-2xs text-muted-foreground">next_actions is UNKNOWN on this payload.</p>
+            )}
+            <p className="text-3xs text-muted-foreground">as-of {attention.generated_at ?? 'UNKNOWN'}</p>
+            <GoLink href={`#studio/projects${pmQuery()}`}>Open task board →</GoLink>
+          </>
+        ) : !tried ? (
+          <p className="text-2xs text-muted-foreground">Reading PM attention…</p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 export function SevenNeedOverview({ surface }: { surface: CommandSurface | null }) {
   const [pm, setPm] = React.useState<PmPortfolio | null>(null);
   const [pmProblem, setPmProblem] = React.useState<string | null>(null);
   const [pmTried, setPmTried] = React.useState(false);
+  const [attention, setAttention] = React.useState<PmAttention | null>(null);
+  const [attentionProblem, setAttentionProblem] = React.useState<string | null>(null);
+  const [attentionTried, setAttentionTried] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -195,6 +274,17 @@ export function SevenNeedOverview({ surface }: { surface: CommandSurface | null 
         setPmProblem(`${res.state}: ${res.message}`);
       }
     });
+    void pmAttention().then((res) => {
+      if (cancelled) return;
+      setAttentionTried(true);
+      if (res.ok && Array.isArray(res.data.next_actions)) {
+        setAttention(res.data);
+        setAttentionProblem(null);
+      } else {
+        setAttention(null);
+        setAttentionProblem(res.ok ? 'PM attention payload is missing next_actions.' : `${res.state}: ${res.message}`);
+      }
+    });
     return () => {
       cancelled = true;
     };
@@ -203,11 +293,13 @@ export function SevenNeedOverview({ surface }: { surface: CommandSurface | null 
   const cards = buildCards(surface, pm, pmProblem, pmTried);
 
   return (
-    <Panel
-      title="Seven operational needs"
-      count="scan, then open the owning surface"
-      className="seven-need-overview"
-    >
+    <>
+      <NextActionsCard attention={attention} problem={attentionProblem} tried={attentionTried} />
+      <Panel
+        title="Seven operational needs"
+        count="scan, then open the owning surface"
+        className="seven-need-overview"
+      >
       <div className="body">
         <p className="text-2xs text-muted-foreground">
           Daily-driver index for projects, boards, assignments, activity, delivery, evidence, and
@@ -237,8 +329,9 @@ export function SevenNeedOverview({ surface }: { surface: CommandSurface | null 
               <GoLink href={card.href}>Open owning surface →</GoLink>
             </li>
           ))}
-        </ul>
-      </div>
-    </Panel>
+          </ul>
+        </div>
+      </Panel>
+    </>
   );
 }

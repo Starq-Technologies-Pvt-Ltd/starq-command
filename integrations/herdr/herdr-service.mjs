@@ -26,12 +26,18 @@
 
 import http from "node:http";
 import path from "node:path";
+import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import { HerdrClient, HerdrClientError, validateAgentId } from "./herdr-client.mjs";
 import { TaskStore } from "../control-plane/task-store.ts";
+import { PmTaskExecutionStore } from "../control-plane/pm-task-execution-store.ts";
+import { Dispatcher } from "./dispatcher.ts";
+import { WorktreeManager } from "../workspace/worktree-manager.ts";
 import { VerifierGuard } from "../control-plane/verifier-guard.ts";
-import { QuotaTracker } from "../../src/capacity/quota-tracker.ts";
 import { StuckDetector } from "../../src/detector/stuck-detector.ts";
 import { RoomEventAdapter } from "../room/event-adapter.ts";
+import { projectWorkforce } from "../../server/workforce-runtime.mjs";
+import { readWorkforceCapabilityRegistry } from "../../server/workforce-capability-registry.mjs";
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "localhost"]);
 
@@ -64,11 +70,47 @@ export function createHerdrService({
   port = Number(process.env.HERDR_SERVICE_PORT || 5179),
   host = "127.0.0.1",
   client = new HerdrClient(),
-  taskStore = new TaskStore(path.resolve(process.cwd(), "data", "control-plane.db")),
-  quotaTracker = new QuotaTracker(),
+  taskStore = null,
+  pmExecutionStore = undefined,
   stuckDetector = new StuckDetector(),
-  roomAdapter = new RoomEventAdapter(),
+  roomAdapter = new RoomEventAdapter({ instanceId: process.env.COMMAND_ROOM_INSTANCE }),
 } = {}) {
+  let activePmExecutionStore = pmExecutionStore ?? null;
+  if (!taskStore && !activePmExecutionStore) {
+    const dbPath = path.resolve(process.env.COMMAND_PM_DB_PATH || "data/pm-operating.db");
+    if (fs.existsSync(dbPath)) {
+      try { activePmExecutionStore = new PmTaskExecutionStore(dbPath); }
+      catch (error) { console.warn(`[CommandDispatcher] PM execution bridge unavailable: ${error.message}`); }
+    }
+  }
+  const activeTaskStore = taskStore || (activePmExecutionStore
+    ? TaskStore.forPmExecutionStore(activePmExecutionStore)
+    : new TaskStore(path.resolve(process.cwd(), "data", "control-plane.db")));
+  const dispatcher = activePmExecutionStore ? new Dispatcher({
+    store: activePmExecutionStore,
+    getWorkforce: async () => {
+      const registry = readWorkforceCapabilityRegistry(path.resolve(process.env.COMMAND_WORKFORCE_CAPABILITIES || "data/workforce-capabilities.json"));
+      const state = await client.getState();
+      return projectWorkforce(state, {
+        capabilities: registry.workers,
+        activeWorkload: activePmExecutionStore.listActiveWorkload(),
+      });
+    },
+    worktreeManager: WorktreeManager,
+    repoResolver: (task) => {
+      let mappings;
+      try { mappings = JSON.parse(process.env.COMMAND_REPOSITORY_MAP || "{}"); }
+      catch { return null; }
+      const mapping = mappings[task.projectId];
+      if (!mapping || typeof mapping.path !== "string" || !path.isAbsolute(mapping.path) || !fs.existsSync(mapping.path)) return null;
+      try {
+        const baseSha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: mapping.path, encoding: "utf8", timeout: 5000 }).trim();
+        return { repoPath: mapping.path, baseSha, worktreesDir: mapping.worktreesDir };
+      } catch { return null; }
+    },
+    roomAdapter,
+    sender: process.env.COMMAND_DISPATCH_ROOM_FROM || "",
+  }) : null;
   const json = (res, status, body, extraHeaders = {}) => {
     const payload = JSON.stringify(body, null, 2);
     res.writeHead(status, {
@@ -220,28 +262,94 @@ export function createHerdrService({
         const state = url.searchParams.get("state") || undefined;
         const project = url.searchParams.get("project") || undefined;
         const builder = url.searchParams.get("builder") || undefined;
-        const tasks = taskStore.listTasks({ state, project, builder });
+        const tasks = activeTaskStore.listTasks({ state, project, builder });
         json(res, 200, { ok: true, count: tasks.length, tasks });
+        return;
+      }
+
+      if (method === VERB_GET && pathname === "/api/command/dispatch/preview") {
+        if (!dispatcher) {
+          json(res, 503, { ok: false, state: "UNAVAILABLE", reason: "PM execution bridge is not initialized." });
+          return;
+        }
+        json(res, 200, { ok: true, ...(await dispatcher.preview()) });
+        return;
+      }
+
+      if (method === VERB_POST && pathname === "/api/command/dispatch") {
+        if (!requireCsrf()) return;
+        if (!dispatcher) {
+          json(res, 503, { ok: false, state: "UNAVAILABLE", reason: "PM execution bridge is not initialized." });
+          return;
+        }
+        json(res, 200, await dispatcher.dispatchNext());
+        return;
+      }
+
+      const recoverMatch = /^\/api\/command\/tasks\/([^/]+)\/recover$/.exec(pathname);
+      if (method === VERB_POST && recoverMatch) {
+        if (!requireCsrf()) return;
+        if (!dispatcher) {
+          json(res, 503, { ok: false, state: "UNAVAILABLE", reason: "PM execution bridge is not initialized." });
+          return;
+        }
+        const body = await readBody(req);
+        if (typeof body.reason !== "string" || body.reason.trim().length < 5) {
+          json(res, 400, { error: "Recovery requires a reason of at least five characters.", code: "RECOVERY_REASON_REQUIRED" });
+          return;
+        }
+        json(res, 200, await dispatcher.recover(recoverMatch[1], body.reason.trim()));
+        return;
+      }
+
+      const verifyStartMatch = /^\/api\/command\/tasks\/([^/]+)\/verification-start$/.exec(pathname);
+      if (method === VERB_POST && verifyStartMatch) {
+        if (!requireCsrf()) return;
+        if (!dispatcher) {
+          json(res, 503, { ok: false, state: "UNAVAILABLE", reason: "PM execution bridge is not initialized." });
+          return;
+        }
+        json(res, 200, await dispatcher.startVerification(verifyStartMatch[1]));
+        return;
+      }
+
+      const closeMatch = /^\/api\/command\/tasks\/([^/]+)\/pm-close$/.exec(pathname);
+      if (method === VERB_POST && closeMatch) {
+        if (!requireCsrf()) return;
+        if (!activePmExecutionStore) {
+          json(res, 503, { ok: false, state: "UNAVAILABLE", reason: "PM execution bridge is not initialized." });
+          return;
+        }
+        const body = await readBody(req);
+        if (typeof body.actor !== "string" || !body.actor.trim()) {
+          json(res, 400, { error: "PM close requires the authenticated Founder actor handle.", code: "FOUNDER_ACTOR_REQUIRED" });
+          return;
+        }
+        json(res, 200, { ok: true, task: activePmExecutionStore.closePmTask(closeMatch[1], body.actor.trim()) });
         return;
       }
 
       const taskMatch = /^\/api\/command\/tasks\/([^/]+)$/.exec(pathname);
       if (method === VERB_GET && taskMatch) {
         const taskId = taskMatch[1];
-        const task = taskStore.getTask(taskId);
+        const task = activeTaskStore.getTask(taskId);
         if (!task) {
           json(res, 404, { error: `Task '${taskId}' not found`, code: "TASK_NOT_FOUND" });
           return;
         }
-        const history = taskStore.getTransitionHistory(taskId);
+        const history = activeTaskStore.getTransitionHistory(taskId);
         json(res, 200, { ok: true, task, history });
         return;
       }
 
       if (method === VERB_POST && pathname === "/api/command/tasks") {
         if (!requireCsrf()) return;
+        if (activePmExecutionStore) {
+          json(res, 409, { error: "PM owns task creation. Create the task through /api/pm/tasks, then dispatch its READY record.", code: "PM_TASK_AUTHORITY" });
+          return;
+        }
         const body = await readBody(req);
-        const task = taskStore.createTask(body);
+        const task = activeTaskStore.createTask(body);
         await roomAdapter.emitEvent("TASK_CREATED", {
           taskId: task.taskId,
           sender: "founder",
@@ -257,13 +365,7 @@ export function createHerdrService({
         if (!requireCsrf()) return;
         const taskId = taskTransitionMatch[1];
         const body = await readBody(req);
-        const task = taskStore.transitionTask(
-          taskId,
-          body.nextState,
-          body.actor || "system",
-          body.reason,
-          body.updates
-        );
+        const task = activeTaskStore.transitionTask(taskId, body.nextState, body.actor || "system", body.reason, body.updates);
         json(res, 200, { ok: true, task });
         return;
       }
@@ -273,23 +375,21 @@ export function createHerdrService({
         if (!requireCsrf()) return;
         const taskId = taskBuilderCompleteMatch[1];
         const body = await readBody(req);
-        const currentTask = taskStore.getTask(taskId);
+        const currentTask = activeTaskStore.getTask(taskId);
         if (!currentTask) {
           json(res, 404, { error: `Task '${taskId}' not found`, code: "TASK_NOT_FOUND" });
           return;
         }
-        const check = VerifierGuard.canSubmitBuilderCompletion(currentTask, body.artifact);
+        const guardTask = activePmExecutionStore
+          ? { ...currentTask.execution, taskId, state: currentTask.execution?.state }
+          : currentTask;
+        const check = VerifierGuard.canSubmitBuilderCompletion(guardTask, body.artifact);
         if (!check.allowed) {
           json(res, 400, { error: check.reason, code: "BUILDER_COMPLETION_REFUSED" });
           return;
         }
-        taskStore.attachBuilderArtifact(taskId, body.artifact);
-        const updated = taskStore.transitionTask(
-          taskId,
-          "BUILDER_COMPLETE",
-          body.artifact.builderSeat,
-          "Builder completion submitted with test evidence"
-        );
+        activeTaskStore.attachBuilderArtifact(taskId, body.artifact);
+        const updated = activeTaskStore.transitionTask(taskId, "BUILDER_COMPLETE", body.artifact.builderSeat, "Builder completion submitted with test evidence");
         await roomAdapter.emitEvent("BUILDER_COMPLETE", {
           taskId,
           sender: body.artifact.builderSeat,
@@ -305,25 +405,23 @@ export function createHerdrService({
         if (!requireCsrf()) return;
         const taskId = taskVerifyMatch[1];
         const body = await readBody(req);
-        const currentTask = taskStore.getTask(taskId);
+        const currentTask = activeTaskStore.getTask(taskId);
         if (!currentTask) {
           json(res, 404, { error: `Task '${taskId}' not found`, code: "TASK_NOT_FOUND" });
           return;
         }
         const artifact = body.artifact;
+        const guardTask = activePmExecutionStore
+          ? { ...currentTask.execution, taskId, state: currentTask.execution?.state }
+          : currentTask;
         if (artifact.result === "PASS") {
-          const check = VerifierGuard.canAcceptTask(currentTask, artifact);
+          const check = VerifierGuard.canAcceptTask(guardTask, artifact);
           if (!check.allowed) {
             json(res, 400, { error: check.reason, code: "VERIFICATION_ACCEPT_REFUSED" });
             return;
           }
-          taskStore.attachVerifierArtifact(taskId, artifact);
-          const accepted = taskStore.transitionTask(
-            taskId,
-            "ACCEPTED",
-            artifact.verifierSeat,
-            `Independent verification passed: ${artifact.verdictNotes}`
-          );
+          activeTaskStore.attachVerifierArtifact(taskId, artifact);
+          const accepted = activeTaskStore.transitionTask(taskId, "ACCEPTED", artifact.verifierSeat, `Independent verification passed: ${artifact.verdictNotes}`);
           await roomAdapter.emitEvent("VERIFICATION_ACCEPTED", {
             taskId,
             sender: artifact.verifierSeat,
@@ -333,18 +431,13 @@ export function createHerdrService({
           json(res, 200, { ok: true, verdict: "ACCEPTED", task: accepted });
           return;
         } else {
-          const check = VerifierGuard.canRejectTask(currentTask, artifact);
+          const check = VerifierGuard.canRejectTask(guardTask, artifact);
           if (!check.allowed) {
             json(res, 400, { error: check.reason, code: "VERIFICATION_REJECT_REFUSED" });
             return;
           }
-          taskStore.attachVerifierArtifact(taskId, artifact);
-          const rejected = taskStore.transitionTask(
-            taskId,
-            "REJECTED",
-            artifact.verifierSeat,
-            `Verification rejected: ${artifact.verdictNotes}`
-          );
+          activeTaskStore.attachVerifierArtifact(taskId, artifact);
+          const rejected = activeTaskStore.transitionTask(taskId, "REJECTED", artifact.verifierSeat, `Verification rejected: ${artifact.verdictNotes}`);
           await roomAdapter.emitEvent("VERIFICATION_REJECTED", {
             taskId,
             sender: artifact.verifierSeat,
@@ -356,13 +449,39 @@ export function createHerdrService({
         }
       }
 
-      if (method === VERB_GET && pathname === "/api/command/fleet") {
-        json(res, 200, { ok: true, fleet: quotaTracker.getFullFleetStatus() });
+      if (method === VERB_GET && ["/api/command/workforce", "/api/command/fleet"].includes(pathname)) {
+        const herdrState = await client.getState();
+        const registry = readWorkforceCapabilityRegistry(path.resolve(process.env.COMMAND_WORKFORCE_CAPABILITIES || "data/workforce-capabilities.json"));
+        const workforce = projectWorkforce(herdrState, {
+          capabilities: registry.workers,
+          activeWorkload: activePmExecutionStore?.listActiveWorkload() ?? [],
+        });
+        json(res, 200, {
+          ok: workforce.state === "OBSERVED",
+          ...workforce,
+          fleet: workforce.seats,
+        });
         return;
       }
 
       if (method === VERB_GET && pathname === "/api/command/capacity") {
-        json(res, 200, { ok: true, capacity: quotaTracker.getFullCapacityOverview() });
+        const herdrState = await client.getState();
+        const workforce = projectWorkforce(herdrState);
+        json(res, 200, {
+          ok: workforce.state === "OBSERVED",
+          observed_at: workforce.observed_at,
+          source: "DECLARED STAFF PROFILE + LIVE HERDR + PM EXECUTION WORKLOAD; PROVIDER QUOTA NOT CONNECTED",
+          capacity: workforce.seats.map((seat) => ({
+            seat: seat.handle,
+            provider: seat.provider_owner,
+            capacityClass: seat.capacity_class,
+            telemetrySource: seat.quota.source ?? "UNKNOWN",
+            quotaStatus: seat.quota.status,
+            availability: seat.availability,
+            dispatchEligible: seat.dispatch_eligible,
+            reason: seat.quota.reason,
+          })),
+        });
         return;
       }
 

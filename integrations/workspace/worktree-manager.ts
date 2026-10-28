@@ -44,10 +44,11 @@ export class WorktreeManager {
     seat: string;
     baseSha: string;
     worktreesDir?: string;
+    branchName?: string;
   }): Promise<WorktreeProvisionResult> {
     const parentDir = params.worktreesDir || path.join(params.repoPath, '.worktrees');
     const workspacePath = path.join(parentDir, `${params.taskId}-builder`);
-    const branch = `starq/task/${params.taskId}`;
+    const branch = params.branchName || `starq/task/${params.taskId}`;
 
     if (!fs.existsSync(parentDir)) {
       fs.mkdirSync(parentDir, { recursive: true });

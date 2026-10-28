@@ -550,6 +550,18 @@ describe('UNKNOWN AND UNAVAILABLE — absence is never drawn as a healthy empty'
     expect(html).toMatch(/COMPANY OS PROJECTION ABSENT/);
   });
 
+  it('still renders Operate when company_os is absent', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(CompanyOsSurface, {
+        surface: { ...surface, company_os: undefined },
+        tab: 'Operate',
+      }),
+    );
+    expect(html).toMatch(/writable operating org/);
+    expect(html).toMatch(/data-surface-signature="company-os-operate"/);
+    expect(html).not.toMatch(/COMPANY OS PROJECTION ABSENT/);
+  });
+
   it('renders an unparseable registry as UNREADABLE with its reason', () => {
     const fs = require('node:fs');
     const p = path.join(process.env.TEMP!, 'broken-seats.json');
@@ -632,6 +644,7 @@ describe('BOUNDARIES — Command stays derived, Herdr stays runtime truth', () =
       'Portfolio',
       'Founder',
       'Infrastructure',
+      'Operate',
     ]);
     // One surface file, and it is reached through the existing shell.
     expect(surface.company_os).toBeTruthy();

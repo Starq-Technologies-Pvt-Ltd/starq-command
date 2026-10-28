@@ -3,6 +3,8 @@ import { BuildingSurface } from '@/surfaces/building';
 import { PmBoardSurface } from '@/surfaces/pm-board';
 import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
 import { SevenNeedOverview } from '@/surfaces/seven-need-overview';
+import { LibrarySurface } from '@/surfaces/library';
+import { CortexSurface } from '@/surfaces/cortex';
 import { parseBuildingRoute, routeHash, type BuildingRoute } from '@/lib/building-route';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Rail, RoomSwitcher, TopBar, type ViewId } from '@/components/shell';
@@ -273,6 +275,16 @@ export default function App() {
                   <SevenNeedOverview surface={null} />
                 </div>
               ) : null}
+              {route.view === 'library' ? (
+                <div className="px-4 pb-4" data-library-without-core-projection="">
+                  <LibrarySurface />
+                </div>
+              ) : null}
+              {route.view === 'cortex' ? (
+                <div className="px-4 pb-4" data-cortex-without-core-projection="">
+                  <CortexSurface />
+                </div>
+              ) : null}
               {pmFallbackRoute ? (
                 <div className="px-4 pb-4" data-pm-without-core-projection="">
                   {pmFallbackRoute.kind === 'portfolio' ? (
@@ -378,27 +390,17 @@ export default function App() {
 
 type PmFallbackRoute =
   | { kind: 'portfolio' }
-  | { kind: 'board'; projectId: 'command' | 'erp' | 'hoadha' };
+  | { kind: 'board'; projectId: string };
 
 /**
- * The PM service has its own API and state gate. Keep these routes reachable
- * when the unrelated core projection service is unavailable, while the
- * UnavailableState above continues to qualify the rest of Command.
+ * Boards use the PM service, not the hung core projection.
  */
 function pmRouteWithoutCoreProjection(route: BuildingRoute): PmFallbackRoute | null {
   if (route.view !== 'studio') return null;
-  if (route.projectId?.toLowerCase() === 'command') {
-    return { kind: 'board', projectId: 'command' };
-  }
-  if (route.room === 'erp' && route.tab === 'Tasks') {
-    return { kind: 'board', projectId: 'erp' };
-  }
-  if (route.room === 'hoadha' && route.tab === 'Board') {
-    return { kind: 'board', projectId: 'hoadha' };
-  }
-  if (route.room === null && !route.projectId && route.tab === 'Projects') {
-    return { kind: 'portfolio' };
-  }
+  if (route.projectId) return { kind: 'board', projectId: route.projectId };
+  if (route.room === 'erp' && route.tab === 'Tasks') return { kind: 'board', projectId: 'erp' };
+  if (route.room === 'hoadha' && route.tab === 'Board') return { kind: 'board', projectId: 'hoadha' };
+  if (route.room === null && !route.projectId && route.tab === 'Projects') return { kind: 'portfolio' };
   return null;
 }
 

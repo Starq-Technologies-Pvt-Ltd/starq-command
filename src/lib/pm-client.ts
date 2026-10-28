@@ -3,27 +3,38 @@
  * Every failure is returned as a value; nothing here throws into a component.
  */
 /**
- * Production PM service is always :5176. A disposable verification instance may be
- * addressed with `?pm_port=5190..5199` on the hash; it is labelled SCRATCH in the UI.
+ * The supported Command lifecycle pins PM at :5176. Disposable verification
+ * instances can use :5190–:5199 and must always use a separate PM_DB_PATH.
  */
 export function pmPort(): number {
   try {
     const q = window.location.hash.split('?')[1] ?? '';
     const v = new URLSearchParams(q).get('pm_port');
-    return v && /^519\d$/.test(v) ? Number(v) : 5176;
+    if (v && /^519\d$/.test(v)) return Number(v);
   } catch {
-    return 5176;
+    /* default */
   }
+  return 5176;
 }
-export const pmIsScratch = () => pmPort() !== 5176;
+export const pmIsScratch = () => {
+  const port = pmPort();
+  return port >= 5190 && port <= 5199;
+};
 export const pmQuery = () => (pmIsScratch() ? `?pm_port=${pmPort()}` : '');
 const pmBase = () => `http://127.0.0.1:${pmPort()}`;
 
 export const PM_STATUSES = [
-  'BACKLOG', 'READY', 'IN_PROGRESS', 'REVIEW', 'VERIFICATION',
-  'ACCEPTANCE', 'CLOSED', 'BLOCKED', 'FOUNDER_GATE',
+  'TODO', 'NEXT', 'IN_PROGRESS', 'BLOCKED', 'DONE',
 ] as const;
 export type PmStatus = (typeof PM_STATUSES)[number];
+
+export const PM_STATUS_LABELS: Record<PmStatus, string> = {
+  TODO: 'To Do',
+  NEXT: 'Next Up',
+  IN_PROGRESS: 'In Progress',
+  BLOCKED: 'Blocked',
+  DONE: 'Done',
+};
 export type PmPriority = 'P0' | 'P1' | 'P2' | 'P3';
 export const PM_PRIORITIES: PmPriority[] = ['P0', 'P1', 'P2', 'P3'];
 
@@ -98,6 +109,37 @@ export interface PmTaskDetail {
   task: PmTask;
   history: PmHistoryRow[];
   hold: PmHold;
+  source_record: {
+    source_system: string;
+    source_file: string;
+    source_row_index: number;
+    resolution: 'IMPORTED';
+    raw_status: string | null;
+    payload_sha256: string;
+    source_file_sha256: string;
+    raw_payload: Record<string, unknown>;
+  } | null;
+}
+
+export interface PmNexusSource {
+  source_file: string;
+  source_system: string;
+  content_sha256: string;
+  row_count: number;
+  imported_at: string;
+  preserved_rows: number;
+  duplicate_rows: number;
+  invalid_rows: number;
+  archived_rows: number;
+}
+
+export interface PmNexusSourceRecord {
+  source_row_index: number;
+  task_id: string | null;
+  resolution: 'IMPORTED' | 'DUPLICATE_TASK_ID' | 'INVALID_ID' | 'ARCHIVED_ID_COLLISION';
+  raw_status: string | null;
+  payload_sha256: string;
+  raw_payload: Record<string, unknown>;
 }
 
 export interface PmPortfolioProject {
@@ -180,18 +222,165 @@ async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: un
   }
 }
 
+export type PmUnitKind = 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM';
+export const PM_UNIT_KINDS: PmUnitKind[] = ['COMPANY', 'DIVISION', 'DEPARTMENT', 'TEAM'];
+export type PmPersonKind = 'HUMAN' | 'DIGITAL';
+export const PM_PERSON_KINDS: PmPersonKind[] = ['HUMAN', 'DIGITAL'];
+
+export interface PmOrgCompany {
+  id: string;
+  name: string;
+  legal_name?: string | null;
+  notes?: string | null;
+}
+
+export interface PmOrgUnit {
+  id: string;
+  company_id: string;
+  parent_id?: string | null;
+  kind: PmUnitKind | string;
+  name: string;
+  description?: string | null;
+}
+
+export interface PmOrgPosition {
+  id: string;
+  unit_id: string;
+  title: string;
+  job_description?: string | null;
+  reports_to_position_id?: string | null;
+}
+
+export interface PmOrgPerson {
+  id: string;
+  handle: string;
+  display_name: string;
+  kind: PmPersonKind | string;
+}
+
+export interface PmOrgAppointment {
+  id: string;
+  position_id: string;
+  person_id: string;
+}
+
+export interface PmOrg {
+  company: PmOrgCompany | PmOrgCompany[] | null;
+  units: PmOrgUnit[];
+  positions: PmOrgPosition[];
+  people: PmOrgPerson[];
+  appointments: PmOrgAppointment[];
+  generated_at: string;
+  room_post: string;
+}
+
+export interface PmAttentionAction {
+  task_id: string;
+  project_id: string;
+  title: string;
+  status: string;
+  owner: string;
+  verifier: string;
+  priority: string;
+  reason: string;
+  href: string;
+}
+
+export interface PmAttention {
+  generated_at: string;
+  room_post: string;
+  next_actions: PmAttentionAction[];
+  blocked: number;
+  founder_gate: number;
+  unassigned: number;
+  in_progress: number;
+}
+
+export interface PmCreateCompanyBody {
+  actor: string;
+  name: string;
+  legal_name?: string;
+  notes?: string;
+}
+
+export interface PmCreateUnitBody {
+  actor: string;
+  company_id: string;
+  parent_id?: string;
+  kind: PmUnitKind;
+  name: string;
+  description?: string;
+}
+
+export interface PmCreatePositionBody {
+  actor: string;
+  unit_id: string;
+  title: string;
+  job_description?: string;
+  reports_to_position_id?: string;
+}
+
+export interface PmCreatePersonBody {
+  actor: string;
+  handle: string;
+  display_name: string;
+  kind: PmPersonKind;
+}
+
+export interface PmCreateAppointmentBody {
+  actor: string;
+  position_id: string;
+  person_id: string;
+}
+
+export interface PmCreateProjectBody {
+  actor: string;
+  id: string;
+  name: string;
+  prefix: string;
+  description?: string;
+}
+
+export interface PmLocalEvidenceBody {
+  actor: string;
+  expected_updated_at: string;
+  note: string;
+}
+
+/** Normalize GET /api/pm/org `company` which may be one row or a list. */
+export function pmOrgCompanies(org: PmOrg | null | undefined): PmOrgCompany[] {
+  if (!org?.company) return [];
+  return Array.isArray(org.company) ? org.company : [org.company];
+}
+
 export const pmHealth = () => call<PmHealth>('GET', '/api/pm/health');
 export const pmMeta = () => call<PmMeta>('GET', '/api/pm/meta');
 export const pmProjects = () => call<{ projects: PmProject[] }>('GET', '/api/pm/projects');
 export const pmTasks = (projectId: string) =>
   call<{ project_id: string; tasks: PmTask[] }>('GET', `/api/pm/tasks?project_id=${encodeURIComponent(projectId)}`);
 export const pmTask = (id: string) => call<PmTaskDetail>('GET', `/api/pm/tasks/${encodeURIComponent(id)}`);
+export const pmNexusSources = (file?: string) => call<{ sources: PmNexusSource[]; records?: PmNexusSourceRecord[] }>(
+  'GET', `/api/pm/nexus/sources${file ? `?file=${encodeURIComponent(file)}` : ''}`,
+);
 export const pmPortfolio = () => call<PmPortfolio>('GET', '/api/pm/portfolio');
+export const pmOrg = () => call<PmOrg>('GET', '/api/pm/org');
+export const pmAttention = () => call<PmAttention>('GET', '/api/pm/attention');
+export const pmCreateCompany = (body: PmCreateCompanyBody) =>
+  call<PmOrgCompany>('POST', '/api/pm/org/companies', body);
+export const pmCreateUnit = (body: PmCreateUnitBody) => call<PmOrgUnit>('POST', '/api/pm/org/units', body);
+export const pmCreatePosition = (body: PmCreatePositionBody) =>
+  call<PmOrgPosition>('POST', '/api/pm/org/positions', body);
+export const pmCreatePerson = (body: PmCreatePersonBody) => call<PmOrgPerson>('POST', '/api/pm/org/people', body);
+export const pmCreateAppointment = (body: PmCreateAppointmentBody) =>
+  call<PmOrgAppointment>('POST', '/api/pm/org/appointments', body);
+export const pmCreateProject = (body: PmCreateProjectBody) => call<PmProject>('POST', '/api/pm/projects', body);
 export const pmCreateTask = (body: Record<string, unknown>) => call<PmTaskDetail>('POST', '/api/pm/tasks', body);
 export const pmUpdateTask = (id: string, body: Record<string, unknown>) =>
   call<PmTaskDetail>('PATCH', `/api/pm/tasks/${encodeURIComponent(id)}`, body);
 export const pmLinkRoom = (id: string, body: Record<string, unknown>) =>
   call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/room-link`, body);
+export const pmLocalEvidence = (id: string, body: PmLocalEvidenceBody) =>
+  call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/evidence`, body);
 export const pmRetryRoomSync = () => call<{ queued: boolean; pending_room_sync: number }>('POST', '/api/pm/room-sync/retry', {});
 
 export const PM_BOARD_HREF: Record<string, string> = {
@@ -200,9 +389,13 @@ export const PM_BOARD_HREF: Record<string, string> = {
   hoadha: '#studio/hoadha/board',
 };
 
-/** Direct, read-only navigation to a PM task detail from a portfolio card. */
+export function pmBoardHref(projectId: string): string {
+  return PM_BOARD_HREF[projectId] ?? `#studio/${encodeURIComponent(projectId)}`;
+}
+
+/** Direct navigation to a PM task detail from a portfolio card. */
 export function pmTaskHref(projectId: string, taskId: string): string {
-  const route = PM_BOARD_HREF[projectId] ?? `#studio/${encodeURIComponent(projectId)}`;
+  const route = pmBoardHref(projectId);
   const params = new URLSearchParams({ task: taskId });
   if (pmIsScratch()) params.set('pm_port', String(pmPort()));
   return `${route}?${params.toString()}`;
