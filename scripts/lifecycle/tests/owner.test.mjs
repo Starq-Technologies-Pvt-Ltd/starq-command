@@ -38,7 +38,7 @@ function baseConfig(root) {
 }
 
 /** A simulated machine. */
-function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null } = {}) {
+function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null, recordedHistoricalCloseoutRecovery = null } = {}) {
   const dir = mkdtempSync(path.join(tmpdir(), 'starq-owner-'));
   const cfgDoc = baseConfig(dir);
   if (mutateConfig) mutateConfig(cfgDoc);
@@ -51,7 +51,7 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
   const behaviour = {};          // name -> 'exit' | 'stubborn'
   const health = {};             // name -> {ok, detail}
   const files = { [path.join(dir, 'manifest.json')]: JSON.stringify({ workspace_root: dir, agents: [{ id: 'a', startup_policy: 'FLOOR_LAUNCH' }] }) };
-  const calls = { spawn: [], shutdown: [], forceKill: [], broker: [], gracefulStopContained: [], historicalCloseoutHandoff: [] };
+  const calls = { spawn: [], shutdown: [], forceKill: [], broker: [], gracefulStopContained: [], historicalCloseoutHandoff: [], recoverOwnedJob: [] };
   const brokerSim = {
     token: 'TOKEN', admission: 'OPEN', running: [], stopAgents: 'ok', openTerminals: 0,
     pendingLaunches: 0, unresolvedLaunches: 0, orphanedSessions: 0, historicalUnverified: 0,
@@ -128,6 +128,11 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
       calls.historicalCloseoutHandoff.push(evidence);
       return historicalCloseoutHandoff ?? { applied: false, reason: 'no authorized exception fixture' };
     },
+    recordedHistoricalCloseoutRecovery: (evidence) => recordedHistoricalCloseoutRecovery ?? { applied: false, reason: 'no recorded exception fixture' },
+    recoverOwnedJob: async (containment) => {
+      calls.recoverOwnedJob.push(containment);
+      return { outcome: 'GONE', active: 0, closed: true };
+    },
     checkHealth: async (host, c) => health[c.name] ?? { ok: true, detail: 'ok' },
     readFile: (f) => {
       if (f.endsWith('tok.txt')) { if (!brokerSim.token) throw new Error('ENOENT'); return brokerSim.token; }
@@ -184,6 +189,39 @@ test('RECOVERY refuses missing broker channel before any forced signal', async (
     w.brokerSim.token = null;
     assert.equal((await w.owner.recoverForce()).result, RESULT.STOP_INCOMPLETE);
     assert.deepEqual(w.calls.forceKill, []);
+  } finally { w.cleanup(); }
+});
+
+test('RECOVERY resumes only the recorded exact historical exception when the broker is gone and all owned trees are closed', async () => {
+  const ids = ['legacy-1', 'legacy-2', 'legacy-3', 'legacy-4', 'legacy-5', 'legacy-6'];
+  const handoff = {
+    applied: true,
+    decision: { roomSequence: 15821, eventId: 'founder-event', recordHash: 'founder-record' },
+    session_ids: ids,
+    historical_closeout: 'UNKNOWN',
+    broker_boot_id: 'old-broker-boot',
+  };
+  const w = world({ recordedHistoricalCloseoutRecovery: handoff });
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const before = readState(w.statePath).state;
+    for (const child of before.children) w.kill(child.pid);
+    const { forceKill: _testForceKill, ...recoveryDeps } = w.deps;
+    const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: {
+      ...recoveryDeps,
+      brokerRequest: async () => ({ status: 0, error: 'ECONNREFUSED' }),
+      listListeners: async () => [],
+    } });
+    const result = await owner.recoverForce();
+    assert.equal(result.result, RESULT.STOPPED);
+    assert.deepEqual(w.calls.forceKill, []);
+    assert.equal(w.calls.recoverOwnedJob.length, 1, 'the broker JobGuardian receipt is rechecked without signaling a gone process');
+    const state = readState(w.statePath).state;
+    const resumed = state.events.find((event) => event.event === 'recover.historical_closeout_exception_resumed');
+    assert.ok(resumed);
+    assert.equal(resumed.historical_closeout, 'UNKNOWN');
+    assert.deepEqual(resumed.session_ids, ids);
+    assert.equal(state.children.every((child) => child.status === 'EXITED' && child.tree_closeout_verified === true), true);
   } finally { w.cleanup(); }
 });
 

@@ -33,7 +33,7 @@ import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHe
 import { readHerdrStatus } from '../../../herdr-floor/src/herdr-status.mjs';
 import { nativeContainment, resolvePid } from '../../../herdr-floor/src/launcher.mjs';
 import { containmentOptions } from '../../../herdr-floor/src/containment-config.mjs';
-import { evaluateHistoricalCloseoutHandoff } from './historical-closeout-handoff.mjs';
+import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const CHILD_HOST = path.resolve(HERE, '..', 'lifecycle-child.mjs');
@@ -96,6 +96,8 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       ? jobs().stop(child.containment, { force: false, graceMs })
       : Promise.resolve({ outcome: 'UNKNOWN', detail: 'contained graceful stop requires the recorded job descriptor' })),
     historicalCloseoutHandoff: deps.historicalCloseoutHandoff ?? evaluateHistoricalCloseoutHandoff,
+    recordedHistoricalCloseoutRecovery: deps.recordedHistoricalCloseoutRecovery ?? evaluateRecordedHistoricalCloseoutRecovery,
+    recoverOwnedJob: deps.recoverOwnedJob ?? ((containment, graceMs) => jobs().stop(containment, { force: true, graceMs })),
     checkHealth: deps.checkHealth ?? ((host, comp) => checkHealth(host, comp)),
     brokerRequest: deps.brokerRequest ?? brokerRequestReal,
     readFile: deps.readFile ?? ((f) => readFileSync(f, 'utf8')),
@@ -586,7 +588,30 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         const jobOwned = Boolean(brokerChild.containment) && v.verdict !== 'FOREIGN';
         if (v.verdict === 'MATCH' || jobOwned) {
           const view = await broker(cfg, 'GET', '/api/lifecycle');
-          if (view.status === 200 && view.body.running.length) {
+          if (view.status !== 200 && v.verdict === 'GONE') {
+            const listeners = await d.listListeners();
+            const brokerPort = comp(cfg, 'herdrBroker').port;
+            if (listeners.some((listener) => listener.port === brokerPort)) {
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker API is unavailable but its port has a listener; historical recovery cannot bypass the current broker owner' };
+            }
+            if (!await d.treeClosed(brokerChild)) {
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker process is gone but its contained descendants are not proven closed' };
+            }
+            const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
+            const recorded = d.recordedHistoricalCloseoutRecovery({ stateDir, events: doc.events });
+            if (recorded?.applied !== true) {
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: recorded?.reason ?? 'broker channel unavailable and no exact historical recovery evidence' };
+            }
+            appendEvent(doc, 'recover.historical_closeout_exception_resumed', {
+              decision: recorded.decision,
+              session_ids: recorded.session_ids,
+              historical_closeout: 'UNKNOWN',
+              broker_boot_id: recorded.broker_boot_id,
+              broker_process: 'GONE',
+              broker_port_clear: true,
+            });
+            save(doc);
+          } else if (view.status === 200 && view.body.running.length) {
             await broker(cfg, 'POST', '/api/lifecycle/drain');
             const r = await broker(cfg, 'POST', '/api/lifecycle/force-stop-agents', cfg.timeouts_ms.agent_stop);
             steps.push({ name: 'agents', result: r.body ?? r.error });
@@ -594,29 +619,31 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
               save(doc);
               return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'the broker could not prove/terminate every agent; it is left up so ownership is not orphaned' };
             }
-          } else if (view.status !== 200) {
+          } else if (view.status !== 200 && v.verdict !== 'GONE') {
             return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker channel unavailable; refusing all force recovery without agent closeout proof' };
           }
-          const drain = await broker(cfg, 'POST', '/api/lifecycle/drain');
-          if (drain.status !== 200 || drain.body?.admission !== 'DRAINING') {
-            return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: 'pending, orphaned, terminal or agent ownership remains unresolved' };
-          }
-          if (!drain.body?.drained) {
-            const floor = await broker(cfg, 'GET', '/api/agents');
-            const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
-            const handoff = floor.status === 200
-              ? await d.historicalCloseoutHandoff({ stateDir, lifecycleView: drain.body, registryProjection: floor.body?.registry_records })
-              : { applied: false, reason: 'broker registry projection unavailable' };
-            if (handoff?.applied !== true) {
-              return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: handoff?.reason ?? 'pending, orphaned, terminal or agent ownership remains unresolved' };
+          const drain = view.status === 200 ? await broker(cfg, 'POST', '/api/lifecycle/drain') : null;
+          if (drain) {
+            if (drain.status !== 200 || drain.body?.admission !== 'DRAINING') {
+              return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: 'pending, orphaned, terminal or agent ownership remains unresolved' };
             }
-            appendEvent(doc, 'recover.historical_closeout_exception_verified', {
-              decision: handoff.decision,
-              session_ids: handoff.session_ids,
-              historical_closeout: 'UNKNOWN',
-              broker_boot_id: handoff.broker_boot_id,
-            });
-            save(doc);
+            if (!drain.body?.drained) {
+              const floor = await broker(cfg, 'GET', '/api/agents');
+              const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
+              const handoff = floor.status === 200
+                ? await d.historicalCloseoutHandoff({ stateDir, lifecycleView: drain.body, registryProjection: floor.body?.registry_records })
+                : { applied: false, reason: 'broker registry projection unavailable' };
+              if (handoff?.applied !== true) {
+                return { result: RESULT.STOP_INCOMPLETE, phase: 'drain', steps, note: handoff?.reason ?? 'pending, orphaned, terminal or agent ownership remains unresolved' };
+              }
+              appendEvent(doc, 'recover.historical_closeout_exception_verified', {
+                decision: handoff.decision,
+                session_ids: handoff.session_ids,
+                historical_closeout: 'UNKNOWN',
+                broker_boot_id: handoff.broker_boot_id,
+              });
+              save(doc);
+            }
           }
         } else {
           return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
@@ -629,7 +656,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         if (!child) continue;
         // Re-prove executable + creation time IMMEDIATELY before the forced signal.
         if (child.containment && !deps.forceKill) {
-          const proof = await jobs().stop(child.containment, { force: true, graceMs: cfg.timeouts_ms.graceful_exit });
+          const proof = await d.recoverOwnedJob(child.containment, cfg.timeouts_ms.graceful_exit);
           if (proof.outcome !== 'GONE' || proof.active !== 0 || !proof.closed) return { result: RESULT.STOP_INCOMPLETE, phase: 'job-recovery', steps, proof };
           Object.assign(child, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: 'explicit owned-job recovery' });
           steps.push({ name, outcome: 'GONE', proof }); save(doc); continue;

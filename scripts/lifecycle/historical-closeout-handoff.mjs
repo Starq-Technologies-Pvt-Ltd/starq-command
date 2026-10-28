@@ -1,5 +1,5 @@
 import { Registry } from '../../../herdr-floor/src/registry.mjs';
-import { evaluateHistoricalCloseoutException } from '../../../herdr-floor/src/historical-closeout-exception.mjs';
+import { HISTORICAL_CLOSEOUT_EXCEPTION, evaluateHistoricalCloseoutException } from '../../../herdr-floor/src/historical-closeout-exception.mjs';
 
 const EXPECTED_UNVERIFIED_COUNT = 6;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -51,5 +51,51 @@ export function evaluateHistoricalCloseoutHandoff({ stateDir, lifecycleView, reg
     };
   } catch (err) {
     return fail(`historical broker handoff validation failed: ${err.message}`);
+  }
+}
+
+/**
+ * Resume only the exact Founder-authorized recovery after the broker that
+ * witnessed its quiescent handoff has itself gone away. The durable owner
+ * event must name the pinned decision, all six exact sessions, and UNKNOWN;
+ * the current broker registry must still match the preserved archive. This
+ * does not mark historical trees closed and cannot authorize any new session.
+ */
+export function evaluateRecordedHistoricalCloseoutRecovery({ stateDir, events }) {
+  const fail = (reason) => ({ applied: false, reason, session_ids: [] });
+  try {
+    if (typeof stateDir !== 'string' || !Array.isArray(events)) return fail('missing durable recovery evidence');
+    const audit = [...events].reverse().find((event) => event?.event === 'recover.historical_closeout_exception_verified');
+    if (!audit) return fail('no prior broker-verified historical closeout exception event');
+    const expectedIds = [...HISTORICAL_CLOSEOUT_EXCEPTION.sessionIds].sort();
+    const actualIds = Array.isArray(audit.session_ids) ? [...audit.session_ids].sort() : [];
+    if (JSON.stringify(audit.decision) !== JSON.stringify(HISTORICAL_CLOSEOUT_EXCEPTION.decision)
+      || JSON.stringify(actualIds) !== JSON.stringify(expectedIds)
+      || audit.historical_closeout !== 'UNKNOWN'
+      || typeof audit.broker_boot_id !== 'string' || !audit.broker_boot_id) {
+      return fail('prior recovery event does not match the exact Founder decision and six UNKNOWN records');
+    }
+
+    const registry = new Registry({ stateDir });
+    const loaded = registry.load();
+    if (loaded.corrupt || loaded.orphaned !== 0 || registry.inspectionUnresolved) return fail('current registry is not resolved evidence');
+    const records = registry.all();
+    if (records.length !== expectedIds.length) return fail('current registry contains records outside the six-session exception scope');
+    const exception = evaluateHistoricalCloseoutException({ stateDir, records });
+    if (!exception.applied
+      || JSON.stringify([...exception.session_ids].sort()) !== JSON.stringify(expectedIds)
+      || exception.historical_closeout !== 'UNKNOWN') {
+      return fail(`pinned historical exception no longer validates: ${exception.reason ?? 'scope mismatch'}`);
+    }
+    return {
+      applied: true,
+      reason: 'prior broker-verified handoff and exact six-record exception revalidated; historical closeout remains UNKNOWN',
+      decision: exception.decision,
+      session_ids: expectedIds,
+      historical_closeout: 'UNKNOWN',
+      broker_boot_id: audit.broker_boot_id,
+    };
+  } catch (err) {
+    return fail(`recorded historical recovery validation failed: ${err.message}`);
   }
 }
