@@ -226,11 +226,14 @@ export interface PmMeta {
   handles: string[];
 }
 
+export const PM_TIMEOUT_MS = 5_000;
+export const PM_MAX_SAFE_GET_RETRIES = 2;
+
 export type PmResult<T> =
   | { ok: true; data: T }
   | {
       ok: false;
-      state: 'UNAVAILABLE' | 'REJECTED';
+      state: 'UNAVAILABLE' | 'REJECTED' | 'TIMEOUT';
       status: number;
       code: string;
       message: string;
@@ -238,26 +241,55 @@ export type PmResult<T> =
       current_updated_at?: string;
     };
 
-async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<PmResult<T>> {
+/** Internal helper to perform a single PM request. Timeout covers headers + body parsing via AbortSignal.timeout. */
+async function fetchWithTimeout<T>(url: string, options: RequestInit, timeoutMs: number = PM_TIMEOUT_MS): Promise<PmResult<T>> {
   try {
-    const res = await fetch(`${pmBase()}${path}`, {
-      method,
-      cache: 'no-store',
-      headers: method === 'GET' ? undefined : { 'Content-Type': 'application/json', 'X-PM-Client': 'starq-command' },
-      body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
+    const res = await fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(timeoutMs),
     });
-    const payload = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    let payload: Record<string, unknown> | null = null;
+    try {
+      payload = (await res.json()) as Record<string, unknown> | null;
+    } catch (err: unknown) {
+      const isBodyAbort =
+        err !== null &&
+        typeof err === 'object' &&
+        'name' in err &&
+        typeof (err as Record<string, unknown>).name === 'string' &&
+        ((err as Record<string, unknown>).name === 'TimeoutError' ||
+         (err as Record<string, unknown>).name === 'AbortError');
+      if (isBodyAbort) throw err;
+      payload = null;
+    }
     if (res.ok) return { ok: true, data: payload as T };
+    const isUnavailable = res.status === 503;
     return {
       ok: false,
-      state: res.status === 503 ? 'UNAVAILABLE' : 'REJECTED',
+      state: isUnavailable ? 'UNAVAILABLE' : 'REJECTED',
       status: res.status,
       code: String(payload?.error ?? 'ERROR'),
       message: String(payload?.message ?? `PM service returned ${res.status}`),
       errors: Array.isArray(payload?.errors) ? (payload?.errors as string[]) : undefined,
       current_updated_at: typeof payload?.current_updated_at === 'string' ? payload.current_updated_at : undefined,
     };
-  } catch {
+  } catch (err: unknown) {
+    const isAbort =
+      err !== null &&
+      typeof err === 'object' &&
+      'name' in err &&
+      typeof (err as Record<string, unknown>).name === 'string' &&
+      ((err as Record<string, unknown>).name === 'TimeoutError' ||
+       (err as Record<string, unknown>).name === 'AbortError');
+    if (isAbort) {
+      return {
+        ok: false,
+        state: 'TIMEOUT',
+        status: 0,
+        code: 'TIMEOUT',
+        message: `PM request timed out after ${timeoutMs}ms`,
+      };
+    }
     return {
       ok: false,
       state: 'UNAVAILABLE',
@@ -266,6 +298,25 @@ async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: un
       message: 'The PM service (127.0.0.1:5176) is not reachable. Nothing was saved.',
     };
   }
+}
+
+async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown, attempt: number = 1): Promise<PmResult<T>> {
+  const result = await fetchWithTimeout<T>(`${pmBase()}${path}`, {
+    method,
+    cache: 'no-store',
+    headers: method === 'GET' ? undefined : { 'Content-Type': 'application/json', 'X-PM-Client': 'starq-command' },
+    body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
+  });
+  if (result.ok) return result;
+  const isRetryable = method === 'GET' && (result.state === 'TIMEOUT' || result.state === 'UNAVAILABLE');
+  if (isRetryable && attempt <= PM_MAX_SAFE_GET_RETRIES) {
+    return call<T>(method, path, body, attempt + 1);
+  }
+  return result;
+}
+
+export async function pmCall<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown): Promise<PmResult<T>> {
+  return call<T>(method, path, body);
 }
 
 export type PmUnitKind = 'COMPANY' | 'DIVISION' | 'DEPARTMENT' | 'TEAM';
