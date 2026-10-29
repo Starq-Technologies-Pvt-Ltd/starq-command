@@ -57,6 +57,8 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
   const et = surface.execution_truth;
 
   const l4 = wt.maturity?.L4 ?? null;
+  const l3ByFamily = new Map((wt.maturity?.L3 ?? []).map((item) => [item.family, item] as const));
+  const maturitySourceAt = wt.generated_at ?? null;
   const l1 = wt.maturity?.L1 ?? null;
   const hold = pt.hold_state;
   const discrepancies = pt.reconciliation?.known_discrepancies ?? [];
@@ -138,6 +140,7 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
                 <thead>
                   <tr>
                     <th style={{ width: '12rem' }}>Family</th>
+                    <th style={{ width: '7rem' }}>Maturity</th>
                     <th style={{ width: '9rem' }}>Closure state</th>
                     <th style={{ width: '6rem' }}>Stages</th>
                     <th>Declared blocker</th>
@@ -164,6 +167,9 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
                         <td className="row-rail" data-tone={f.critical_blocker ? 'drift' : 'room'}>
                           <span className="mono">{f.id}</span>
                           <div className="text-[10px] text-muted-foreground">{f.name}</div>
+                        </td>
+                        <td data-erp-maturity={f.id} className="tnum text-2xs text-muted-foreground">
+                          {formatMaturity(l3ByFamily.get(f.id)?.maturity)}
                         </td>
                         <td>
                           <span className={cn('rounded-sm border px-1.5 py-px text-2xs', tone.chip)}>
@@ -240,6 +246,16 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
               </div>
               <Progress value={l4.maturity} className="mt-2" />
               <p className="mt-2 text-2xs leading-relaxed text-muted-foreground">{l4.excludes}</p>
+              <p className="mt-2 text-2xs text-muted-foreground">
+                Canonical work model calculated:{' '}
+                {maturitySourceAt ? (
+                  <time dateTime={maturitySourceAt} data-maturity-source-timestamp={maturitySourceAt} className="font-mono">
+                    {maturitySourceAt}
+                  </time>
+                ) : (
+                  <span data-maturity-source-timestamp="UNKNOWN">UNKNOWN</span>
+                )}
+              </p>
             </>
           ) : (
             <UnknownValue reason="work truth projection unavailable" />

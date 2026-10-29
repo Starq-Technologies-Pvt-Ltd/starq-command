@@ -208,6 +208,78 @@ describe('Phase 7 — the first screen answers', () => {
       expect(html).toContain('Task count is NOT maturity');
     }));
 
+  it('renders canonical per-family maturity by family id and exposes its source timestamp', () =>
+    withRealisticRoot((root) => {
+      const surface = {
+        ...base,
+        building: buildBuilding(root, base),
+        process_truth: {
+          ...base.process_truth,
+          process_families: ['O2C', 'P2P', 'I2GL', 'C2B', 'R2R'].map((id) => ({
+            ...base.process_truth.process_families[0],
+            id,
+            name: id,
+          })),
+        },
+        work_truth: {
+          ...base.work_truth,
+          available: true,
+          generated_at: '2026-10-29T18:19:43.309157Z',
+          maturity: {
+            L4: { raw: 0.4746, maturity: 0.4746, caps_applied: [], excludes: 'Task counts excluded.' },
+            L3: [
+              { family: 'R2R', maturity: 0.4615 },
+              { family: 'C2B', maturity: 0.35 },
+              { family: 'I2GL', maturity: 0.5808 },
+              { family: 'P2P', maturity: 0.4475 },
+              { family: 'O2C', maturity: 0.5333 },
+            ],
+          },
+        },
+      } as CommandSurface;
+      const html = render('#studio/erp/overview', surface);
+
+      // The list is intentionally out of process-family order; values must be
+      // joined by the canonical family id rather than by array position.
+      for (const [family, value] of Object.entries({
+        O2C: '53.33%',
+        P2P: '44.75%',
+        I2GL: '58.08%',
+        C2B: '35.00%',
+        R2R: '46.15%',
+      }))
+        expect(html).toContain(`data-erp-maturity="${family}" class="tnum text-2xs text-muted-foreground">${value}</td>`);
+      expect(html).toContain('47.46%');
+      expect(html).toContain('data-maturity-source-timestamp="2026-10-29T18:19:43.309157Z"');
+      expect(html).toContain('2026-10-29T18:19:43.309157Z');
+    }));
+
+  it('shows UNKNOWN when a process family has no canonical maturity value', () =>
+    withRealisticRoot((root) => {
+      const surface = {
+        ...base,
+        building: buildBuilding(root, base),
+        process_truth: {
+          ...base.process_truth,
+          process_families: ['O2C', 'P2P', 'I2GL', 'C2B', 'R2R'].map((id) => ({
+            ...base.process_truth.process_families[0],
+            id,
+            name: id,
+          })),
+        },
+        work_truth: {
+          ...base.work_truth,
+          available: true,
+          maturity: {
+            L4: { raw: 0.4746, maturity: 0.4746, caps_applied: [], excludes: 'Task counts excluded.' },
+            L3: [],
+          },
+        },
+      } as CommandSurface;
+      const html = render('#studio/erp/overview', surface);
+      expect(html).toContain('data-erp-maturity="O2C" class="tnum text-2xs text-muted-foreground">UNKNOWN</td>');
+    }));
+
   it('Hoadha overview is a compact watch face, and the deep product lives on peers', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
