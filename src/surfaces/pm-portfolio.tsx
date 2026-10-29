@@ -12,11 +12,16 @@ import {
   pmPortfolio,
   pmProjects,
   pmQuery,
+  pmRepositoryStatus,
+  REPOSITORY_STATUS_POLL_MS,
+  readRepositoryStatus,
   type PmNexusSource,
   type PmNexusSourceRecord,
   type PmPortfolio,
   type PmProject,
   type PmStatus,
+  type RepositoryStatusFeed,
+  type RepositorySyncState,
 } from '@/lib/pm-client';
 import { OrgOperateSnapshot } from '@/surfaces/org-operate';
 
@@ -61,18 +66,21 @@ export function getOperationalQualifier(
   projectId: string,
   holdState?: string | null,
   customQualifier?: string | null,
+  authorityUpdate?: { lifted_by: string; scope: string } | null,
 ): { label: string; tone: 'hold' | 'stale' | 'muted' | 'room'; note?: string } {
+  if (projectId === 'erp') {
+    return {
+      label: 'ACTIVE',
+      tone: 'room',
+      note: authorityUpdate?.lifted_by
+        ? `Operating authority: ACTIVE per ${authorityUpdate.lifted_by} (${authorityUpdate.scope}). Historical DEC-100 superseded.`
+        : 'Operating authority: ACTIVE per Founder #16183/#16185/#16211. Historical DEC-100 superseded.',
+    };
+  }
   if (customQualifier) {
     return {
       label: customQualifier,
       tone: customQualifier.includes('HOLD') ? 'hold' : customQualifier.includes('HISTORICAL') ? 'muted' : 'stale',
-    };
-  }
-  if (projectId === 'erp') {
-    return {
-      label: 'ACTIVE (CP2 #12690 HOLD)',
-      tone: 'hold',
-      note: 'Normal ERP roadmap active per Founder #14394. Residual hold: CP2 #12690 (payment-command neutrality).',
     };
   }
   if (projectId === 'hoadha') {
@@ -209,7 +217,7 @@ export function PmPortfolioSnapshot() {
           {problem ? <SourceGap reason="PM boards unavailable." detail={problem} /> : null}
           <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
             {(data?.projects ?? []).map((project) => {
-              const qualifier = getOperationalQualifier(project.id, project.hold?.state, project.execution_qualifier);
+              const qualifier = getOperationalQualifier(project.id, project.hold?.state, project.execution_qualifier, project.hold?.authority_update);
               return (
                 <li key={project.id} className="rounded border border-border p-2" data-project-snapshot={project.id}>
                   <div className="flex items-start justify-between gap-2">
@@ -296,10 +304,11 @@ export function PmPortfolioSurface() {
         {problem && !data ? (
           <SourceGap reason="PM service unavailable." detail={`${problem} Start it with: npm run os:start`} />
         ) : null}
+        <RepositoryStatusPanel />
         {data ? (
           <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3" data-project-grid="pm-portfolio">
             {visible.map((p) => {
-              const qualifier = getOperationalQualifier(p.id, p.hold?.state, p.execution_qualifier);
+              const qualifier = getOperationalQualifier(p.id, p.hold?.state, p.execution_qualifier, p.hold?.authority_update);
               const done = p.counts.DONE ?? 0;
               const historicalClosed = p.done_historical ?? done;
               return (
@@ -368,6 +377,109 @@ export function PmPortfolioSurface() {
       </Panel>
       <PmSourceArchivePanel />
     </section>
+  );
+}
+
+function syncTone(state: RepositorySyncState): 'ok' | 'stale' | 'unknown' | 'drift' {
+  if (state === 'CURRENT') return 'ok';
+  if (state === 'STALE') return 'stale';
+  if (state === 'UNRESOLVED') return 'drift';
+  return 'unknown';
+}
+
+function showFact(value: string | number | null): string {
+  if (value === null || value === '') return 'UNKNOWN';
+  return String(value);
+}
+
+function showUpstream(value: string | null): string {
+  if (!value) return 'UNKNOWN';
+  if (value.includes('://') || value.includes('@')) return 'REDACTED';
+  return value;
+}
+
+function showAheadBehind(ahead: number | null, behind: number | null): string {
+  if (ahead === null || behind === null) return 'UNKNOWN';
+  return `${ahead} ahead / ${behind} behind`;
+}
+
+export function RepositoryStatusPanel() {
+  const [feed, setFeed] = React.useState<RepositoryStatusFeed | null>(null);
+  const [problem, setProblem] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const res = await pmRepositoryStatus();
+      if (!active) return;
+      if (!res.ok) {
+        setFeed(null);
+        setProblem(res.message);
+      } else {
+        const read = readRepositoryStatus(res.data);
+        if (!read.ok) {
+          setFeed(null);
+          setProblem(read.reason);
+        } else {
+          setFeed(read.feed);
+          setProblem(null);
+        }
+      }
+      setLoading(false);
+    };
+    void load();
+    const timer = setInterval(() => { void load(); }, REPOSITORY_STATUS_POLL_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const count = problem ? 'UNAVAILABLE' : loading ? 'LOADING' : `${feed?.repositories.length ?? 0} repos`;
+  return (
+    <Panel title="Repository sync" count={count}>
+      <div className="body grid gap-2" data-repository-status="">
+        <p className="prose-note">
+          Git branch, HEAD, ahead/behind, dirty files, and the last origin fetch are sync facts.
+          They do not mark a task done, verified, or ready.
+        </p>
+        {problem ? <SourceGap reason="Repository status unavailable." detail={problem} /> : null}
+        {feed ? (
+          <ul className="grid gap-2">
+            {feed.repositories.map((repo) => (
+              <li
+                key={repo.project_id}
+                className="rounded border border-border p-2"
+                data-repository={repo.project_id}
+                data-sync-state={repo.state}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <strong className="text-xs">{repo.project_id}</strong>
+                  <Chip value={repo.state} tone={syncTone(repo.state)} />
+                </div>
+                <dl className="mt-1 grid gap-1 text-2xs text-muted-foreground">
+                  <div className="flex justify-between gap-2"><dt>Branch</dt><dd className="mono text-foreground">{showFact(repo.branch)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>HEAD</dt><dd className="mono text-foreground" title={repo.head ?? undefined}>{showFact(repo.head)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Upstream</dt><dd className="mono text-foreground">{showUpstream(repo.upstream)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Ahead / behind</dt><dd className="mono text-foreground">{showAheadBehind(repo.ahead, repo.behind)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Dirty files</dt><dd className="mono text-foreground">{showFact(repo.dirty_file_count)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Last origin fetch</dt><dd className="mono text-foreground">{showFact(repo.last_origin_fetch)}</dd></div>
+                  <div className="flex justify-between gap-2"><dt>Commit time</dt><dd className="mono text-foreground">{showFact(repo.commit_time)}</dd></div>
+                </dl>
+                {repo.reason ? <p className="mt-1 text-2xs text-muted-foreground">{repo.reason}</p> : null}
+              </li>
+            ))}
+            {feed.repositories.length === 0 ? (
+              <li className="text-2xs text-muted-foreground">No repository rows were returned.</li>
+            ) : null}
+          </ul>
+        ) : null}
+        {feed?.generated_at ? (
+          <p className="text-2xs text-muted-foreground">Status generated {feed.generated_at}. Polled every 30 seconds.</p>
+        ) : null}
+      </div>
+    </Panel>
   );
 }
 

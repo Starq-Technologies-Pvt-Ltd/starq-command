@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { restoreCollidedRecords } from '../server/nexus-fidelity.mjs';
+import { mapStatus, restoreCollidedRecords } from '../server/nexus-fidelity.mjs';
+
+test('historical preserved status stays open, matching the Nexus importer', () => {
+  assert.equal(mapStatus('preserved'), 'TODO');
+});
 
 test('relinks an already-restored collided task source row on importer restart', () => {
   const source = {

@@ -1,36 +1,41 @@
 import * as React from 'react';
 import { Panel, Chip, SourceGap } from '@/components/console';
 import { pmGetRoadmaps, type PmRoadmapsData } from '@/lib/pm-client';
-import { GitBranch } from 'lucide-react';
+import { GitBranch, RefreshCw } from 'lucide-react';
 
 export function ErpRoadmapSurface() {
   const [data, setData] = React.useState<PmRoadmapsData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [lastFetch, setLastFetch] = React.useState<string | null>(null);
+  const [refreshing, setRefreshing] = React.useState(false);
+
+  const loadRoadmaps = React.useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const res = await pmGetRoadmaps();
+      if (res.ok) {
+        setData(res.data);
+        setError(null);
+        setLastFetch(new Date().toISOString());
+      } else {
+        setError(res.message || 'PM roadmaps endpoint returned error');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load ERP roadmap data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   React.useEffect(() => {
-    let active = true;
-    pmGetRoadmaps()
-      .then((res) => {
-        if (!active) return;
-        if (res.ok) {
-          setData(res.data);
-          setLoading(false);
-        } else {
-          setError(res.message || 'PM roadmaps endpoint returned error');
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setError(err?.message || 'Failed to load ERP roadmap data');
-          setLoading(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    loadRoadmaps();
+  }, [loadRoadmaps]);
+
+  const handleRefresh = () => {
+    loadRoadmaps();
+  };
 
   if (loading) {
     return (
@@ -52,6 +57,8 @@ export function ErpRoadmapSurface() {
     );
   }
 
+  const fetchTime = lastFetch ? new Date(lastFetch).toLocaleTimeString() : null;
+
   const generations = data.plan_generations || [];
   const approvedPlan = data.current_approved_plan;
   const stageBindings = data.stage_bindings || [];
@@ -63,7 +70,20 @@ export function ErpRoadmapSurface() {
   return (
     <div className="flex flex-col gap-4 p-4" data-testid="erp-roadmap-surface">
       {/* 1. Header Banner */}
-      <Panel title="ERP Roadmap & Current Approved Plan (W3 / R-6 / M-2 / M-5)">
+      <Panel
+        title="ERP Roadmap & Current Approved Plan (W3 / R-6 / M-2 / M-5)"
+        toolbar={
+          <button
+            type="button"
+            className="go-link"
+            disabled={refreshing}
+            onClick={handleRefresh}
+            aria-label="Refresh roadmap data"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        }
+      >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 pb-3">
           <div className="flex items-center gap-2">
             <GitBranch className="h-4 w-4 text-emerald-500" />
@@ -73,8 +93,17 @@ export function ErpRoadmapSurface() {
             <Chip value="CURRENT APPROVED" tone="ok" />
           </div>
           <div className="text-xs text-muted-foreground">
-            Authority: <span className="font-mono text-foreground">{approvedPlan?.authority || 'Founder #14394'}</span> · Date: {approvedPlan?.approved_date || '2026-10-26'}
+            <span className="font-mono text-emerald-500">LIVE PM DATABASE</span>
+            {fetchTime && (
+              <>
+                {' '}· Last updated: <span className="font-mono text-foreground">{fetchTime}</span>
+              </>
+            )}
           </div>
+        </div>
+
+        <div className="mt-3 text-xs text-muted-foreground bg-surface-0/20 border border-border/40 rounded p-2">
+          <span className="font-semibold text-foreground">Data source:</span> Live PM service database (/api/pm/roadmaps), not the historical starq-erp-tasks.json Nexus projection. PM board reflects current work; historical JSON is static (last updated 2026-09-19).
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-3 text-xs">

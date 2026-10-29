@@ -287,9 +287,9 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
   return restored;
 }
 
-function mapStatus(raw) {
+export function mapStatus(raw) {
   const s = String(raw ?? '').toLowerCase();
-  if (s === 'done' || s === 'closed' || s === 'preserved') return 'DONE';
+  if (s === 'done' || s === 'closed') return 'DONE';
   if (s === 'in_progress') return 'IN_PROGRESS';
   if (s === 'next') return 'NEXT';
   if (s === 'blocked') return 'BLOCKED';

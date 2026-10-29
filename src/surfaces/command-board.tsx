@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { commandTasks, commandDispatchPreview, commandRoomEvents } from '@/lib/command-client';
+import { useEffect, useCallback, useState } from 'react';
 import { Chip, KV, Panel } from '@/components/console';
 import {
   COMMAND_BOARD_SOURCE,
@@ -113,14 +114,76 @@ export function CommandBoardSurface() {
     return () => { mounted = false; };
   }, []);
 
-  if (projection) return <CommandBoardView projection={projection} />;
   return (
-    <section className="command-stack" aria-label="Command board task projection" data-input={COMMAND_BOARD_SOURCE.input}>
-      <Panel title="Command / MODS offline board" count="CHECKING">
-        <div className="body"><p className="prose-note">Reading the three pinned offline board assets.</p></div>
-      </Panel>
-    </section>
+    <>
+      {projection ? (
+        <CommandBoardView projection={projection} />
+      ) : (
+        <section className="command-stack" aria-label="Command board task projection" data-input={COMMAND_BOARD_SOURCE.input}>
+          <Panel title="Command / MODS offline board" count="CHECKING">
+            <div className="body"><p className="prose-note">Reading the three pinned offline board assets.</p></div>
+          </Panel>
+        </section>
+      )}
+      <LiveDispatcherPanel />
+    </>
   );
 }
 
+function LiveDispatcherPanel() {
+  const [state, setState] = useState<'UNAVAILABLE' | 'STALE' | 'LIVE'>('STALE');
+  const [settled, setSettled] = useState(false);
+  const [tasks, setTasks] = useState<unknown[]>([]);
+  const [preview, setPreview] = useState<unknown>(null);
+  const [events, setEvents] = useState<unknown[]>([]);
+
+  const loadLive = useCallback(async () => {
+    try {
+      const [tasksResult, previewResult, eventsResult] = await Promise.all([
+        commandTasks(),
+        commandDispatchPreview(),
+        commandRoomEvents(),
+      ]);
+      const tasksOk = tasksResult.ok === true;
+      const previewOk = previewResult.ok === true;
+      const eventsOk = eventsResult.ok === true;
+      setTasks(tasksOk ? tasksResult.data?.tasks ?? [] : []);
+      setPreview(previewOk ? previewResult.data ?? null : null);
+      setEvents(eventsOk ? eventsResult.data?.events ?? [] : []);
+      const succeeded = Number(tasksOk) + Number(previewOk) + Number(eventsOk);
+      if (succeeded === 3) setState('LIVE');
+      else if (succeeded === 0) setState('UNAVAILABLE');
+      else setState('STALE');
+    } catch {
+      setTasks([]);
+      setPreview(null);
+      setEvents([]);
+      setState('UNAVAILABLE');
+    } finally {
+      setSettled(true);
+    }
+  }, []);
+
+  useEffect(() => { void loadLive(); }, [loadLive]);
+
+  return (
+    <Panel title="Live dispatcher activity (read-only)" count={state === 'LIVE' ? `${tasks.length} tasks` : state}>
+      <div className="body text-xs space-y-2">
+        <div><Chip value={state} tone={state === 'LIVE' ? 'ok' : state === 'STALE' ? 'stale' : 'drift'} /> <span>Feed: /api/command (factory.tsx)</span></div>
+        <div><strong>Tasks shown:</strong> {tasks.length} (no execution claimed)</div>
+        <div><strong>Dispatch preview:</strong> {preview ? 'available (not executed)' : 'unavailable'}</div>
+        <div><strong>Room events:</strong> {events.length} (historical overlay)</div>
+        {settled && state !== 'LIVE' ? (
+          <p className="text-2xs text-muted-foreground">
+            {state === 'UNAVAILABLE'
+              ? 'Required command feeds did not succeed. No live execution is claimed.'
+              : 'Only feeds that reported success are counted. This is not a live feed.'}
+          </p>
+        ) : null}
+        <p className="text-2xs text-muted-foreground">Offline board above is HISTORICAL — bounded authorization, not live execution.</p>
+      </div>
+    </Panel>
+  );
+}
+export { LiveDispatcherPanel };
 export { CommandBoardView };

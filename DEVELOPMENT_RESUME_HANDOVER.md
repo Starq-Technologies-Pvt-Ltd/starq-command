@@ -85,3 +85,18 @@ Restore Git history to a new path with `git clone <bundle-path> <checkout-path>`
 
 Final checkpoint and backup report is Room #15899; the continuity record is #15898. Previous recovery report is #15896 and verification addendum #15897.
 
+
+## 2026-10-30 Nightly Sync and Shutdown Handover
+
+This checkpoint supersedes the prior runtime snapshot for the current evening. It records branch preservation, not production acceptance or commissioning.
+
+- Command portfolio/roadmap/workforce changes in `pm-portfolio-convergence-20261028` are being saved to that branch. No merge to `main` is included.
+- ERP maturity Overview display and focused UI cases are in the isolated `codex/erp-maturity-display-20261029` branch. The source/type checks recorded in Room #16696 passed; the focused Vitest and live UI gates remain blocked by missing worktree dependencies and lifecycle preflight #16684.
+- The PM provenance accuracy worktree remains a separate WIP branch. Its source change and helper are preserved; no test result is claimed.
+- Runtime start remains blocked by the lifecycle preflight recorded at #16684. OMP's #16702 process check found StarqBot PID 37020 and Windows Vision Hermes PID 26280 to be separate process trees with no observed WSL/Deadpool link.
+- Vision's ERP RLS fixture change is committed on its own branch; the probe still fails at `accounting_periods` and is not accepted. OMP handed off the false-alert fix before editing (#16710).
+- Quota-limited seats remain in the Quota Hold workspace. No feature branch is merged into `main` as part of this handover.
+
+Before shutdown, post the final branch heads and test limitations in canonical Room, then run `D:\StarqTech\Stop-Starq.bat -StopAgents` as the final shutdown action. The script's default path includes StarqBot shutdown; do not use `-KeepBot`.
+
+Canonical Room handover: #16708; Vision #16709; OMP #16710. Follow-up closure record will hold the verified pushed heads and final stop result.

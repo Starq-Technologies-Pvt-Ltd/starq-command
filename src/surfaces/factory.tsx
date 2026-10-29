@@ -35,6 +35,8 @@ export function SoftwareFactorySurface() {
   const [busy, setBusy] = React.useState(false);
   const [statusMsg, setStatusMsg] = React.useState<string | null>(null);
   const [errorMsg, setErrorMsg] = React.useState<string | null>(null);
+  const [lastFetchAt, setLastFetchAt] = React.useState<string | null>(null);
+  const [fetchError, setFetchError] = React.useState<string | null>(null);
 
   // Active sub-view tab
   const [tab, setTab] = React.useState<'DISPATCH' | 'EXECUTIONS' | 'WORKFORCE' | 'CAPACITY' | 'STUCK' | 'EVENTS'>('DISPATCH');
@@ -42,6 +44,8 @@ export function SoftwareFactorySurface() {
   const loadAll = React.useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
+    setFetchError(null);
+    const startedAt = new Date().toISOString();
     try {
       const [tRes, pRes, wRes, cRes, sRes, eRes] = await Promise.all([
         commandTasks(),
@@ -64,8 +68,11 @@ export function SoftwareFactorySurface() {
       if (cRes.ok && cRes.data) setCapacity(cRes.data);
       if (sRes.ok && sRes.data) setStuck(sRes.data.stuckTasks || []);
       if (eRes.ok && eRes.data) setEvents(eRes.data.events || []);
+
+      setLastFetchAt(startedAt);
     } catch (err: any) {
       setUnavailableReason(err.message || 'Service unreachable');
+      setFetchError(err.message || 'Service unreachable');
     } finally {
       setLoading(false);
     }
@@ -233,6 +240,19 @@ export function SoftwareFactorySurface() {
         count={unavailableReason ? 'UNAVAILABLE' : (loading ? 'Loading...' : `${tasks.length} live tasks`)}
         toolbar={(
           <div className="flex items-center gap-1.5">
+            {lastFetchAt && (
+              <span
+                className="text-2xs font-mono text-muted-foreground"
+                title={`Last successful fetch: ${new Date(lastFetchAt).toISOString()}`}
+              >
+                ↑ {new Date(lastFetchAt).toLocaleTimeString()}
+              </span>
+            )}
+            {fetchError && (
+              <span className="text-2xs font-mono text-truth-drift" title={fetchError}>
+                ⚠ fetch error
+              </span>
+            )}
             <button
               type="button"
               className="go-link"
@@ -264,6 +284,26 @@ export function SoftwareFactorySurface() {
 
         {statusMsg ? <p role="status" className="px-3 pt-2 text-xs text-truth-ok">{statusMsg}</p> : null}
         {errorMsg ? <p role="alert" className="px-3 pt-2 text-xs text-truth-drift">{errorMsg}</p> : null}
+        {fetchError && !unavailableReason ? (
+          <p role="alert" className="px-3 pt-2 text-xs text-truth-drift">
+            Last fetch error: {fetchError}
+          </p>
+        ) : null}
+        {workforce?.observed_at && (
+          <p role="status" className="px-3 pt-1 text-2xs font-mono text-muted-foreground">
+            Workforce observed: {new Date(workforce.observed_at).toLocaleTimeString()}
+          </p>
+        )}
+        {capacity?.observed_at && (
+          <p role="status" className="px-3 pt-1 text-2xs font-mono text-muted-foreground">
+            Capacity observed: {new Date(capacity.observed_at).toLocaleTimeString()}
+          </p>
+        )}
+        {preview?.workforceObserved_at && (
+          <p role="status" className="px-3 pt-1 text-2xs font-mono text-muted-foreground">
+            Dispatch preview observed: {new Date(preview.workforceObserved_at).toLocaleTimeString()}
+          </p>
+        )}
 
         {/* Sub-navigation tabs */}
         <nav className="flex flex-wrap items-center gap-2 border-b border-border bg-card/20 px-3 py-2 text-2xs" aria-label="Factory Views">

@@ -649,7 +649,8 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         } else {
           return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
         }
-      } else if (!await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+      } else if (!doc.children.some((c) => c.name === 'herdrBroker' && c.status === 'EXITED' && c.tree_closeout_verified === true)
+        && !await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
         return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'missing broker record is not agent closeout proof' };
       }
       for (const name of topoOrder(cfg.components).map((c) => c.name).reverse()) {

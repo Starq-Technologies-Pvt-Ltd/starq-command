@@ -127,6 +127,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [filterPriority, setFilterPriority] = React.useState<string>('ALL');
   const [filterWorker, setFilterWorker] = React.useState<string>('ALL');
   const [filterEpicMilestone, setFilterEpicMilestone] = React.useState<string>('ALL');
+  const [filterPhaseSprint, setFilterPhaseSprint] = React.useState<string>('ALL');
   const [filterStage, setFilterStage] = React.useState<string>('ALL');
   const [filterProvenance, setFilterProvenance] = React.useState<string>('ALL');
   const [sortBy, setSortBy] = React.useState<'DEFAULT' | 'PRIORITY' | 'ID' | 'UPDATED'>('DEFAULT');
@@ -380,12 +381,18 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const allEpics = [...new Set(tasks.map((t) => t.epic).filter(Boolean) as string[])].sort();
   const allMilestones = [...new Set(tasks.map((t) => t.milestone).filter(Boolean) as string[])].sort();
   const allEpicsMilestones = [...new Set([...allEpics, ...allMilestones])];
+  const allPhaseSprint = [
+    ...new Set([
+      ...tasks.flatMap((t) => t.phase ? [`phase:${t.phase}`] : []),
+      ...tasks.flatMap((t) => t.sprint ? [`sprint:${t.sprint}`] : []),
+    ]),
+  ].sort();
 
   // Filter tasks
   const q = query.trim().toLowerCase();
   let visible = tasks.filter((t) => {
     if (q) {
-      const matchText = `${t.id} ${t.title} ${t.owner} ${t.status} ${t.stage ?? ''} ${(t.workers || []).join(' ')} ${t.epic ?? ''} ${t.milestone ?? ''}`.toLowerCase();
+      const matchText = `${t.id} ${t.title} ${t.owner} ${t.status} ${t.stage ?? ''} ${(t.workers || []).join(' ')} ${t.epic ?? ''} ${t.phase ?? ''} ${t.sprint ?? ''} ${t.milestone ?? ''} ${t.commit_sha ?? ''} ${t.pr_ref ?? ''}`.toLowerCase();
       if (!matchText.includes(q)) return false;
     }
     if (filterPriority !== 'ALL' && t.priority !== filterPriority) return false;
@@ -398,6 +405,12 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     }
     if (filterEpicMilestone !== 'ALL') {
       if (t.epic !== filterEpicMilestone && t.milestone !== filterEpicMilestone) return false;
+    }
+    if (filterPhaseSprint !== 'ALL') {
+      const separator = filterPhaseSprint.indexOf(':');
+      const kind = filterPhaseSprint.slice(0, separator);
+      const value = filterPhaseSprint.slice(separator + 1);
+      if ((kind === 'phase' ? t.phase : t.sprint) !== value) return false;
     }
     return true;
   });
@@ -475,6 +488,14 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             <select aria-label="Filter Epic/Milestone" value={filterEpicMilestone} onChange={(e) => setFilterEpicMilestone(e.target.value)}>
               <option value="ALL">Epic/Milestone: All</option>
               {allEpicsMilestones.map((em) => <option key={em} value={em}>{em}</option>)}
+            </select>
+          ) : null}
+          {allPhaseSprint.length > 0 ? (
+            <select aria-label="Filter Phase/Sprint" value={filterPhaseSprint} onChange={(e) => setFilterPhaseSprint(e.target.value)}>
+              <option value="ALL">Phase/Sprint: All</option>
+              {allPhaseSprint.map((entry) => (
+                <option key={entry} value={entry}>{entry.slice(0, entry.indexOf(':'))}: {entry.slice(entry.indexOf(':') + 1)}</option>
+              ))}
             </select>
           ) : null}
           <span className="ml-auto font-semibold text-muted-foreground">Sort:</span>
@@ -575,6 +596,14 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                               {t.milestone ? <span className="chip" data-tone="muted">M: {t.milestone}</span> : null}
                             </div>
                           ) : null}
+                          {(t.phase || t.sprint || t.commit_sha || t.pr_ref) ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {t.phase ? <span className="chip" data-tone="muted">Phase: {t.phase}</span> : null}
+                              {t.sprint ? <span className="chip" data-tone="muted">Sprint: {t.sprint}</span> : null}
+                              {t.commit_sha ? <span className="chip mono" data-tone="room" title={t.commit_sha}>Commit: {t.commit_sha.slice(0, 10)}</span> : null}
+                              {t.pr_ref ? <span className="chip mono" data-tone="room">{t.pr_ref}</span> : null}
+                            </div>
+                          ) : null}
 
                           {/* Multi-Agent Workers & Governance Stage indicator */}
                           <div className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
@@ -663,11 +692,15 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               ) : null}
             </div>
 
-            {/* Epics, Sprints, Milestones, Release Track */}
+            {/* Existing Nexus fidelity fields; values remain claims until reconciled. */}
             <dl className="grid grid-cols-2 gap-2 rounded border border-border bg-card/30 p-2 text-2xs sm:grid-cols-4">
               <div>
                 <dt className="text-muted-foreground">Epic</dt>
                 <dd className="mono font-medium text-foreground">{detail.task.epic || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Phase</dt>
+                <dd className="font-medium text-foreground">{detail.task.phase || '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Sprint</dt>
@@ -681,7 +714,25 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                 <dt className="text-muted-foreground">Release Track</dt>
                 <dd className="mono font-medium text-foreground">{detail.task.release_track || '—'}</dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Lane / Module / Group</dt>
+                <dd className="font-medium text-foreground">{[detail.task.lane, detail.task.module, detail.task.task_group].filter(Boolean).join(' · ') || '—'}</dd>
+              </div>
             </dl>
+
+            {(detail.task.commit_sha || detail.task.merge_commit || detail.task.commits_json || detail.task.pr_ref || detail.task.pr_url || detail.task.branch || detail.task.worktree) ? (
+              <Panel title="GitHub and worktree references" count="REFERENCES ONLY">
+                <dl className="body grid grid-cols-1 gap-1 text-2xs sm:grid-cols-2">
+                  <div><dt className="text-muted-foreground">Branch</dt><dd className="mono break-all">{detail.task.branch || '—'}</dd></div>
+                  <div><dt className="text-muted-foreground">Commit</dt><dd className="mono break-all">{detail.task.commit_sha || '—'}</dd></div>
+                  <div><dt className="text-muted-foreground">Merge commit</dt><dd className="mono break-all">{detail.task.merge_commit || '—'}</dd></div>
+                  <div><dt className="text-muted-foreground">PR</dt><dd className="mono break-all">{[detail.task.pr_ref, detail.task.pr_url].filter(Boolean).join(' · ') || '—'}</dd></div>
+                  <div><dt className="text-muted-foreground">Worktree</dt><dd className="mono break-all">{detail.task.worktree || '—'}</dd></div>
+                  {detail.task.commits_json ? <div className="sm:col-span-2"><dt className="text-muted-foreground">Commit history</dt><dd className="mono break-all">{detail.task.commits_json}</dd></div> : null}
+                </dl>
+                <p className="px-3 pb-2 text-2xs text-muted-foreground">Stored references only. Repository reconciliation determines whether each commit exists and is integrated.</p>
+              </Panel>
+            ) : null}
 
             {/* Multi-Agent Workers Array */}
             <div className="flex flex-wrap items-center gap-1.5 rounded border border-border/60 bg-surface-0/40 p-2 text-2xs">
@@ -932,6 +983,38 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                   ))}
                 </ul>
               </Panel>
+            ) : null}
+
+            {(detail.task.nexus_attributes || detail.task.requirements_json || detail.task.from_decision_json || detail.task.dependencies_json || detail.task.children_json || detail.task.related_json || detail.task.blocked_by_json || detail.task.contributors_json || detail.task.review_note || detail.task.notes_raw || detail.task.evidence_json || detail.task.verification_json) ? (
+              <details className="rounded border border-border p-3" data-task-fidelity="">
+                <summary className="cursor-pointer text-xs text-muted-foreground">Additional preserved fidelity fields</summary>
+                <div className="mt-2 grid gap-2">
+                  {([
+                    ['Requirements', detail.task.requirements_json],
+                    ['Decision links', detail.task.from_decision_json],
+                    ['Dependency details', detail.task.dependencies_json],
+                    ['Children', detail.task.children_json],
+                    ['Related work', detail.task.related_json],
+                    ['Blocked by', detail.task.blocked_by_json],
+                    ['Contributors', detail.task.contributors_json],
+                    ['Evidence details', detail.task.evidence_json],
+                    ['Verification details', detail.task.verification_json],
+                    ['Review note', detail.task.review_note],
+                    ['Raw notes', detail.task.notes_raw],
+                  ] as const).filter(([, value]) => value).map(([label, value]) => (
+                    <div key={label} className="grid gap-1">
+                      <strong className="text-2xs text-muted-foreground">{label}</strong>
+                      <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words text-2xs">{value}</pre>
+                    </div>
+                  ))}
+                  {detail.task.nexus_attributes ? (
+                    <div className="grid gap-1">
+                      <strong className="text-2xs text-muted-foreground">Complete Nexus attributes</strong>
+                      <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words text-2xs">{JSON.stringify(detail.task.nexus_attributes, null, 2)}</pre>
+                    </div>
+                  ) : null}
+                </div>
+              </details>
             ) : null}
 
             {/* Original Nexus Source Payload */}

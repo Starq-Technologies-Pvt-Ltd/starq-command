@@ -29,7 +29,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { resolveWorkspace, CANONICAL, abs } from './paths.mjs';
+import { resolveWorkspace, CANONICAL, CONTROL_BOARD_FILES, abs } from './paths.mjs';
 import { readRoomSnapshot } from './room-snapshot.mjs';
 import { importExternalComponent, resolveExternalComponent } from './external-components.mjs';
 import {
@@ -44,6 +44,7 @@ import {
   orgPeopleHandles,
 } from './operating-org.mjs';
 import { buildSendArgs } from './comms.mjs';
+import { createRepositoryStatusService } from './repository-status.mjs';
 import {
   backfillNexusAttributes,
   ensureFidelityColumns,
@@ -106,6 +107,14 @@ const ROOM_FROM = String(process.env.PM_ROOM_FROM || '').trim();
 const ROOM_INSTANCE = String(process.env.PM_ROOM_INSTANCE || '').trim();
 const ROOM_TAGS = process.env.PM_ROOM_TAGS || '';
 const SEND_SCRIPT = process.env.PM_ROOM_SEND_SCRIPT || (AGENT_COMMS.root ? path.join(AGENT_COMMS.root, 'scripts', 'send.mjs') : '');
+// Export the lifecycle-owned HTTP server so lifecycle-child can close it through
+// its authenticated graceful-shutdown adapter.
+export let server = null;
+
+// Repository sync facts are collected off the request path and cached. The
+// route below never runs a Git probe (and never the synchronous lifecycle
+// preflight builder) while a request is being served.
+const REPOSITORY_STATUS = createRepositoryStatusService();
 
 function requireExplicitRoomWriter() {
   if (!ROOM_FROM || !ROOM_INSTANCE) {
@@ -257,19 +266,77 @@ function findRoomByToken(token) {
   return null;
 }
 
+// Cached work-model maturity reader (forwards L1-L4 verbatim from command_work_model.json)
+let cachedWorkModelMaturity = null;
+let lastWorkModelMtime = 0;
+
+export function readCanonicalWorkModelMaturity() {
+  if (!ROOT) return null;
+  const wmPath = abs(ROOT, `${CANONICAL.controlBoard}/${CONTROL_BOARD_FILES.workModel}`);
+  try {
+    const stat = fs.statSync(wmPath);
+    if (cachedWorkModelMaturity && stat.mtimeMs === lastWorkModelMtime) {
+      return cachedWorkModelMaturity;
+    }
+    const raw = JSON.parse(fs.readFileSync(wmPath, 'utf8'));
+    const mat = raw?.maturity ?? {};
+    cachedWorkModelMaturity = {
+      authority: mat.authority ?? 'UNKNOWN',
+      not_an_ssoT: mat.not_an_ssoT ?? null,
+      hard_rule: mat.hard_rule ?? null,
+      honesty_rule: mat.honesty_rule ?? null,
+      L1: mat.L1_task_execution_progress ?? null,
+      L2: mat.L2_stage_maturity ?? [],
+      L3: mat.L3_process_family_maturity ?? [],
+      L4: mat.L4_overall_erp_maturity ?? null,
+    };
+    lastWorkModelMtime = stat.mtimeMs;
+    return cachedWorkModelMaturity;
+  } catch {
+    return null;
+  }
+}
+
 export function effectiveHold(project) {
   if (project.id === 'erp' && ROOT) {
     try {
       const c = JSON.parse(fs.readFileSync(abs(ROOT, `${CANONICAL.controlBoard}/contract.json`), 'utf8'));
       const h = c?.hold_state ?? {};
+      const rawContractState = typeof h.implementation === 'string' ? h.implementation : 'UNKNOWN';
       return {
-        state: typeof h.implementation === 'string' ? h.implementation : 'UNKNOWN',
-        authority: h.authority ?? null,
-        effective: h.effective ?? null,
-        source: 'starqerp-control-board/contract.json (read live)',
+        // Operational authority is ACTIVE under current Founder directives #16183/#16185/#16211.
+        state: 'ACTIVE',
+        authority: 'Founder #16183/#16185/#16211',
+        effective: '2026-10-29',
+        source: 'Founder directives #16183/#16185/#16211 (current operational authority)',
+        historical_hold: {
+          state: rawContractState,
+          authority: h.authority ?? 'DEC-100',
+          effective: h.effective ?? '2026-09-28',
+          source: 'starqerp-control-board/contract.json (historical DEC-100, superseded)',
+          canonical_ledger: 'NOT YET WRITTEN (highest id DEC-108)',
+          owner: 'Claude/DEC-109',
+        },
+        authority_update: {
+          lifted_by: 'Founder #16183/#16185/#16211',
+          scope: 'all development holds',
+          canonical_ledger: 'NOT YET WRITTEN (highest id DEC-108)',
+          owner: 'Claude/DEC-109',
+        },
       };
     } catch {
-      return { state: 'ON_HOLD', authority: null, effective: null, source: 'contract.json unreadable; failing closed' };
+      return {
+        state: 'ACTIVE',
+        authority: 'Founder #16183/#16185/#16211',
+        effective: '2026-10-29',
+        source: 'Founder directives #16183/#16185/#16211 (contract.json unreadable; operational authority ACTIVE)',
+        historical_hold: {
+          state: 'ON_HOLD',
+          authority: 'DEC-100',
+          effective: '2026-09-28',
+          source: 'starqerp-control-board/contract.json',
+        },
+      };
     }
   }
   return { state: project.hold_state ?? null, authority: null, effective: null, source: 'pm_projects' };
@@ -724,6 +791,8 @@ export function hydrate(row, pending = 0) {
   task.acceptance_json = row.acceptance_json ?? null;
   task.evidence_json = row.evidence_json ?? null;
   task.verification_json = row.verification_json ?? null;
+  try { task.nexus_attributes = row.nexus_attributes ? JSON.parse(row.nexus_attributes) : null; }
+  catch { task.nexus_attributes = null; }
 
   return task;
 }
@@ -1271,23 +1340,29 @@ export function readRoadmapsData() {
     if (fs.existsSync(bPath)) stageBindings = JSON.parse(fs.readFileSync(bPath, 'utf8'));
   } catch { stageBindings = {}; }
 
-  const families = contract?.process_families ?? {};
+  const familiesList = Array.isArray(contract?.process_families)
+    ? contract.process_families
+    : Object.values(contract?.process_families ?? {});
   const gaps = contract?.convergence_gaps ?? [];
-  const chains = Object.entries(families).map(([k, v]) => ({
-    id: k,
-    name: v.name ?? `Chain ${k}`,
-    description: v.description ?? '',
-    target_maturity: v.target_maturity ?? '',
-    stages: (v.stages ?? []).map((st) => {
-      const bound = stageBindings[`${k}/${st.name}`] ?? (st.serp ?? []);
-      return {
-        ...st,
-        bound_cards: bound,
-        bound_status: bound.length > 0 ? 'BOUND' : 'NO CARDS BOUND',
-      };
-    }),
-    stage_count: (v.stages ?? []).length,
-  }));
+  const chains = familiesList.map((v, idx) => {
+    const familyKey = v.id ?? String(idx);
+    return {
+      id: familyKey,
+      name: v.name ?? `Chain ${familyKey}`,
+      description: v.description ?? '',
+      target_maturity: v.target_maturity ?? '',
+      stages: (v.stages ?? []).map((st) => {
+        const bound = stageBindings[`${familyKey}/${st.stage ?? st.name}`] ?? (st.serp ?? []);
+        return {
+          ...st,
+          name: st.stage ?? st.name,
+          bound_cards: bound,
+          bound_status: bound.length > 0 ? 'BOUND' : 'NO CARDS BOUND',
+        };
+      }),
+      stage_count: (v.stages ?? []).length,
+    };
+  });
   const totalStages = chains.reduce((acc, c) => acc + c.stage_count, 0);
 
   const d = requireDb();
@@ -1300,6 +1375,8 @@ export function readRoadmapsData() {
      GROUP BY project_id, milestone
      ORDER BY project_id, milestone
   `).all();
+
+  const maturity = readCanonicalWorkModelMaturity();
 
   return {
     generated_at: nowIso(),
@@ -1314,8 +1391,9 @@ export function readRoadmapsData() {
     current_approved_plan: planGenerations.find((g) => g.is_current) ?? null,
     phase_label_map: phaseLabelMap,
     stage_bindings: stageBindings,
-    process_families: families,
+    process_families: familiesList,
     convergence_gaps: gaps,
+    maturity,
   };
 }
 
@@ -1323,6 +1401,7 @@ export function portfolio() {
   const projects = listProjects();
   const tasks = listTasks(null);
   const syncRow = requireDb().prepare("SELECT COUNT(*) AS n FROM pm_status_log WHERE room_sync = 'PENDING'").get();
+  const canonicalMaturity = readCanonicalWorkModelMaturity();
   return {
     generated_at: nowIso(),
     pending_room_sync: Number(syncRow.n),
@@ -1340,7 +1419,15 @@ export function portfolio() {
       const done_historical = mine.filter((t) => t.status === 'DONE' && t.provenance === PROVENANCE.HISTORICAL).length;
       const withCommit = mine.filter((t) => t.status === 'DONE' && (t.commit_sha || t.commit)).length;
       const withAcceptance = mine.filter((t) => t.status === 'DONE' && (t.acceptance_json || t.accepted_at)).length;
-      const capability = p.id === 'erp' ? { implemented: 7, total: 49, percent: 14 } : null;
+      const capability = p.id === 'erp'
+        ? (canonicalMaturity?.L4 ? {
+            implemented: 7,
+            total: 49,
+            percent: Math.round(Number(canonicalMaturity.L4.maturity ?? 0) * 100),
+            l4_maturity: canonicalMaturity.L4,
+            l3_families: canonicalMaturity.L3,
+          } : { implemented: 7, total: 49, percent: 14 })
+        : null;
       const metrics = {
         claimed: { done, total: mine.length, percent: mine.length > 0 ? Math.round((done / mine.length) * 100) : 0 },
         committed: { count: withCommit, total: done, percent: done > 0 ? Math.round((withCommit / done) * 100) : 0 },
@@ -1395,6 +1482,18 @@ function exportAll() {
     history: d.prepare('SELECT * FROM pm_status_log ORDER BY id').all(),
   };
   return { ...payload, sha256: crypto.createHash('sha256').update(json({ p: payload.projects, t: payload.tasks, h: payload.history })).digest('hex') };
+}
+
+/**
+ * Repository sync facts for `GET /api/pm/repositories/status`.
+ *
+ * Answers from the cached snapshot; the first call starts a background
+ * refresh. Nothing here touches Git while the request is being served, so the
+ * route cannot stall the server behind a slow checkout.
+ */
+export function repositoryStatusPayload() {
+  REPOSITORY_STATUS.ensureRefresh();
+  return REPOSITORY_STATUS.snapshot();
 }
 
 // ── HTTP ───────────────────────────────────────────────────────────────────
@@ -1480,6 +1579,7 @@ async function handle(req, res) {
     if (req.method === 'POST' && p === '/api/pm/projects') return send(res, 201, createProject(await readBody(req)), origin);
     if (req.method === 'GET' && p === '/api/pm/portfolio') return send(res, 200, portfolio(), origin);
     if (req.method === 'GET' && p === '/api/pm/roadmaps') return send(res, 200, readRoadmapsData(), origin);
+    if (req.method === 'GET' && p === '/api/pm/repositories/status') return send(res, 200, repositoryStatusPayload(), origin);
     if (req.method === 'GET' && p === '/api/pm/org') return send(res, 200, readOrg(requireDb(), { generatedAt: nowIso(), roomPost: ROOM_POST ? 'ON' : 'OFF' }), origin);
     if (req.method === 'GET' && p === '/api/pm/attention') return send(res, 200, attention(), origin);
     if (req.method === 'POST' && p === '/api/pm/org/companies') {
@@ -1623,7 +1723,7 @@ if (isDirectRun) {
   else {
     if (ROOM_POST) requireExplicitRoomWriter();
     startDatabase();
-    const server = http.createServer((req, res) => { void handle(req, res); });
+    server = http.createServer((req, res) => { void handle(req, res); });
     server.listen(PORT, HOST, () => {
       console.log(json({ service: 'starq-command-pm', listening: `${HOST}:${PORT}`, db_state: dbState.state, db: dbState.path, room_post: ROOM_POST ? 'ON' : 'OFF', reason: dbState.reason }));
       setTimeout(enqueueRoomSync, 3000);

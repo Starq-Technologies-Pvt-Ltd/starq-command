@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { JSDOM } from 'jsdom';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+vi.mock('@/lib/command-client', () => ({
+  commandTasks: vi.fn(),
+  commandDispatchPreview: vi.fn(),
+  commandRoomEvents: vi.fn(),
+}));
 import boardRaw from '../board/command-board.json?raw';
 import schemaRaw from '../board/board-schema.json?raw';
 import manifestRaw from '../board/board-manifest.json?raw';
@@ -10,7 +19,8 @@ import {
   loadCommandBoard,
   validateCommandBoardBundle,
 } from '../src/lib/command-board';
-import { CommandBoardView } from '../src/surfaces/command-board';
+import { CommandBoardSurface, CommandBoardView } from '../src/surfaces/command-board';
+import { commandDispatchPreview, commandRoomEvents, commandTasks } from '@/lib/command-client';
 
 const raw = { board: boardRaw, schema: schemaRaw, manifest: manifestRaw };
 
@@ -164,5 +174,110 @@ describe('separate read-only Command task input', () => {
     expect(html).not.toContain('<input');
     expect(html).not.toContain('<form');
     expect(html).not.toContain('draggable=');
+  });
+});
+describe('live dispatcher surface', () => {
+  const boardAssets = new Map([
+    ['command-board.json', raw.board],
+    ['board-schema.json', raw.schema],
+    ['board-manifest.json', raw.manifest],
+  ]);
+
+  function feedOk<T>(data: T) {
+    return Promise.resolve({ ok: true as const, status: 200, data });
+  }
+
+  function feedFail() {
+    return Promise.resolve({ ok: false as const, status: 503, error: 'feed unavailable' });
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', async (input: unknown) => {
+      const href = input instanceof URL ? input.href : String(input);
+      const name = href.split('/').pop()?.split('?')[0] ?? '';
+      const body = boardAssets.get(name);
+      return {
+        ok: body !== undefined,
+        status: body !== undefined ? 200 : 404,
+        text: async () => body ?? '',
+        json: async () => ({}),
+      };
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
+  });
+
+  async function renderLoadedSurface(): Promise<string> {
+    const dom = new JSDOM('<!DOCTYPE html><html><body><div id="root"></div></body></html>');
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    globalThis.window = dom.window as unknown as typeof window;
+    globalThis.document = dom.window.document;
+    const root = createRoot(dom.window.document.getElementById('root')!);
+    await act(async () => {
+      root.render(<CommandBoardSurface />);
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    const html = dom.window.document.getElementById('root')?.innerHTML ?? '';
+    await act(async () => {
+      root.unmount();
+    });
+    dom.window.close();
+    globalThis.window = previousWindow;
+    globalThis.document = previousDocument;
+    return html;
+  }
+
+  it('keeps the dispatcher visible and LIVE only after every required feed succeeds', async () => {
+    vi.mocked(commandTasks).mockImplementation(() => feedOk({ ok: true, count: 2, tasks: [{ taskId: 'A' }, { taskId: 'B' }] }));
+    vi.mocked(commandDispatchPreview).mockImplementation(() => feedOk({ eligible: [], blocked: [], workforceObservedAt: null }));
+    vi.mocked(commandRoomEvents).mockImplementation(() => feedOk({ ok: true, state: 'OK', events: [{ eventId: 'e1' }] }));
+
+    const html = await renderLoadedSurface();
+
+    expect(html).toContain('33 historical rows');
+    expect(html).toContain('Live dispatcher activity (read-only)</h2><span class="chip" data-tone="muted">2 tasks</span>');
+    expect(html).toContain('title="LIVE"');
+    expect(html).toContain('available (not executed)');
+    expect(html).not.toContain('>CHECKING<');
+    expect(html).not.toContain('<button');
+    expect(html).not.toContain('<input');
+    expect(html).not.toContain('<form');
+    expect(html).not.toContain('draggable=');
+  });
+
+  it('stays visible and STALE when only some required feeds succeed', async () => {
+    vi.mocked(commandTasks).mockImplementation(() => feedOk({ ok: true, count: 1, tasks: [{ taskId: 'A' }] }));
+    vi.mocked(commandDispatchPreview).mockImplementation(() => feedFail());
+    vi.mocked(commandRoomEvents).mockImplementation(() => feedOk({ ok: true, state: 'OK', events: [{ eventId: 'e1' }] }));
+
+    const html = await renderLoadedSurface();
+
+    expect(html).toContain('33 historical rows');
+    expect(html).toContain('Live dispatcher activity (read-only)</h2><span class="chip" data-tone="muted">STALE</span>');
+    expect(html).toContain('Tasks shown:</strong> 1');
+    expect(html).toContain('Dispatch preview:</strong> unavailable');
+    expect(html).toContain('Room events:</strong> 1');
+    expect(html).toContain('Only feeds that reported success are counted.');
+    expect(html).not.toContain('title="LIVE"');
+  });
+
+  it('stays visible and UNAVAILABLE when required feeds resolve ok:false', async () => {
+    vi.mocked(commandTasks).mockImplementation(() => feedFail());
+    vi.mocked(commandDispatchPreview).mockImplementation(() => feedFail());
+    vi.mocked(commandRoomEvents).mockImplementation(() => feedFail());
+
+    const html = await renderLoadedSurface();
+
+    expect(html).toContain('33 historical rows');
+    expect(html).toContain('Live dispatcher activity (read-only)</h2><span class="chip" data-tone="muted">UNAVAILABLE</span>');
+    expect(html).toContain('Required command feeds did not succeed.');
+    expect(html).toContain('Tasks shown:</strong> 0');
+    expect(html).not.toContain('title="LIVE"');
   });
 });
