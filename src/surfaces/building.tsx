@@ -39,6 +39,7 @@ import { LibrarySurface } from '@/surfaces/library';
 import { CortexSurface } from '@/surfaces/cortex';
 import { CommsSurface } from '@/surfaces/comms';
 import { ErpRoom } from '@/surfaces/erp-room';
+import { ErpRoadmapSurface } from '@/surfaces/erp-roadmap';
 import { HoadhaRoom } from '@/surfaces/hoadha-room';
 import { IntegritySurface } from '@/surfaces/integrity';
 import { StaffSurface } from '@/surfaces/staff';
@@ -52,6 +53,7 @@ import { WorkPackagesRoute } from '@/surfaces/work-packages-route';
 import { StudioGroupLegend } from '@/components/shell';
 import { CommandBoardSurface } from '@/surfaces/command-board';
 import { PmBoardSurface } from '@/surfaces/pm-board';
+import { SoftwareFactorySurface } from '@/surfaces/factory';
 import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
 import { HistoricalPmSurface } from '@/surfaces/historical-pm';
 
@@ -1215,6 +1217,8 @@ function RoomContent({
   }
 
   if (route.room === 'erp') {
+    if (route.tab === 'Roadmap')
+      return <ErpRoadmapSurface />;
     if (route.tab === 'Tasks')
       return <PmBoardSurface projectId="erp" />;
     if (route.tab === 'Process')
@@ -1282,13 +1286,25 @@ function StudioContent({ route, surface }: { route: BuildingRoute; surface: Comm
       ? <IntegritySurface building={surface.building} project="erp" surface={surface} />
       : <SourceGap reason="Building projection unavailable." />;
   if (route.tab === 'Herdr')
-    return <HerdrSurface />;
-  if (route.tab === 'Projects')
     return (
+      <>
+        <SoftwareFactorySurface />
+        <HerdrSurface />
+      </>
+    );
+  if (route.tab === 'Projects')
+    return route.projectId ? (
+      <PmBoardSurface projectId={route.projectId} />
+    ) : (
       <>
         <PmPortfolioSurface />
         <DevStudio tab={route.tab} surface={surface} />
-        <CommandBoardSurface />
+        <details className="mt-4">
+          <summary className="cursor-pointer text-[11px] text-muted-foreground">
+            Offline MODS Baseline Projection (#9455)
+          </summary>
+          <CommandBoardSurface />
+        </details>
       </>
     );
   return <DevStudio tab={route.tab} surface={surface} />;
@@ -1359,7 +1375,21 @@ export function BuildingSurface({
   if (pmRoute) {
     return (
       <div className="room-root" data-room="studio" data-pm-route={pmRoute.project ?? 'portfolio'}>
-        {pmRoute.project ? <PmBoardSurface projectId={pmRoute.project} /> : <PmPortfolioSurface />}
+        {pmRoute.project ? (
+          <PmBoardSurface projectId={pmRoute.project} />
+        ) : (
+          <>
+            <PmPortfolioSurface />
+            <details className="mt-4 border-t border-border px-4 py-3">
+              <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                Offline MODS Baseline Projection (#9455)
+              </summary>
+              <div className="mt-2">
+                <CommandBoardSurface />
+              </div>
+            </details>
+          </>
+        )}
       </div>
     );
   }
@@ -1478,7 +1508,7 @@ export function BuildingSurface({
 
   // Studio has its own floor-backed surfaces. An absent Building projection
   // must not hide their content or the navigation between them.
-  if (route.view === 'studio' && !isProjectRoom && !route.projectId)
+  if (route.view === 'studio' && !isProjectRoom)
     return (
       <div className="room-root" data-room="studio">
         <StudioHeadline building={b} />

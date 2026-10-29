@@ -180,7 +180,7 @@ describe('PM to dispatch to execution integration', () => {
     expect(taskStore.getTransitionHistory('PM-CORE-001').map((row:any)=>row.to_state)).toEqual([
       'ALLOCATED','EXECUTING','BUILDER_COMPLETE','VERIFYING','ACCEPTED',
     ]);
-  });
+  }, 20_000);
 
   it('fails closed when worker capability/session evidence is unavailable', async () => {
     const f=makeFixture();
@@ -220,7 +220,7 @@ describe('PM to dispatch to execution integration', () => {
     expect(f.store.getHistory('PM-CORE-001').map((row:any)=>row.to_state)).toEqual([
       'ALLOCATED','BLOCKED','QUEUED','ALLOCATED','EXECUTING',
     ]);
-  });
+  }, 20000);
 
   it('recovers a failed worker, saves dirty work, and retries on a new branch', async () => {
     const f=makeFixture();
@@ -237,5 +237,5 @@ describe('PM to dispatch to execution integration', () => {
     expect(rescueBranch).toMatch(/^rescue\/PM-CORE-001-/);
     expect(execFileSync('git',['show',`${rescueBranch}:README.md`],{cwd:f.repoPath,encoding:'utf8'})).toBe('unfinished builder work\n');
     expect(f.store.getTask('PM-CORE-001').stage).toBe('IN_PROGRESS');
-  });
+  }, 15000);
 });

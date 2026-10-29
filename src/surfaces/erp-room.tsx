@@ -24,6 +24,7 @@ import type { BuildingProjection, CommandSurface } from '@/lib/contracts';
 import { FocusRail } from '@/components/console';
 import { AboutMethod, PeerWorkHeader } from '@/components/work-area';
 import { ProjectBoard } from '@/surfaces/project-board';
+import { PmBoardSurface } from '@/surfaces/pm-board';
 import { OverviewSurface } from '@/surfaces/overview';
 import { StaffSurface } from '@/surfaces/staff';
 import { IntegritySurface } from '@/surfaces/integrity';
@@ -172,11 +173,17 @@ export function ErpRoom({
         ) : tab === 'Tasks' ? (
           <>
             <PeerWorkHeader peer="Tasks" question={ERP_PEERS.Tasks} />
+            <PmBoardSurface projectId="erp" />
+            <details className="mt-4">
+              <summary className="cursor-pointer text-[11px] text-muted-foreground">
+                Canonical projected task records ({building.erp_tasks?.length ?? 0})
+              </summary>
             <ProjectBoard
               records={building.erp_tasks}
               label="Canonical ERP task records"
               projectLabel="starqERP"
             />
+            </details>
             {/*
               WF-HIER-01. The reading note was a `FocusRail` — a full-width
               block above the list, on every render, before the work. It is now

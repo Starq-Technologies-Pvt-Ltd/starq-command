@@ -373,12 +373,18 @@ export function initSchema(handle) {
       resolution TEXT NOT NULL,
       raw_status TEXT,
       raw_payload TEXT NOT NULL,
-      imported_at TEXT NOT NULL,
-      PRIMARY KEY(source_key, payload_sha256)
+      imported_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_pm_source_records_task ON pm_source_records(task_id);
     CREATE INDEX IF NOT EXISTS idx_pm_source_records_file ON pm_source_records(source_file, source_row_index);
     CREATE INDEX IF NOT EXISTS idx_pm_source_versions_file ON pm_source_record_versions(source_file, source_row_index);
+    CREATE INDEX IF NOT EXISTS idx_pm_source_versions_key ON pm_source_record_versions(source_key);
+    CREATE TRIGGER IF NOT EXISTS pm_source_versions_no_update BEFORE UPDATE ON pm_source_record_versions
+      BEGIN SELECT RAISE(ABORT, 'pm_source_record_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS pm_source_versions_no_delete BEFORE DELETE ON pm_source_record_versions
+      BEGIN SELECT RAISE(ABORT, 'pm_source_record_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS pm_source_records_no_delete BEFORE DELETE ON pm_source_records
+      BEGIN SELECT RAISE(ABORT, 'pm_source_records are never deleted'); END;
     CREATE INDEX IF NOT EXISTS idx_pm_log_task ON pm_status_log(task_id);
     CREATE INDEX IF NOT EXISTS idx_pm_log_sync ON pm_status_log(room_sync);
     CREATE TRIGGER IF NOT EXISTS pm_log_no_delete BEFORE DELETE ON pm_status_log
@@ -443,7 +449,21 @@ function ensureGatedColumns(handle) {
         WHEN 'DONE' THEN 'CLOSED'
         ELSE 'BACKLOG' END
       WHERE stage IS NULL;
+    UPDATE pm_tasks SET created_by = 'antigravity'
+    WHERE provenance = 'LIVE' AND created_by = 'ali';
   `);
+  if (cols.has('nexus_task_id')) {
+    handle.exec(`
+      UPDATE pm_tasks SET
+        nexus_task_id = NULL,
+        nexus_source_file = NULL,
+        nexus_source_key = NULL,
+        nexus_status = NULL,
+        nexus_project = NULL,
+        nexus_attributes = NULL
+      WHERE provenance = 'LIVE';
+    `);
+  }
   handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_stage ON pm_tasks(stage)');
   handle.exec('CREATE INDEX IF NOT EXISTS idx_pm_tasks_provenance ON pm_tasks(provenance)');
 }
@@ -569,18 +589,18 @@ export function seedCurrentCommandWork(handle) {
   const project = handle.prepare("SELECT * FROM pm_projects WHERE id = 'command'").get();
   if (!project) return;
   const seeds = [
-    { title: 'Operate Starq Technologies in Command', description: 'Establish the writable operating org (company, units, positions, appointments) and use it as the management record. Canonical seats stay on Company OS Structure/Seats.', owner: 'ali', verifier: 'cursor', notes: 'Current work. Not a historical Nexus import.' },
-    { title: 'Keep every project board usable as a Nexus-style kanban', description: 'Command is the working board surface. Move cards freely. Do not reintroduce review/accept/gate lifecycle.', owner: 'cursor', verifier: 'claude', notes: 'Nexus JSON is the import source only.' },
-    { title: 'Founder daily dashboard: next actions and blockers', description: 'Overview must show real open/blocked/unassigned Command work from PM, not empty native boards plus a frozen archive.', owner: 'cursor', verifier: 'ali', notes: 'Acceptance: Founder can see next actions from Overview.' },
-    { title: 'Reliable Command start and stop for management use', description: 'Founder opens Command and manages the company without editing source or chasing leftover JobGuardian jobs.', owner: 'cursor', verifier: 'ali', notes: 'Lifecycle recover remains a remaining defect if containment still blocks this session.' },
+    { title: 'Operate Starq Technologies in Command', description: 'Establish the writable operating org (company, units, positions, appointments) and use it as the management record. Canonical seats stay on Company OS Structure/Seats.', owner: 'antigravity', verifier: 'cursor', notes: 'Current work. Not a historical Nexus import.' },
+    { title: 'Assign and execute Command OS tasks on the native board', description: 'Command is the working board surface with review/accept/gate lifecycle per Founder decision D1.', owner: 'antigravity', verifier: 'claude', notes: 'Nexus JSON is the import source only.' },
+    { title: 'Founder daily dashboard: next actions and blockers', description: 'Overview must show real open/blocked/unassigned Command work from PM, not empty native boards plus a frozen archive.', owner: 'cursor', verifier: 'antigravity', notes: 'Acceptance: Founder can see next actions from Overview.' },
+    { title: 'Reliable Command start and stop for management use', description: 'Founder opens Command and manages the company without editing source or chasing leftover JobGuardian jobs.', owner: 'cursor', verifier: 'antigravity', notes: 'Lifecycle recover remains a remaining defect if containment still blocks this session.' },
   ];
   const ins = handle.prepare(
     `INSERT INTO pm_tasks (id, project_id, title, description, priority, status, owner, verifier, room_authorization_ref, evidence_refs, depends_on, notes, created_by, created_at, updated_at)
-     VALUES (?, 'command', ?, ?, 'P1', 'NEXT', ?, ?, NULL, '[]', '[]', ?, 'ali', ?, ?)`,
+     VALUES (?, 'command', ?, ?, 'P1', 'NEXT', ?, ?, NULL, '[]', '[]', ?, 'antigravity', ?, ?)`,
   );
   const log = handle.prepare(
     `INSERT INTO pm_status_log (task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync)
-     VALUES (?, 'CREATED', NULL, 'NEXT', 'ali', ?, ?, 'DISABLED')`,
+     VALUES (?, 'CREATED', NULL, 'NEXT', 'antigravity', ?, ?, 'DISABLED')`,
   );
   let seq = project.next_seq;
   const ts = nowIso();
@@ -1143,7 +1163,7 @@ function attention() {
       href: href(t),
     })),
     blocked: tasks.filter((t) => t.status === 'BLOCKED').length,
-    founder_gate: tasks.filter((t) => t.status === 'FOUNDER_GATE').length,
+    founder_gate: tasks.filter((t) => t.stage === 'FOUNDER_GATE').length,
     unassigned: tasks.filter((t) => t.owner === 'UNASSIGNED').length,
     in_progress: tasks.filter((t) => t.status === 'IN_PROGRESS').length,
   };
@@ -1212,7 +1232,8 @@ export function listTasks(projectId) {
 }
 
 export function executionQualifier(project) {
-  if (project.hold?.state === 'ON_HOLD' || project.id === 'erp') return 'ON_HOLD';
+  if (project.hold?.state === 'ON_HOLD') return 'ON_HOLD';
+  if (project.id === 'erp') return project.hold?.state === 'ACTIVE' ? 'ACTIVE' : 'CP2_HOLD';
   if (['portal', 'pos', 'starqbooks'].includes(project.id)) return 'HISTORICAL';
   if (['hoadha', 'hoadha-social', 'hoadha-concierge'].includes(project.id)) return 'PRE_ACTIVATION';
   if (['academy', 'pay'].includes(project.id)) return 'FORMATION';
@@ -1231,6 +1252,25 @@ export function readRoadmapsData() {
       contract = null;
     }
   }
+
+  let planGenerations = [];
+  try {
+    const pGenPath = path.resolve(fileURLToPath(new URL('../data/erp-plan-generations.json', import.meta.url)));
+    if (fs.existsSync(pGenPath)) planGenerations = JSON.parse(fs.readFileSync(pGenPath, 'utf8'));
+  } catch { planGenerations = []; }
+
+  let phaseLabelMap = [];
+  try {
+    const pMapPath = path.resolve(fileURLToPath(new URL('../data/erp-phase-label-map.json', import.meta.url)));
+    if (fs.existsSync(pMapPath)) phaseLabelMap = JSON.parse(fs.readFileSync(pMapPath, 'utf8'));
+  } catch { phaseLabelMap = []; }
+
+  let stageBindings = {};
+  try {
+    const bPath = path.resolve(fileURLToPath(new URL('../data/erp-stage-bindings.json', import.meta.url)));
+    if (fs.existsSync(bPath)) stageBindings = JSON.parse(fs.readFileSync(bPath, 'utf8'));
+  } catch { stageBindings = {}; }
+
   const families = contract?.process_families ?? {};
   const gaps = contract?.convergence_gaps ?? [];
   const chains = Object.entries(families).map(([k, v]) => ({
@@ -1238,7 +1278,14 @@ export function readRoadmapsData() {
     name: v.name ?? `Chain ${k}`,
     description: v.description ?? '',
     target_maturity: v.target_maturity ?? '',
-    stages: v.stages ?? [],
+    stages: (v.stages ?? []).map((st) => {
+      const bound = stageBindings[`${k}/${st.name}`] ?? (st.serp ?? []);
+      return {
+        ...st,
+        bound_cards: bound,
+        bound_status: bound.length > 0 ? 'BOUND' : 'NO CARDS BOUND',
+      };
+    }),
     stage_count: (v.stages ?? []).length,
   }));
   const totalStages = chains.reduce((acc, c) => acc + c.stage_count, 0);
@@ -1256,13 +1303,17 @@ export function readRoadmapsData() {
 
   return {
     generated_at: nowIso(),
-    authority: 'starqerp-control-board/contract.json (5 chains, 49 stages, 8 gaps) · live PM milestones',
+    authority: 'starqerp-control-board/contract.json (5 chains, 49 stages, 8 gaps) · live PM milestones · M-1/M-3/M-5 plan generations & bindings',
     chains,
     chains_count: chains.length,
     stages_count: totalStages,
     gaps,
     gaps_count: gaps.length,
     milestones,
+    plan_generations: planGenerations,
+    current_approved_plan: planGenerations.find((g) => g.is_current) ?? null,
+    phase_label_map: phaseLabelMap,
+    stage_bindings: stageBindings,
     process_families: families,
     convergence_gaps: gaps,
   };
@@ -1285,7 +1336,17 @@ export function portfolio() {
         HISTORICAL_NEXUS: mine.filter((t) => t.provenance === PROVENANCE.HISTORICAL).length,
         LIVE: mine.filter((t) => t.provenance === PROVENANCE.LIVE).length,
       };
+      const done = mine.filter((t) => t.status === 'DONE').length;
       const done_historical = mine.filter((t) => t.status === 'DONE' && t.provenance === PROVENANCE.HISTORICAL).length;
+      const withCommit = mine.filter((t) => t.status === 'DONE' && (t.commit_sha || t.commit)).length;
+      const withAcceptance = mine.filter((t) => t.status === 'DONE' && (t.acceptance_json || t.accepted_at)).length;
+      const capability = p.id === 'erp' ? { implemented: 7, total: 49, percent: 14 } : null;
+      const metrics = {
+        claimed: { done, total: mine.length, percent: mine.length > 0 ? Math.round((done / mine.length) * 100) : 0 },
+        committed: { count: withCommit, total: done, percent: done > 0 ? Math.round((withCommit / done) * 100) : 0 },
+        proven: { count: withAcceptance, total: done, percent: done > 0 ? Math.round((withAcceptance / done) * 100) : 0 },
+        capability,
+      };
       const eq = executionQualifier(p);
       return {
         id: p.id,
@@ -1299,6 +1360,7 @@ export function portfolio() {
         counts,
         stages,
         provenance,
+        metrics,
         execution_qualifier: eq,
         founder_gate: stages.FOUNDER_GATE ?? 0,
         blocked: counts.BLOCKED,
@@ -1541,10 +1603,11 @@ function cliBackup() {
 }
 
 function cliVerify(file) {
-  const handle = new DatabaseSync(path.resolve(file), { readOnly: true });
+  const target = file ? path.resolve(file) : (resolveDbPath() || path.resolve('data/pm-operating.db'));
+  const handle = new DatabaseSync(target, { readOnly: true });
   const check = integrity(handle);
   const n = (t) => Number(handle.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n);
-  console.log(json({ file: path.resolve(file), integrity: check.detail, projects: n('pm_projects'), tasks: n('pm_tasks'), history_rows: n('pm_status_log') }));
+  console.log(json({ file: target, integrity: check.detail, projects: n('pm_projects'), tasks: n('pm_tasks'), history_rows: n('pm_status_log') }));
   handle.close();
   process.exit(check.ok ? 0 : 3);
 }

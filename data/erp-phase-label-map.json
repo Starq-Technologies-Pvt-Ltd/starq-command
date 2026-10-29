@@ -1,0 +1,250 @@
+[
+  {
+    "raw_phase_string": "DEC-033 — Independent audit defect closure",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 11,
+    "id_range": "SERP-407..SERP-418"
+  },
+  {
+    "raw_phase_string": "Final stretch",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 19,
+    "id_range": "SERP-382..SERP-400"
+  },
+  {
+    "raw_phase_string": "Phase 0 - Main base",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; 24 Aug Blueprint variant",
+    "total_cards": 9,
+    "id_range": "SERP-299..SERP-403"
+  },
+  {
+    "raw_phase_string": "Phase 0 — Preserve the company’s work",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 8,
+    "id_range": "SERP-020..SERP-282"
+  },
+  {
+    "raw_phase_string": "Phase 1 - Organisation spine",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; 24 Aug Blueprint variant",
+    "total_cards": 10,
+    "id_range": "SERP-283..SERP-338"
+  },
+  {
+    "raw_phase_string": "Phase 1 — Make the build tell the truth",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 8,
+    "id_range": "SERP-171..SERP-190"
+  },
+  {
+    "raw_phase_string": "Phase 10 — Starq AI, controlled",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 10,
+    "id_range": "SERP-015..SERP-106"
+  },
+  {
+    "raw_phase_string": "Phase 11 — Canonical repository cleanup / release candidate",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 12,
+    "id_range": "SERP-192..SERP-380"
+  },
+  {
+    "raw_phase_string": "Phase 12 — Market displacement",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 11,
+    "id_range": "SERP-194..SERP-252"
+  },
+  {
+    "raw_phase_string": "Phase 2 - Measured internal pilot",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; 24 Aug Blueprint variant",
+    "total_cards": 9,
+    "id_range": "SERP-288..SERP-330"
+  },
+  {
+    "raw_phase_string": "Phase 2 — Close the security/domain gates",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 110,
+    "id_range": "M0-BACK-001..SERP-405"
+  },
+  {
+    "raw_phase_string": "Phase 3 — Connect the client to the real backend",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 29,
+    "id_range": "SERP-049..SERP-168"
+  },
+  {
+    "raw_phase_string": "Phase 3 — ERP convergence (post 28 Sep 2026 course correction)",
+    "plan_generation": "Generation 3 (Core Convergence)",
+    "plan_status": "CURRENT Approved Plan",
+    "formatting_nuance": "Em-dash U+2014; DEC-100 Convergence Phase",
+    "total_cards": 8,
+    "id_range": "SERP-460..SERP-467"
+  },
+  {
+    "raw_phase_string": "Phase 4 — Adversarial security & accounting truth",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 21,
+    "id_range": "M0-CLIE-001..SERP-379"
+  },
+  {
+    "raw_phase_string": "Phase 5 — Real internal pilot",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 14,
+    "id_range": "SERP-003..SERP-378"
+  },
+  {
+    "raw_phase_string": "Phase 6 — Starq Switch Kit + external client #1",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 11,
+    "id_range": "SERP-262..SERP-272"
+  },
+  {
+    "raw_phase_string": "Phase 6 — Switch Kit + external client #1",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 1,
+    "id_range": "SERP-017..SERP-017"
+  },
+  {
+    "raw_phase_string": "Phase 7 — External client #2 + productisation",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 11,
+    "id_range": "SERP-018..SERP-281"
+  },
+  {
+    "raw_phase_string": "Phase 8 — Security & operations maturity / ISO readiness",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 13,
+    "id_range": "SERP-193..SERP-232"
+  },
+  {
+    "raw_phase_string": "Phase 9 — Localization & module breadth expansion",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Em-dash U+2014; Canonical 24 Aug Blueprint phase",
+    "total_cards": 53,
+    "id_range": "SERP-005..SPOS-008"
+  },
+  {
+    "raw_phase_string": "R2 - M2 service pilot",
+    "plan_generation": "Generation 2 (Workshop/Garage)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; 24 Aug Blueprint variant",
+    "total_cards": 7,
+    "id_range": "SERP-431..SERP-437"
+  },
+  {
+    "raw_phase_string": "Stage 1 - Finance kernel",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 24,
+    "id_range": "SERP-290..SERP-346"
+  },
+  {
+    "raw_phase_string": "Stage 2 - Commercial readiness",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 14,
+    "id_range": "SERP-347..SERP-360"
+  },
+  {
+    "raw_phase_string": "Stage 2 - Inventory & stock",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 2,
+    "id_range": "SERP-309..SERP-313"
+  },
+  {
+    "raw_phase_string": "Stage 4 - Commercial & purchasing",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 3,
+    "id_range": "SERP-310..SERP-314"
+  },
+  {
+    "raw_phase_string": "Stage 5 - Full ERP integrations",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 1,
+    "id_range": "SERP-333..SERP-333"
+  },
+  {
+    "raw_phase_string": "Stage 6 - Business units & branches",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 1,
+    "id_range": "SERP-316..SERP-316"
+  },
+  {
+    "raw_phase_string": "Stage 7 - HR and payroll",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 1,
+    "id_range": "SERP-327..SERP-327"
+  },
+  {
+    "raw_phase_string": "Stage 8 - Projects & job costing",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 3,
+    "id_range": "SERP-320..SERP-322"
+  },
+  {
+    "raw_phase_string": "Stage 9 - Warehouse module",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "Hyphen U+002D; Early 10-Stage module program",
+    "total_cards": 2,
+    "id_range": "SERP-312..SERP-325"
+  },
+  {
+    "raw_phase_string": "UI/UX Polish",
+    "plan_generation": "Generation 1 (Initial ERP)",
+    "plan_status": "Superseded",
+    "formatting_nuance": "No prefix; early cosmetic task",
+    "total_cards": 1,
+    "id_range": "SERP-406..SERP-406"
+  }
+]

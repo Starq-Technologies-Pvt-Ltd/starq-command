@@ -182,7 +182,7 @@ export function fidelityFromPayload(payload, { sourceFile, sourceKey }) {
  */
 export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
   const collided = handle.prepare(
-    "SELECT source_key, source_file, source_row_index, raw_payload FROM pm_source_records WHERE resolution = 'DUPLICATE_TASK_ID'",
+    "SELECT source_key, source_file, source_row_index, raw_payload, resolution, task_id FROM pm_source_records WHERE resolution = 'DUPLICATE_TASK_ID' OR task_id LIKE '%:%'",
   ).all();
 
   const restored = [];
@@ -197,16 +197,26 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
 
     const key = `${originalId}:${projectId}`;
     if (handle.prepare('SELECT 1 FROM pm_tasks WHERE id = ?').get(key)) {
-      // The import rebuilds source rows as DUPLICATE_TASK_ID on every start.
+      // The import rebuilds source rows on every start.
       // If an earlier start already restored the task, relink provenance here.
-      handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
-        .run(key, row.source_key);
-      try {
-        handle.prepare("UPDATE pm_source_record_versions SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
+      if (row.task_id !== key || row.resolution !== 'IMPORTED') {
+        handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
           .run(key, row.source_key);
-      } catch {}
+      }
+      const lastVer = handle.prepare(
+        'SELECT resolution, task_id FROM pm_source_record_versions WHERE source_key = ? ORDER BY rowid DESC LIMIT 1',
+      ).get(row.source_key);
+      if (!lastVer || lastVer.resolution !== 'IMPORTED' || lastVer.task_id !== key) {
+        const payloadHash = createHash('sha256').update(row.raw_payload).digest('hex');
+        handle.prepare(`
+          INSERT INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
+          VALUES (?, ?, 'starqNexus', ?, ?, ?, 'IMPORTED', ?, ?, ?)
+        `).run(row.source_key, payloadHash, row.source_file, row.source_row_index, key, p.status ? String(p.status) : null, row.raw_payload, nowIso());
+      }
       continue;
     }
+
+    if (row.resolution !== 'DUPLICATE_TASK_ID') continue;
 
     const ts = nowIso();
     const f = fidelityFromPayload(p, { sourceFile: row.source_file, sourceKey: row.source_key });
@@ -316,10 +326,11 @@ function ownerFrom(p) {
  */
 export function backfillNexusAttributes(handle) {
   const rows = handle.prepare(`
-    SELECT s.task_id AS id, s.source_file, s.source_key, s.raw_payload, t.nexus_attributes
+    SELECT s.task_id AS id, s.source_file, s.source_key, s.raw_payload,
+           t.nexus_attributes, t.acceptance_json, t.phase, t.sprint, t.epic, t.lane, t.milestone, t.workers_json
       FROM pm_source_records s
       JOIN pm_tasks t ON t.id = s.task_id
-     WHERE s.resolution = 'IMPORTED'
+     WHERE s.resolution = 'IMPORTED' AND t.provenance <> 'LIVE'
   `).all();
 
   const update = handle.prepare(`
@@ -346,7 +357,17 @@ export function backfillNexusAttributes(handle) {
     let payload;
     try { payload = JSON.parse(row.raw_payload); } catch { continue; }
     const f = fidelityFromPayload(payload, { sourceFile: row.source_file, sourceKey: row.source_key });
-    if (row.nexus_attributes === f.nexus_attributes) { skipped += 1; continue; }
+    const needsUpdate = (
+      row.nexus_attributes !== f.nexus_attributes ||
+      row.acceptance_json !== f.acceptance_json ||
+      row.phase !== f.phase ||
+      row.sprint !== f.sprint ||
+      row.epic !== f.epic ||
+      row.lane !== f.lane ||
+      row.milestone !== f.milestone ||
+      row.workers_json !== f.workers_json
+    );
+    if (!needsUpdate) { skipped += 1; continue; }
     update.run(
       f.nexus_task_id, f.nexus_source_file, f.nexus_source_key, f.nexus_status,
       f.nexus_project, f.nexus_attributes,

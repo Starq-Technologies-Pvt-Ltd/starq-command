@@ -644,7 +644,7 @@ function HoadhaBoard({ h }: { h: H }) {
 
   return (
     <>
-      {/*
+            {/*
         THE CONTROL ITSELF. `role="group"` with `aria-pressed` on each option, so
         the mutually exclusive choice is announced as a choice. Both counts are
         inside the control, which is what makes "which collection am I in and

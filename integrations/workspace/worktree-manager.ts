@@ -126,15 +126,24 @@ export class WorktreeManager {
     taskId?: string
   ): Promise<WorktreeCleanupResult> {
     if (!fs.existsSync(workspacePath)) {
-      return { cleaned: true, message: 'Workspace does not exist' };
+      try {
+        await this.execGit(['worktree', 'prune'], repoPath);
+      } catch {
+        /* best effort */
+      }
+      LeaseService.releaseLease(workspacePath);
+      return { cleaned: true, message: 'Workspace does not exist; pruned git metadata' };
     }
 
     let savedRescueSha: string | undefined;
+    let dirty = false;
+    let rescueRefCreated = false;
 
     try {
       // 1. Check for uncommitted work
       const { stdout: status } = await this.execGit(['status', '--porcelain'], workspacePath);
-      if (status.length > 0) {
+      dirty = status.length > 0;
+      if (dirty) {
         // Workspace is dirty! Do NOT destroy uncommitted work.
         // Create rescue stash commit
         const timestamp = Date.now();
@@ -146,6 +155,7 @@ export class WorktreeManager {
           savedRescueSha = sha;
           // Create rescue branch so commit is reachable
           await this.execGit(['branch', `rescue/${taskId || 'uncommitted'}-${timestamp}`, sha], workspacePath);
+          rescueRefCreated = true;
         } catch {
           // Fallback: git stash create
           const { stdout: stashSha } = await this.execGit(['stash', 'create', rescueMsg], workspacePath);
@@ -155,8 +165,62 @@ export class WorktreeManager {
         }
       }
 
-      // 2. Remove git worktree
-      await this.execGit(['worktree', 'remove', '--force', workspacePath], repoPath);
+      // 2. Remove git worktree with retry and guarded fallback
+      let removed = false;
+      let lastErr: unknown = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await this.execGit(['worktree', 'remove', '--force', workspacePath], repoPath);
+          removed = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, attempt * 100));
+        }
+      }
+
+      // Guard: the filesystem fallback may only run when no unrescued work can be
+      // lost — the tree was clean, or dirty work is reachable from a rescue branch.
+      // A bare `stash create` SHA is not a ref and does not qualify.
+      if (!removed && dirty && !rescueRefCreated) {
+        const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        return {
+          cleaned: false,
+          savedRescueSha,
+          message: `RELEASE_FAILED (NEEDS_OPERATOR: dirty work has no rescue branch; fallback refused): ${msg}`,
+        };
+      }
+
+      if (!removed) {
+        // Guarded Windows fallback: remove directory from filesystem then git worktree prune
+        try {
+          fs.rmSync(workspacePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+          await this.execGit(['worktree', 'prune'], repoPath);
+          const { stdout: listOut } = await this.execGit(['worktree', 'list', '--porcelain'], repoPath);
+          const normalizedWs = path.resolve(workspacePath).toLowerCase().replace(/\\/g, '/');
+          const isStillListed = listOut.split('\n').some((line) => {
+            if (line.startsWith('worktree ')) {
+              const p = path.resolve(line.slice(9).trim()).toLowerCase().replace(/\\/g, '/');
+              return p === normalizedWs;
+            }
+            return false;
+          });
+          if (!isStillListed) {
+            removed = true;
+          }
+        } catch (fallbackErr) {
+          lastErr = fallbackErr;
+        }
+      }
+
+      if (!removed) {
+        const msg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        return {
+          cleaned: false,
+          savedRescueSha,
+          message: `RELEASE_FAILED: ${msg}`,
+        };
+      }
 
       // 3. Release lease
       LeaseService.releaseLease(workspacePath);
@@ -170,7 +234,7 @@ export class WorktreeManager {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { cleaned: false, message: `Failed to remove worktree: ${msg}` };
+      return { cleaned: false, savedRescueSha, message: `Failed to remove worktree: ${msg}` };
     }
   }
 }

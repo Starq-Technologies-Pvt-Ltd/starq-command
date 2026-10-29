@@ -106,3 +106,87 @@ export function buildHealthPreflight(report = {}) {
     inspection_complete: inspectionComplete,
   };
 }
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
+
+export const REPOSITORY_PREFLIGHT_SCHEMA = 'starq.command.repository_preflight/v1';
+
+export function buildRepositoryPreflight(config = {}, dbPath = null) {
+  const repositoryMap = config.repository_map && typeof config.repository_map === 'object'
+    ? config.repository_map
+    : {};
+
+  let projectIds = [];
+  const targetDb = dbPath || path.resolve(config.workspace_root || 'D:\\StarqTech', '00_STARQ_HQ/operations/starq-command/data/pm-operating.db');
+  if (fs.existsSync(targetDb)) {
+    try {
+      const db = new DatabaseSync(targetDb, { readOnly: true });
+      const rows = db.prepare('SELECT id FROM pm_projects ORDER BY id').all();
+      projectIds = rows.map((r) => r.id);
+      db.close();
+    } catch { /* fallback to map keys */ }
+  }
+  if (!projectIds.length) {
+    projectIds = Object.keys(repositoryMap);
+  }
+
+  const projects = {};
+  for (const id of projectIds) {
+    const entry = repositoryMap[id];
+    if (!entry) {
+      projects[id] = {
+        state: 'UNRESOLVED',
+        reason: 'No repository mapping configured in lifecycle.config.json',
+      };
+      continue;
+    }
+    if (!entry.path || typeof entry.path !== 'string') {
+      projects[id] = {
+        state: 'UNRESOLVED',
+        reason: 'Configured repository path is missing or invalid',
+      };
+      continue;
+    }
+    if (!path.isAbsolute(entry.path)) {
+      projects[id] = {
+        state: 'UNRESOLVED',
+        reason: `Configured repository path is not absolute: ${entry.path}`,
+      };
+      continue;
+    }
+    if (!fs.existsSync(entry.path)) {
+      projects[id] = {
+        state: 'UNRESOLVED',
+        reason: `Configured repository path does not exist: ${entry.path}`,
+      };
+      continue;
+    }
+    try {
+      const baseSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+        cwd: entry.path,
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      projects[id] = {
+        state: 'RESOLVED',
+        path: entry.path,
+        baseSha,
+        worktreesDir: entry.worktreesDir || null,
+      };
+    } catch (err) {
+      projects[id] = {
+        state: 'UNRESOLVED',
+        reason: `Failed to inspect git repository at ${entry.path}: ${err.message}`,
+      };
+    }
+  }
+
+  return {
+    schema: REPOSITORY_PREFLIGHT_SCHEMA,
+    projects,
+  };
+}

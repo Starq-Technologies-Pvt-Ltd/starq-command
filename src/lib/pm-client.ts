@@ -72,6 +72,12 @@ export interface PmProject {
   provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
   provenance_counts?: { live: number; historical: number } | Record<string, number>;
   execution_qualifier?: string | null;
+  metrics?: {
+    claimed: { done: number; total: number; percent: number };
+    committed: { count: number; total: number; percent: number };
+    proven: { count: number; total: number; percent: number };
+    capability: { implemented: number; total: number; percent: number } | null;
+  };
 }
 
 export interface PmTask {
@@ -182,6 +188,12 @@ export interface PmPortfolioProject {
   provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
   provenance_counts?: { live: number; historical: number } | Record<string, number>;
   execution_qualifier?: string | null;
+  metrics?: {
+    claimed: { done: number; total: number; percent: number };
+    committed: { count: number; total: number; percent: number };
+    proven: { count: number; total: number; percent: number };
+    capability: { implemented: number; total: number; percent: number } | null;
+  };
 }
 
 export interface PmPortfolio {
@@ -435,7 +447,7 @@ export const pmLinkRoom = (id: string, body: PmLinkRoomInput | Record<string, un
   const b = body as Record<string, unknown>;
   const eventId = String(b.eventId || b.event_id || b.token || '');
   const payload: Record<string, unknown> = {
-    actor: (b.actor as string) || 'ali',
+    actor: String(b.actor || ''),
     expected_updated_at: (b.expected_updated_at as string) || '',
     sequence: Number(b.sequence),
     eventId,
@@ -454,14 +466,64 @@ export const pmAddEvidence = (id: string, body: PmAddEvidenceInput | Record<stri
   ].filter(Boolean);
   const note = parts.join(' · ') || 'Evidence attached';
   return call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/evidence`, {
-    actor: (b.actor as string) || 'ali',
+    actor: String(b.actor || ''),
     expected_updated_at: (b.expected_updated_at as string) || '',
     note,
+    path: b.path ? String(b.path) : undefined,
+    sha256: b.sha256 ? String(b.sha256) : undefined,
+    description: b.description ? String(b.description) : undefined,
   });
 };
 export const pmLocalEvidence = (id: string, body: PmLocalEvidenceBody) =>
   call<PmTaskDetail>('POST', `/api/pm/tasks/${encodeURIComponent(id)}/evidence`, body);
 export const pmRetryRoomSync = () => call<{ queued: boolean; pending_room_sync: number }>('POST', '/api/pm/room-sync/retry', {});
+
+export interface PmRoadmapMilestone {
+  id: string;
+  chain: string;
+  name: string;
+  status: string;
+  target_date?: string;
+  actual_date?: string;
+  notes?: string;
+}
+
+export interface PmPlanGeneration {
+  id: string;
+  title: string;
+  status: string;
+  card_count: number;
+  description: string;
+}
+
+export interface PmApprovedPlan {
+  generation_id: string;
+  approved_date: string;
+  authority: string;
+  cards: string[];
+  description: string;
+}
+
+export interface PmStageBinding {
+  stage: string;
+  chain: string;
+  bound_cards: string[];
+  bound_status: 'BOUND' | 'NO CARDS BOUND';
+}
+
+export interface PmRoadmapsData {
+  chains_count: number;
+  stages_count: number;
+  gaps_count: number;
+  milestones: PmRoadmapMilestone[];
+  plan_generations?: PmPlanGeneration[];
+  current_approved_plan?: PmApprovedPlan;
+  phase_label_map?: Record<string, string>;
+  stage_bindings?: PmStageBinding[];
+}
+
+export const pmGetRoadmaps = () => call<PmRoadmapsData>('GET', '/api/pm/roadmaps');
+
 
 export const PM_BOARD_HREF: Record<string, string> = {
   command: '#studio/command',

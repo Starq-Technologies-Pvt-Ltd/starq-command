@@ -121,17 +121,16 @@ test('WP-0: Full Portfolio & Source Convergence (18 Nexus boards, 1,349 tasks, f
   assert.equal(posDetail.source_record.resolution, 'IMPORTED');
   assert.equal(posDetail.source_record.source_file, 'starq-pos-tasks.json');
 
-  // 9. Verify legacy PM snapshot links
+  // 9. Verify legacy PM snapshot links preserved as ARCHIVED_ID_COLLISION (P-1)
   for (let i = 1; i <= 4; i++) {
     const id = `PM-CMD-00${i}`;
     const legacyRec = db.prepare("SELECT * FROM pm_source_records WHERE source_key = ?").get(`command-pm-v1:${id}`);
     assert.ok(legacyRec, `Legacy record for ${id} must exist`);
-    assert.equal(legacyRec.resolution, 'IMPORTED');
-    assert.equal(legacyRec.task_id, id);
+    assert.equal(legacyRec.resolution, 'ARCHIVED_ID_COLLISION');
+    assert.equal(legacyRec.task_id, null);
 
     const cmdDetail = taskDetail(id);
-    assert.ok(cmdDetail.source_record, `taskDetail('${id}') must return source_record`);
-    assert.equal(cmdDetail.source_record.resolution, 'IMPORTED');
+    assert.ok(!cmdDetail.source_record, `taskDetail('${id}') must not link to legacy archived record`);
   }
 
   // 10. Verify API: listTasks() returns fidelity columns

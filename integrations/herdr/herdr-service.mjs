@@ -66,6 +66,23 @@ function readBody(req) {
   });
 }
 
+function loadRepositoryMap() {
+  if (process.env.COMMAND_REPOSITORY_MAP) {
+    // Environment override is rejected per runtime port & config policy
+    console.warn("WARNING: COMMAND_REPOSITORY_MAP environment override is rejected; repository_map in lifecycle.config.json is authoritative.");
+  }
+  const configPath = path.resolve(import.meta.dirname, "../../lifecycle.config.json");
+  if (fs.existsSync(configPath)) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      if (cfg.repository_map && typeof cfg.repository_map === "object") {
+        return cfg.repository_map;
+      }
+    } catch { /* fallback */ }
+  }
+  return {};
+}
+
 export function createHerdrService({
   port = Number(process.env.HERDR_SERVICE_PORT || 5179),
   host = "127.0.0.1",
@@ -98,9 +115,7 @@ export function createHerdrService({
     },
     worktreeManager: WorktreeManager,
     repoResolver: (task) => {
-      let mappings;
-      try { mappings = JSON.parse(process.env.COMMAND_REPOSITORY_MAP || "{}"); }
-      catch { return null; }
+      const mappings = loadRepositoryMap();
       const mapping = mappings[task.projectId];
       if (!mapping || typeof mapping.path !== "string" || !path.isAbsolute(mapping.path) || !fs.existsSync(mapping.path)) return null;
       try {

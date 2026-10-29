@@ -39,6 +39,7 @@ export const STUDIO_TABS = ['Overview', 'Staff', 'Projects', 'Capacity', 'Activi
 export const ERP_TABS = [
   'Overview',
   'Process',
+  'Roadmap',
   'Tasks',
   'Decisions',
   'Evidence',

@@ -1,0 +1,212 @@
+{
+  "O2C/Customer / Order": [
+    "SERP-314",
+    "SERP-303",
+    "SERP-315"
+  ],
+  "O2C/Pricing / Tax": [
+    "SERP-072",
+    "SERP-319",
+    "SERP-314"
+  ],
+  "O2C/Fulfilment": [
+    "SERP-050",
+    "SERP-051",
+    "SERP-085",
+    "SERP-086"
+  ],
+  "O2C/Sale / Invoice": [
+    "SERP-058",
+    "SERP-059",
+    "SERP-060",
+    "SERP-320",
+    "SERP-324"
+  ],
+  "O2C/Stock Issue": [
+    "SERP-086",
+    "SERP-087",
+    "SERP-309"
+  ],
+  "O2C/COGS": [
+    "SERP-309"
+  ],
+  "O2C/Receivable / Cash": [
+    "SERP-293",
+    "SERP-307"
+  ],
+  "O2C/Payment": [
+    "SERP-351",
+    "SERP-352",
+    "SERP-353",
+    "SERP-354"
+  ],
+  "O2C/Refund": [
+    "SERP-354",
+    "SERP-088"
+  ],
+  "O2C/Settlement": [
+    "SERP-354",
+    "SERP-294"
+  ],
+  "O2C/Accounting": [
+    "SERP-291",
+    "SERP-460"
+  ],
+  "O2C/Bank Reconciliation": [
+    "SERP-296"
+  ],
+  "P2P/Supplier": [
+    "SERP-066",
+    "SERP-067",
+    "SERP-068",
+    "SERP-303"
+  ],
+  "P2P/Requisition / PO": [
+    "SERP-069",
+    "SERP-070",
+    "SERP-071",
+    "SERP-311"
+  ],
+  "P2P/Goods Receipt": [
+    "SERP-072",
+    "SERP-073",
+    "SERP-074",
+    "SERP-311"
+  ],
+  "P2P/Landed Cost": [
+    "SERP-310",
+    "SERP-465"
+  ],
+  "P2P/Inventory Valuation": [
+    "SERP-305",
+    "SERP-309"
+  ],
+  "P2P/Supplier Invoice": [
+    "SERP-060",
+    "SERP-307"
+  ],
+  "P2P/Payable": [
+    "SERP-293",
+    "SERP-307"
+  ],
+  "P2P/Supplier Payment": [
+    "SERP-294",
+    "SERP-354",
+    "SERP-465"
+  ],
+  "P2P/Accounting": [
+    "SERP-291",
+    "SERP-460"
+  ],
+  "P2P/Bank Reconciliation": [
+    "SERP-296"
+  ],
+  "I2GL/Receive": [
+    "SERP-072",
+    "SERP-311"
+  ],
+  "I2GL/Transfer": [
+    "SERP-312",
+    "SERP-466"
+  ],
+  "I2GL/Reserve": [
+    "SERP-086",
+    "SERP-466"
+  ],
+  "I2GL/Issue": [
+    "SERP-087",
+    "SERP-309"
+  ],
+  "I2GL/Return": [
+    "SERP-088"
+  ],
+  "I2GL/Adjustment": [
+    "SERP-088",
+    "SERP-305"
+  ],
+  "I2GL/Valuation": [
+    "SERP-309",
+    "SERP-466"
+  ],
+  "I2GL/COGS": [
+    "SERP-309"
+  ],
+  "I2GL/Inventory Subledger": [
+    "SERP-309",
+    "SERP-460"
+  ],
+  "I2GL/GL Reconciliation": [
+    "SERP-308",
+    "SERP-346",
+    "SERP-461"
+  ],
+  "C2B/Tender / Payment": [
+    "SERP-352",
+    "SERP-353",
+    "SERP-354"
+  ],
+  "C2B/Provider": [
+    "SERP-351",
+    "SERP-352"
+  ],
+  "C2B/Capture": [
+    "SERP-354"
+  ],
+  "C2B/Settlement": [
+    "SERP-354"
+  ],
+  "C2B/Fees": [
+    "SERP-351",
+    "SERP-354",
+    "SERP-464"
+  ],
+  "C2B/Clearing": [
+    "SERP-294",
+    "SERP-296",
+    "SERP-464"
+  ],
+  "C2B/Bank Deposit": [
+    "SERP-296",
+    "SERP-464"
+  ],
+  "C2B/Reconciliation": [
+    "SERP-296",
+    "SERP-461"
+  ],
+  "C2B/Difference Handling": [
+    "SERP-294",
+    "SERP-464"
+  ],
+  "R2R/Subledger Events": [
+    "SERP-460"
+  ],
+  "R2R/Journal Proposals": [
+    "SERP-291",
+    "SERP-077"
+  ],
+  "R2R/Approval": [
+    "SERP-077",
+    "SERP-064",
+    "SERP-065"
+  ],
+  "R2R/Posting": [
+    "SERP-077",
+    "SERP-291"
+  ],
+  "R2R/Trial Balance": [
+    "SERP-292"
+  ],
+  "R2R/Period Close": [
+    "SERP-295",
+    "SERP-467"
+  ],
+  "R2R/Financial Statements": [
+    "SERP-292",
+    "SERP-293",
+    "SERP-317"
+  ],
+  "R2R/Tax Reports": [
+    "SERP-297",
+    "SERP-319"
+  ]
+}

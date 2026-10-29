@@ -1,0 +1,52 @@
+[
+  {
+    "id": "gen1",
+    "name": "Generation 1: Initial ERP & Bare-Minimum Launch Programme",
+    "period": "Early Aug – 20 Aug 2026",
+    "status": "SUPERSEDED",
+    "description": "Pre-blueprint exploratory tickets and prototype modules.",
+    "governing_authority": "DEC-001..DEC-050",
+    "task_count": 0,
+    "is_current": false
+  },
+  {
+    "id": "gen2",
+    "name": "Generation 2: Workshop/Garage Proving & Merge Baseline",
+    "period": "21 Aug – 27 Sep 2026",
+    "status": "SUPERSEDED",
+    "description": "24 Aug Blueprint phase execution. Provides foundational substrate of 429 completed/historical records.",
+    "governing_authority": "DEC-073 (24 Aug Final Blueprint)",
+    "task_count": 429,
+    "is_current": false
+  },
+  {
+    "id": "gen3",
+    "name": "Generation 3: Core Convergence / Business-Process First",
+    "period": "28 Sep – 23 Oct 2026",
+    "status": "CURRENT_APPROVED_PLAN",
+    "description": "The active convergence scope: 8 cards (SERP-460..SERP-467) in 'Phase 3 — ERP convergence (post 28 Sep 2026 course correction)'.",
+    "governing_authority": "DEC-100 & Room #14394 (General Freeze Lifted Oct 26)",
+    "task_count": 8,
+    "is_current": true,
+    "task_ids": [
+      "SERP-460",
+      "SERP-461",
+      "SERP-462",
+      "SERP-463",
+      "SERP-464",
+      "SERP-465",
+      "SERP-466",
+      "SERP-467"
+    ]
+  },
+  {
+    "id": "gen4",
+    "name": "Generation 4: Neutral Modular Enterprise & Parallel Resumption",
+    "period": "24 Oct 2026 – Present",
+    "status": "OPERATING_POSTURE",
+    "description": "Governance-first resumption following Founder Room #14394 and #14577. Residual CP2 HOLD #12690 preserved.",
+    "governing_authority": "Founder Room #14394 / #14577",
+    "task_count": 0,
+    "is_current": false
+  }
+]

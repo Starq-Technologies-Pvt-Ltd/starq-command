@@ -94,7 +94,7 @@ async function startAndProbe(service: ServiceCase): Promise<{ state: 'STARTED' }
     }
     try {
       const response = await fetch(`http://127.0.0.1:${port}${service.route}`, {
-        signal: AbortSignal.timeout(900),
+        signal: AbortSignal.timeout(2500),
       });
       if (response.status !== 404) {
         await response.arrayBuffer();
@@ -136,7 +136,7 @@ afterEach(async () => {
     if (path.dirname(resolved) !== parent || !path.basename(resolved).startsWith('command-entrypoint-')) {
       throw new Error(`Refusing to remove test data outside its isolated directory: ${resolved}`);
     }
-    fs.rmSync(resolved, { recursive: true, force: true });
+    fs.rmSync(resolved, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

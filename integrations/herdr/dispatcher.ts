@@ -25,7 +25,25 @@ export class Dispatcher {
   async preview() {
     const workforce = await this.options.getWorkforce();
     const plan = planDispatch(this.options.store.listReadyTasks(), workforce);
-    return { ...plan, workforceObservedAt: workforce.observed_at ?? null };
+    const eligible = plan.eligible.map((candidate: any) => {
+      const task = this.options.store.getTask(candidate.taskId);
+      if (!task) return candidate;
+      const repository = this.options.repoResolver(task);
+      const branchName = task.execution?.retries
+        ? `starq/task/${task.taskId}-retry-${task.execution.retries}`
+        : `starq/task/${task.taskId}`;
+      const worktreePath = repository?.worktreesDir
+        ? `${repository.worktreesDir}/starq-${task.taskId}`
+        : null;
+      return {
+        ...candidate,
+        repository: repository?.repoPath ?? null,
+        baseSha: repository?.baseSha ?? null,
+        worktreeBranch: branchName,
+        worktreePath,
+      };
+    });
+    return { ...plan, eligible, workforceObservedAt: workforce.observed_at ?? null };
   }
 
   async dispatchNext(requestedTaskId?: string) {

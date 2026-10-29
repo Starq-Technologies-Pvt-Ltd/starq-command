@@ -13,8 +13,10 @@ const DATA_SERVICE = process.env.COMMAND_DATA_SERVICE || 'http://127.0.0.1:5177'
 // data service, which is not modified.
 const BUILDING_SERVICE = process.env.BUILDING_SERVICE || 'http://127.0.0.1:5178';
 const HERDR_SERVICE = process.env.HERDR_SERVICE || 'http://127.0.0.1:5179';
+const PM_SERVICE = process.env.PM_SERVICE || 'http://127.0.0.1:5176';
 
 const proxy = {
+  '/api/pm': { target: PM_SERVICE, changeOrigin: true },
   '/api/command': { target: HERDR_SERVICE, changeOrigin: true },
   '/api/herdr': { target: HERDR_SERVICE, changeOrigin: true },
   '/api/building': { target: BUILDING_SERVICE, changeOrigin: true },

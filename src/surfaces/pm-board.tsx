@@ -154,10 +154,15 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     if (!p.ok) { setProblem(p.message); return; }
     if (!t.ok) { setProblem(t.message); return; }
     setProblem(null);
-    const people = m.data.handles;
-    setHandles(people);
-    if (!readActor() && people.includes('ali')) setActor('ali');
-    else if (!readActor() && people[0]) setActor(people[0]);
+    const retired = new Set(['ali', 'nexus']);
+    const active = m.data.handles.filter((h) => !retired.has(h));
+    setHandles(active);
+    const stored = readActor();
+    if (!stored || retired.has(stored)) {
+      if (active.includes('antigravity')) setActor('antigravity');
+      else if (active[0]) setActor(active[0]);
+      else setActor('');
+    }
     setProject(p.data.projects.find((x) => x.id === projectId) ?? null);
     setTasks(t.data.tasks);
     const id = keepSelected && t.data.tasks.some((task) => task.id === keepSelected) ? keepSelected : null;
@@ -225,9 +230,13 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     return true;
   };
 
-  const who = actor || 'ali';
+  const who = actor;
 
   const move = async (task: PmTask, to: PmStatus, explicitStage?: string) => {
+    if (!who) {
+      setErrors(['Select an active handle in "Acting as" before moving cards.']);
+      return;
+    }
     const isRejecting = (to === 'NEXT' || explicitStage === 'READY') && ['REVIEW', 'VERIFICATION', 'ACCEPTANCE'].includes(task.stage);
     const isBlockedOrGate = to === 'BLOCKED' || explicitStage === 'BLOCKED' || explicitStage === 'FOUNDER_GATE';
     let note: string | undefined;
@@ -262,6 +271,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   };
 
   const create = async () => {
+    if (!who) {
+      setErrors(['Select an active handle in "Acting as" before creating cards.']);
+      return;
+    }
     if (draft.title.trim().length < 3) { setErrors(['Title needs at least 3 characters.']); return; }
     setBusy(true);
     await finish(await pmCreateTask({
@@ -277,6 +290,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
   const save = async () => {
     if (!detail) return;
+    if (!who) {
+      setErrors(['Select an active handle in "Acting as" before saving edits.']);
+      return;
+    }
     setBusy(true);
     const t = detail.task;
     const body: Record<string, unknown> = { actor: who, expected_updated_at: t.updated_at };
@@ -291,6 +308,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const handleLinkRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detail) return;
+    if (!who) {
+      setErrors(['Select an active handle in "Acting as" before linking Room authorization.']);
+      return;
+    }
     const seq = parseInt(roomSeq, 10);
     if (!seq || seq <= 0) { setErrors(['Room sequence must be a positive integer.']); return; }
     if (!/^[a-f0-9]{64}$/i.test(roomEventId.trim())) { setErrors(['Event ID / token must be 64 hex characters.']); return; }
@@ -310,6 +331,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const handleAddEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detail) return;
+    if (!who) {
+      setErrors(['Select an active handle in "Acting as" before attaching evidence.']);
+      return;
+    }
     if (evidenceDesc.trim().length < 5 && !evidencePath.trim()) {
       setErrors(['Evidence requires a description (min 5 chars) or artifact path.']);
       return;
@@ -343,8 +368,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     );
   }
 
-  const people = ['UNASSIGNED', ...handles.filter((h) => h !== 'UNASSIGNED')];
-  const uniqueOwners = [...new Set(tasks.map((t) => t.owner).filter((o) => o && o !== 'UNASSIGNED'))];
+  const retired = new Set(['ali', 'nexus']);
+  const activeHandles = handles.filter((h) => h !== 'UNASSIGNED' && !retired.has(h));
+  const people = ['UNASSIGNED', ...activeHandles];
+  const uniqueOwners = [...new Set(tasks.map((t) => t.owner).filter((o) => o && o !== 'UNASSIGNED' && !retired.has(o)))];
   for (const owner of uniqueOwners) if (!people.includes(owner)) people.push(owner);
 
   // Derive unique filter options
@@ -400,7 +427,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
         <PmNav current={projectId} />
         {project.id === 'erp' ? (
           <p className="mx-3 mb-2 text-2xs text-muted-foreground">
-            DEC-100 still holds ERP implementation. This board is the working record — move cards as you used to in Nexus.
+            General DEC-100 ERP implementation freeze was lifted per Founder Room #14394. CP2 HOLD #12690 remains active for payment-command/payment-dispatch scope.
           </p>
         ) : null}
 
@@ -475,7 +502,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             </div>
             <textarea aria-label="Description" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Optional description" />
             <div className="flex gap-2">
-              <button type="submit" className="go-link" disabled={busy}>Add card</button>
+              <button type="submit" className="go-link" disabled={busy || !actor}>Add card</button>
               <button type="button" className="go-link" onClick={() => setCreating(false)}>Cancel</button>
             </div>
           </form>
@@ -569,6 +596,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                               <Chip value={`EXEC ${executionByTask[t.id].state}`} tone={executionByTask[t.id].state === 'BLOCKED' ? 'drift' : 'room'} />
                               <span className="text-[10px] text-muted-foreground">{executionByTask[t.id].builderSeat ?? 'NO BUILDER'} · {executionByTask[t.id].branch ?? 'NO WORKTREE'}</span>
                             </span>
+                          ) : t.status === 'IN_PROGRESS' ? (
+                            <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state="NONE">
+                              <Chip value="NO EXECUTION RECORD" tone="stale" />
+                            </span>
                           ) : null}
                         </button>
                       </li>
@@ -606,6 +637,12 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                   <div><dt className="meta">Worktrees</dt><dd className="mono break-all">{executionByTask[detail.task.id].workspacePath ?? 'NOT PROVISIONED'}{executionByTask[detail.task.id].verifierWorkspacePath ? ` · ${executionByTask[detail.task.id].verifierWorkspacePath}` : ''}</dd></div>
                   <div><dt className="meta">Lease / candidate</dt><dd className="mono break-all">{executionByTask[detail.task.id].leaseId ?? 'NO LEASE'} / {executionByTask[detail.task.id].candidateSha ?? 'NO CANDIDATE'}</dd></div>
                 </dl>
+              </Panel>
+            ) : detail.task.status === 'IN_PROGRESS' ? (
+              <Panel title="Software factory execution" count="NO RECORD">
+                <div className="body text-2xs text-truth-drift">
+                  No execution record for this in-progress task.
+                </div>
               </Panel>
             ) : null}
 
@@ -708,13 +745,18 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             </label>
 
             {/* Move Task & Save Actions */}
+            {!actor ? (
+              <p className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-2xs text-amber-200">
+                Select an active handle in &quot;Acting as&quot; above to move cards, save changes, link Room, or attach evidence.
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Move task">
               {detail.task.allowed_next.map((to) => (
-                <button key={to} type="button" className="go-link" disabled={busy} onClick={() => void move(detail.task, to)}>
+                <button key={to} type="button" className="go-link" disabled={busy || !actor} onClick={() => void move(detail.task, to)}>
                   → {PM_STATUS_LABELS[to]}
                 </button>
               ))}
-              <button type="button" className="go-link font-semibold" disabled={busy} onClick={() => void save()}>Save Changes</button>
+              <button type="button" className="go-link font-semibold" disabled={busy || !actor} onClick={() => void save()}>Save Changes</button>
             </div>
 
             {/* Allowed Governance Stage Moves */}
@@ -726,7 +768,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                     key={targetStage}
                     type="button"
                     className="go-link"
-                    disabled={busy}
+                    disabled={busy || !actor}
                     onClick={() => void move(detail.task, detail.task.status, targetStage)}
                   >
                     → {targetStage}
@@ -740,7 +782,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 className="go-link"
-                disabled={busy}
+                disabled={busy || !actor}
                 onClick={() => { setShowLinkRoom(!showLinkRoom); setShowAddEvidence(false); }}
               >
                 {showLinkRoom ? 'Cancel Link Room' : 'Link Room Authorization'}
@@ -748,7 +790,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               <button
                 type="button"
                 className="go-link"
-                disabled={busy}
+                disabled={busy || !actor}
                 onClick={() => { setShowAddEvidence(!showAddEvidence); setShowLinkRoom(false); }}
               >
                 {showAddEvidence ? 'Cancel Evidence' : 'Attach Evidence'}

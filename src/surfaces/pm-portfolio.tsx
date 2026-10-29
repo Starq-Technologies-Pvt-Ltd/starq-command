@@ -70,9 +70,9 @@ export function getOperationalQualifier(
   }
   if (projectId === 'erp') {
     return {
-      label: 'ON HOLD (DEC-100)',
+      label: 'ACTIVE (CP2 #12690 HOLD)',
       tone: 'hold',
-      note: 'DEC-100 Founder hold in effect. Production implementation suspended.',
+      note: 'Normal ERP roadmap active per Founder #14394. Residual hold: CP2 #12690 (payment-command neutrality).',
     };
   }
   if (projectId === 'hoadha') {
@@ -302,7 +302,6 @@ export function PmPortfolioSurface() {
               const qualifier = getOperationalQualifier(p.id, p.hold?.state, p.execution_qualifier);
               const done = p.counts.DONE ?? 0;
               const historicalClosed = p.done_historical ?? done;
-              const completion = p.total > 0 ? Math.round((done / p.total) * 100) : null;
               return (
                 <article key={p.id} data-project={p.id} className="grid content-start gap-3 rounded-lg border border-border bg-card/40 p-3">
                   <header className="flex items-start justify-between gap-3">
@@ -318,18 +317,27 @@ export function PmPortfolioSurface() {
                     <Chip value={`${p.open} open`} tone="room" />
                   </header>
 
-                  {/* Multi-tier progress display */}
+                  {/* Multi-tier progress display per DEC-072 / R-1 */}
                   <div className="grid gap-1.5 rounded border border-border/60 bg-surface-0/60 p-2 text-2xs">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>Historical tasks closed:</span>
-                      <span className="mono font-semibold text-foreground">{historicalClosed} / {p.total} historical tickets</span>
+                      <span className="mono font-semibold text-foreground">{historicalClosed} / {p.total} ({p.metrics?.claimed?.percent ?? (p.total > 0 ? Math.round((done / p.total) * 100) : 0)}%)</span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded bg-border" aria-label={completion === null ? 'No cards' : `${completion}% done`}>
-                      <div className="h-full bg-accent" style={{ width: `${completion ?? 0}%` }} />
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Tasks with commit:</span>
+                      <span className="mono font-semibold text-foreground">{p.metrics?.committed?.count ?? 0} / {done} ({p.metrics?.committed?.percent ?? 0}%)</span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                      <span>{completion ?? 0}% tickets closed</span>
-                      <span>{p.open} open</span>
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Verified acceptance:</span>
+                      <span className="mono font-semibold text-foreground">{p.metrics?.proven?.count ?? 0} / {done} ({p.metrics?.proven?.percent ?? 0}%)</span>
+                    </div>
+                    <div className="flex items-center justify-between text-muted-foreground">
+                      <span>Plan capability:</span>
+                      <span className="mono font-semibold text-foreground">
+                        {p.metrics?.capability
+                          ? `${p.metrics.capability.implemented} / ${p.metrics.capability.total} (${p.metrics.capability.percent}%)`
+                          : 'NO CURRENT PLAN'}
+                      </span>
                     </div>
                     {qualifier.note ? (
                       <p className="mt-0.5 border-t border-border/40 pt-1 text-[10px] text-muted-foreground">

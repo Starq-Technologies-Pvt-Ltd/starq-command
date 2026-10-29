@@ -83,6 +83,12 @@ function emit(result) {
       line(`  health_preflight: overall=${hp.overall} idle_cooldown=${hp.idle_cooldown}`);
       for (const p of hp.ports ?? []) line(`  preflight ${(p.name || '?').padEnd(12)} ${String(p.port).padEnd(6)} ${p.state.padEnd(8)} ${p.detail}`);
     }
+    if (result.repositories?.projects) {
+      line('  repository_preflight:');
+      for (const [id, r] of Object.entries(result.repositories.projects)) {
+        line(`    ${id.padEnd(16)} ${r.state.padEnd(11)} ${r.state === 'RESOLVED' ? `${r.path} (${r.baseSha?.slice(0, 7)})` : r.reason}`);
+      }
+    }
   }
 }
 

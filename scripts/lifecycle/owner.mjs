@@ -27,7 +27,7 @@ import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from '
 import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
 import { proveInstance, requestShutdown } from './control.mjs';
 import { checkHealth } from './health.mjs';
-import { buildHealthPreflight } from './preflight.mjs';
+import { buildHealthPreflight, buildRepositoryPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
 import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
 import { importExternalComponent } from '../../server/external-components.mjs';
@@ -851,7 +851,9 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       if (x.listener?.present && !x.listener.owned) report.problems.push(`${x.name} port ${x.port} held by non-owned pid(s) ${x.listener.pids.join(',')}`);
       if (x.ownership === 'UNPROVEN') report.problems.push(`${x.name} alive but instance unproven: ${x.ownership_detail}`);
     }
+    report.repositories = buildRepositoryPreflight(cfg);
     report.health_preflight = buildHealthPreflight(report);
+    report.health_preflight.repositories = report.repositories;
     return report;
   }
 

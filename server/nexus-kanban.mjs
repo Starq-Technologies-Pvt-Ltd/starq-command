@@ -13,7 +13,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 const RECOVERED_DATA_ROOT = path.resolve(fileURLToPath(new URL('../recovered/nexus/starqNexus/data', import.meta.url)));
 const DEFAULT_NEXUS_WORKSPACE = process.env.STARQ_NEXUS_WORKSPACE_ROOT
-  || (fs.existsSync(RECOVERED_DATA_ROOT) ? path.dirname(path.dirname(RECOVERED_DATA_ROOT)) : (process.platform === 'win32' ? 'D:\\!starq' : path.resolve('recovered', 'nexus')));
+  || (fs.existsSync(RECOVERED_DATA_ROOT) ? path.dirname(path.dirname(RECOVERED_DATA_ROOT)) : path.resolve('recovered', 'nexus'));
 export const NEXUS_DATA_ROOT = path.resolve(
   process.env.STARQ_NEXUS_DATA_ROOT
     || (fs.existsSync(RECOVERED_DATA_ROOT) ? RECOVERED_DATA_ROOT : path.join(DEFAULT_NEXUS_WORKSPACE, 'starqNexus', 'data')),
@@ -354,17 +354,11 @@ export function importLegacyPmSnapshot(handle, { dbPath, nowIso, json }) {
     ).run(summary.source_file, contentHash, tasks.length, ts);
     const putVersion = handle.prepare(
       `INSERT INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
-       VALUES (?, ?, 'starqCommand-pm-board-v1', ?, ?, ?, 'IMPORTED', ?, ?, ?)
-       ON CONFLICT(source_key, payload_sha256) DO UPDATE SET
-         task_id = excluded.task_id,
-         resolution = excluded.resolution,
-         raw_status = excluded.raw_status,
-         raw_payload = excluded.raw_payload,
-         imported_at = excluded.imported_at`,
+       VALUES (?, ?, 'starqCommand-pm-board-v1', ?, ?, ?, ?, ?, ?, ?)`,
     );
     const putRecord = handle.prepare(
       `INSERT INTO pm_source_records (source_key, source_system, source_file, source_row_index, task_id, resolution, raw_status, payload_sha256, raw_payload, imported_at)
-       VALUES (?, 'starqCommand-pm-board-v1', ?, ?, ?, 'IMPORTED', ?, ?, ?, ?)
+       VALUES (?, 'starqCommand-pm-board-v1', ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(source_key) DO UPDATE SET
          task_id = excluded.task_id,
          resolution = excluded.resolution,
@@ -377,9 +371,17 @@ export function importLegacyPmSnapshot(handle, { dbPath, nowIso, json }) {
       const sourceKey = `command-pm-v1:${task.id}`;
       const rawPayload = json({ task, history: historyByTask.get(task.id) ?? [] });
       const payloadHash = createHash('sha256').update(rawPayload).digest('hex');
-      const linkedTaskId = task.id;
-      putVersion.run(sourceKey, payloadHash, summary.source_file, rowIndex, linkedTaskId, String(task.status ?? ''), rawPayload, ts);
-      putRecord.run(sourceKey, summary.source_file, rowIndex, linkedTaskId, String(task.status ?? ''), payloadHash, rawPayload, ts);
+      // P-1: The four legacy Command tasks PM-CMD-001..004 are archived early work items,
+      // not identical to the live native Command tasks. They must be preserved as ARCHIVED_ID_COLLISION.
+      const resolution = 'ARCHIVED_ID_COLLISION';
+      const linkedTaskId = null;
+      const lastVer = handle.prepare(
+        'SELECT resolution, task_id, payload_sha256 FROM pm_source_record_versions WHERE source_key = ? ORDER BY rowid DESC LIMIT 1'
+      ).get(sourceKey);
+      if (!lastVer || lastVer.resolution !== resolution || lastVer.task_id !== linkedTaskId || lastVer.payload_sha256 !== payloadHash) {
+        putVersion.run(sourceKey, payloadHash, summary.source_file, rowIndex, linkedTaskId, resolution, String(task.status ?? ''), rawPayload, ts);
+      }
+      putRecord.run(sourceKey, summary.source_file, rowIndex, linkedTaskId, resolution, String(task.status ?? ''), payloadHash, rawPayload, ts);
       summary.preserved += 1;
     });
     summary.content_sha256 = contentHash;

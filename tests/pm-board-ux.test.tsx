@@ -106,7 +106,7 @@ const testTask2: PmTask = {
 
 describe('WP-4 / WP-5 Truthful Progress & Operational Qualifiers', () => {
   it('correctly maps projects to truthful operational qualifiers', () => {
-    expect(getOperationalQualifier('erp').label).toBe('ON HOLD (DEC-100)');
+    expect(getOperationalQualifier('erp').label).toBe('ACTIVE (CP2 #12690 HOLD)');
     expect(getOperationalQualifier('erp').tone).toBe('hold');
 
     expect(getOperationalQualifier('hoadha').label).toBe('PRE-ACTIVATION');
@@ -132,7 +132,7 @@ describe('WP-4 / WP-5 Truthful Progress & Operational Qualifiers', () => {
           id: 'erp',
           name: 'starqERP',
           prefix: 'SERP',
-          hold: { state: 'ON_HOLD', authority: 'DEC-100', effective: '2026-10-15', source: 'pm_projects' },
+          hold: { state: 'ON_HOLD', authority: 'CP2 #12690', effective: '2026-10-15', source: 'pm_projects' },
           source_gap: null,
           total: 437,
           open: 204,
@@ -142,6 +142,12 @@ describe('WP-4 / WP-5 Truthful Progress & Operational Qualifiers', () => {
           blocked: 10,
           pending_room_sync: 0,
           unassigned: 20,
+          dec072_progress: {
+            claimed: 233,
+            committed: 0,
+            proven: 0,
+            capability: null,
+          },
         },
       ],
     };
@@ -170,8 +176,17 @@ describe('WP-4 / WP-5 Truthful Progress & Operational Qualifiers', () => {
 
     expect(host.textContent).toContain('Truthful Progress & Operational Readiness');
     expect(host.textContent).toContain('Historical ticket status does not indicate operational software readiness');
-    expect(host.textContent).toContain('233 / 437 historical tickets');
-    expect(host.textContent).toContain('ON HOLD (DEC-100)');
+    expect(host.textContent).toContain('Historical tasks closed:');
+    expect(host.textContent).toContain('233 / 437');
+    expect(host.textContent).toContain('ACTIVE (CP2 #12690 HOLD)');
+    // DEC-072 Rule 1: No progress bar with width based on done/total
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
+    // 4 Honest Tiers
+    expect(host.textContent).toContain('Historical tasks closed:');
+    expect(host.textContent).toContain('Tasks with commit:');
+    expect(host.textContent).toContain('Verified acceptance:');
+    expect(host.textContent).toContain('Plan capability:');
+    expect(host.textContent).toContain('NO CURRENT PLAN');
   });
 });
 
@@ -270,5 +285,17 @@ describe('WP-1 / WP-2 Kanban Board & Task Details', () => {
     expect(host.textContent).toContain('Attach Evidence');
     expect(host.querySelector('input[aria-label="Independent Verifier"]')).not.toBeNull();
     expect(host.textContent).toContain('GATED LIFECYCLE (ENFORCED)');
+
+    // Check X-3: In-progress task without execution record displays NO EXECUTION RECORD
+    expect(host.textContent).toContain('NO EXECUTION RECORD');
+
+    // Check R-4: Retired handles filtered from Acting as
+    const actingAsSelect = host.querySelector('select[aria-label="Acting as"]') as HTMLSelectElement;
+    expect(actingAsSelect).not.toBeNull();
+    const options = Array.from(actingAsSelect.options).map((o) => o.value);
+    expect(options).toContain('codex');
+    expect(options).toContain('claude');
+    expect(options).not.toContain('ali');
+    expect(options).not.toContain('nexus');
   });
 });

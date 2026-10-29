@@ -4,6 +4,40 @@
   "workspace_root": "D:\\StarqTech",
   "node": "D:\\StarqTech\\00_STARQ_HQ\\operations\\herdr-floor\\runtime\\nodejs\\node.exe",
   "host": "127.0.0.1",
+  "repository_map": {
+    "command": {
+      "path": "D:\\StarqTech\\00_STARQ_HQ\\operations\\starq-command",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "erp": {
+      "path": "D:\\StarqTech\\Projects\\StarqERP",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "hoadha": {
+      "path": "D:\\StarqTech\\Projects\\Hoadhaa\\code",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "buzzlab": {
+      "path": "D:\\StarqTech\\Projects\\BuzzLab",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "portal": {
+      "path": "D:\\StarqTech\\Archives\\LegacyProjects\\projects\\starq-web",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "pos": {
+      "path": "D:\\StarqTech\\Projects\\StarqERP",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "starqbooks": {
+      "path": "D:\\StarqTech\\Projects\\StarqERP",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    },
+    "antrac-erp": {
+      "path": "D:\\StarqTech\\Archives\\LegacyProjects\\projects\\antrac-erp",
+      "worktreesDir": "D:\\StarqTech\\_worktrees"
+    }
+  },
   "timeouts_ms": {
     "identity": 10000,
     "health": 30000,

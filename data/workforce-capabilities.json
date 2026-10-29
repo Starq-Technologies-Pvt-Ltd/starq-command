@@ -1,0 +1,275 @@
+{
+  "schemaVersion": 1,
+  "description": "Starq Dev Studio workforce capability registry — verified capabilities and durable evidence paths for all active identities.",
+  "generatedAt": "2026-10-28T00:00:00.000Z",
+  "authority": "Founder Room #8473 / #15936 X-1",
+  "workers": {
+    "mustarq": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "founder_oversight",
+        "governance_authorization",
+        "product_direction",
+        "acceptance_review"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6MST0000000000000000009",
+        "Room:#6223",
+        "Room:#14394"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "antigravity": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "core_architecture",
+        "typescript",
+        "react",
+        "sqlite",
+        "governance",
+        "software_factory",
+        "backend"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6AG00000000000000000002",
+        "Room:#10663",
+        "Room:#15940"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "codex": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "chief_engineer",
+        "security_remediation",
+        "migrations",
+        "integration_review",
+        "powershell",
+        "python"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6CD00000000000000000003",
+        "Room:#15794",
+        "Room:#15937"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "claude": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "architecture_review",
+        "data_fidelity",
+        "duty_operator",
+        "systems_analysis",
+        "typescript"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6CL00000000000000000004",
+        "Room:#15936",
+        "Room:#8474"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "cursor": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "frontend_engineering",
+        "ux_acceptance",
+        "refactoring",
+        "react",
+        "vitest"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6CR00000000000000000005",
+        "Room:#15939"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "opencode": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "e2e_testing",
+        "playwright",
+        "autonomous_testing",
+        "grind_work"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6OC00000000000000000006",
+        "AGENTS.md"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "deadpool": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "wsl_operations",
+        "hermes_runtime",
+        "linux_tooling"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6DP00000000000000000007",
+        "Room:#8473"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "vision": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "windows_comms",
+        "status_reporting",
+        "verification_support"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J6VS00000000000000000008",
+        "Room:#8473"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "goose": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "implementation_support",
+        "engineering_tasks"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8GSE0000000000000000001",
+        "Room:#8473"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "qoder": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "ide_engineering",
+        "code_editing"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8QDR0000000000000000002"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "vscode": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "independent_audit",
+        "code_review",
+        "ide_workspace"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8VSC0000000000000000003"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "alfred": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "operations_prep",
+        "reconciliation_support"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8ALF0000000000000000004"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "athena": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "academic_strategy",
+        "context_synthesis"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8ATH0000000000000000005"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "bursar": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "bus_audit",
+        "ledger_inspection"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8BUR0000000000000000006"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "openclaw": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "windows_comms",
+        "local_assist"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8OCL0000000000000000007"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "pi": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "bounded_implementation",
+        "lightweight_grind"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8PI00000000000000000008",
+        "Room:#8473"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "devin": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "autonomous_implementation",
+        "bounded_lanes"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8DEV0000000000000000009"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "opencode2": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "bounded_grind",
+        "dots3_evaluation"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8OC20000000000000000010"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "mastracode": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "implementation_support",
+        "workflow_execution"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8MAS0000000000000000011"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "format-watchdog": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "format_compliance_check",
+        "mechanical_linting"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8FWD0000000000000000012"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    },
+    "omp": {
+      "status": "VERIFIED",
+      "capabilities": [
+        "evaluation_lane",
+        "bounded_tasks"
+      ],
+      "evidence": [
+        "agent-comms/protocol/v1/identities.json#ident_01J8OMP0000000000000000013"
+      ],
+      "verifiedAt": "2026-10-28T00:00:00.000Z"
+    }
+  }
+}
