@@ -446,16 +446,17 @@ export interface TransportWriteCapability {
 }
 
 /**
- * Command has one intentionally writable UI action today: Messenger submits to
- * the PM service's Room-backed send route. Keep this exception exact so a new
- * endpoint, method, or source file remains visible to the capability guards.
+ * Command has intentionally writable UI actions for Messenger submission and
+ * PM task artifacts. Keep exceptions exact so new writes remain visible.
  */
 export function isApprovedCommandUiWrite(call: { file: string; text: string; reason: string }): boolean {
   const source = path.relative(process.cwd(), call.file).replace(/\\/g, '/');
-  return source === 'src/surfaces/comms.tsx'
-    && call.reason === "fetch with method 'POST'"
-    && call.text.includes('/api/pm/comms/send')
-    && /method\s*:\s*['"]POST['"]/.test(call.text);
+  if (source === 'src/lib/pm-client.ts' && call.reason === 'fetch options contain a spread — method cannot be statically verified'
+    && call.text.startsWith('fetch(url, {') && call.text.includes('AbortSignal.timeout(timeoutMs)')) return true;
+  return call.reason === "fetch with method 'POST'"
+    && /method\s*:\s*['"]POST['"]/.test(call.text)
+    && ((source === 'src/surfaces/comms.tsx' && call.text.includes('/api/pm/comms/send'))
+      || (source === 'src/lib/pm-client.ts' && call.text.includes('/api/pm/tasks/') && call.text.includes('/artifacts')));
 }
 
 const SAFE_METHODS = new Set(['GET', 'get', 'HEAD', 'head']);

@@ -134,6 +134,7 @@ function resolveDbPath() {
 }
 
 const nowIso = () => new Date().toISOString();
+const nextTaskUpdatedAt = (previous) => new Date(Math.max(Date.now(), Date.parse(previous) + 1)).toISOString();
 const json = (v) => JSON.stringify(v);
 
 class HttpError extends Error {
@@ -243,7 +244,12 @@ function describeRecord(rec, previousHash) {
   };
 }
 
+let roomLookupForTesting = null;
+export function setRoomLookupForTesting(lookup) {
+  roomLookupForTesting = lookup;
+}
 function lookupRoom(sequence) {
+  if (roomLookupForTesting) return roomLookupForTesting(sequence);
   const snapshot = snapshotLedger();
   const idx = snapshot.records.findIndex((rec) => rec.brokerSequence === sequence);
   if (idx < 0) return null;
@@ -1132,13 +1138,90 @@ function updateTask(id, body) {
   return taskDetail(id);
 }
 
-function linkRoom(id, body) {
-  only(body, ['actor', 'expected_updated_at', 'sequence', 'eventId', 'purpose', 'kind']);
-  return updateTask(id, {
-    actor: body.actor,
-    expected_updated_at: body.expected_updated_at,
-    room_ref: { sequence: body.sequence, eventId: body.eventId, purpose: body.purpose, kind: body.kind },
+/** Persist repository artifacts as one optimistic, auditable task update. */
+export function updateTaskArtifacts(id, body) {
+  const fields = ['branch', 'commit_sha', 'pr_ref', 'pr_url'];
+  only(body, ['actor', 'expected_updated_at', ...fields]);
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
+  const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
+  const values = {};
+  for (const field of fields) {
+    const value = body[field] === null ? null : str(body, field, { max: field === 'branch' ? 255 : field === 'pr_url' ? 500 : 200 });
+    if (value === undefined) continue;
+    if (field === 'branch' && value !== null && value !== '' && (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$/.test(value)
+      || value.includes('..') || value.includes('@{') || value.endsWith('/') || value.includes('//')
+      || value.split('/').some((part) => !part || part.startsWith('.') || part.endsWith('.') || part.endsWith('.lock') || part === '@'))) {
+      throw bad('branch is not a valid Git branch ref.', ['branch must be a valid Git branch ref']);
+    }
+    if (field === 'commit_sha' && value !== null && value !== '' && !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value)) {
+      throw bad('commit_sha is invalid.', ['commit_sha must be a 40- or 64-character hexadecimal object id']);
+    }
+    if (field === 'pr_ref' && value !== null && value !== '' && !/^(?:#[1-9][0-9]*|[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#[1-9][0-9]*)$/.test(value)) {
+      throw bad('pr_ref is invalid.', ['pr_ref must be #<number> or owner/repository#<number>']);
+    }
+    if (field === 'pr_url' && value !== null && value !== '') {
+      let url;
+      try { url = new URL(value); } catch { throw bad('pr_url is invalid.', ['pr_url must be a GitHub pull request URL']); }
+      if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port || url.search || url.hash
+        || !/^\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/[1-9][0-9]*\/?$/.test(url.pathname) || url.username || url.password) {
+        throw bad('pr_url is invalid.', ['pr_url must be an https://github.com/<owner>/<repository>/pull/<number> URL']);
+      }
+    }
+    values[field] = value === '' ? null : value;
+  }
+  if (!Object.keys(values).length) throw bad('No artifact fields supplied.', ['at least one artifact field is required']);
+
+  tx((d) => {
+    const row = getTaskRow(id);
+    if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
+    if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Task changed since you loaded it; reload before editing. Nothing was saved.', { current_updated_at: row.updated_at });
+    if (row.stage === 'CLOSED') throw new HttpError(409, 'TASK_CLOSED', 'Closed tasks are immutable.');
+    const changed = Object.fromEntries(Object.entries(values)
+      .filter(([field, value]) => (row[field] ?? null) !== value)
+      .map(([field, value]) => [field, { from: row[field] ?? null, to: value }]));
+    if (!Object.keys(changed).length) throw bad('No artifact values changed.', ['no changes supplied']);
+    const ts = nextTaskUpdatedAt(row.updated_at);
+    const assignments = Object.keys(changed).map((field) => `${field} = ?`).join(', ');
+    d.prepare(`UPDATE pm_tasks SET ${assignments}, updated_at = ? WHERE id = ?`)
+      .run(...Object.keys(changed).map((field) => values[field]), ts, id);
+    logEvent(d, { taskId: id, type: 'ARTIFACTS_UPDATED', actor, detail: { artifacts: changed }, post: false });
   });
+  return taskDetail(id);
+}
+
+export function linkRoom(id, body) {
+  only(body, ['actor', 'expected_updated_at', 'sequence', 'eventId', 'purpose', 'kind']);
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
+  const expected = str(body, 'expected_updated_at', { min: 10, max: 40, required: true });
+  const sequence = body.sequence;
+  if (!Number.isInteger(sequence) || sequence < 1) throw bad('Room sequence invalid.', ['room sequence must be a positive integer']);
+  if (typeof body.eventId !== 'string' || !/^[a-f0-9]{64}$/i.test(body.eventId)) throw bad('Room eventId invalid.', ['eventId must be 64 hex characters']);
+  const purpose = str(body, 'purpose', { min: 3, max: 200, required: true });
+  const kind = body.kind === undefined ? 'authorization' : body.kind;
+  if (!['authorization', 'evidence'].includes(kind)) throw bad('Room ref kind invalid.', ['kind must be authorization or evidence']);
+  const ref = parseRoomRef({ sequence, eventId: body.eventId, purpose, kind }, { taskId: id });
+  tx((d) => {
+    const row = getTaskRow(id);
+    if (!row) throw new HttpError(404, 'TASK_NOT_FOUND', `Unknown task: ${id}.`);
+    if (row.updated_at !== expected) throw new HttpError(409, 'STALE_EDIT', 'Task changed since you loaded it; reload before editing. Nothing was saved.', { current_updated_at: row.updated_at });
+    if (row.stage === 'CLOSED') throw new HttpError(409, 'TASK_CLOSED', 'Closed tasks are immutable.');
+    const task = hydrate(row);
+    let detail;
+    let type;
+    if (kind === 'authorization') {
+      if (JSON.stringify(task.room_authorization_ref) === JSON.stringify(ref)) throw bad('Room authorization is already linked.', ['no changes supplied']);
+      d.prepare('UPDATE pm_tasks SET room_authorization_ref = ?, updated_at = ? WHERE id = ?').run(json(ref), nextTaskUpdatedAt(row.updated_at), id);
+      type = 'ROOM_AUTHORIZATION_LINKED';
+      detail = { room_ref: ref };
+    } else {
+      const nextRefs = [...task.evidence_refs, ref];
+      d.prepare('UPDATE pm_tasks SET evidence_refs = ?, updated_at = ? WHERE id = ?').run(json(nextRefs), nextTaskUpdatedAt(row.updated_at), id);
+      type = 'ROOM_EVIDENCE_LINKED';
+      detail = { room_ref: ref };
+    }
+    logEvent(d, { taskId: id, type, actor, detail, post: false });
+  });
+  return taskDetail(id);
 }
 
 function addLocalEvidence(id, body) {
@@ -1157,7 +1240,7 @@ function addLocalEvidence(id, body) {
     const task = hydrate(row);
     const ev = localLedgerRef({ actor, purpose: note, kind: 'evidence', taskId: id });
     const nextRefs = [...task.evidence_refs, ev];
-    const ts = nowIso();
+    const ts = nextTaskUpdatedAt(row.updated_at);
     d.prepare('UPDATE pm_tasks SET evidence_refs = ?, updated_at = ? WHERE id = ?').run(json(nextRefs), ts, id);
     logEvent(d, { taskId: id, type: 'LOCAL_EVIDENCE', actor, detail: { room_ref: ev, note }, post: false });
   });
@@ -1652,6 +1735,8 @@ async function handle(req, res) {
     if (m && req.method === 'POST') return send(res, 200, linkRoom(decodeURIComponent(m[1]), await readBody(req)), origin);
     m = /^\/api\/pm\/tasks\/([A-Za-z0-9._:-]{2,40})\/evidence$/.exec(p);
     if (m && req.method === 'POST') return send(res, 200, addLocalEvidence(decodeURIComponent(m[1]), await readBody(req)), origin);
+    m = /^\/api\/pm\/tasks\/([A-Za-z0-9._:-]{2,40})\/artifacts$/.exec(p);
+    if (m && req.method === 'POST') return send(res, 200, updateTaskArtifacts(decodeURIComponent(m[1]), await readBody(req)), origin);
     if (req.method === 'POST' && p === '/api/pm/tasks') return send(res, 201, createTask(await readBody(req)), origin);
     if (req.method === 'POST' && p === '/api/pm/room-sync/retry') {
       await readBody(req);

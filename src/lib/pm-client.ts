@@ -535,9 +535,48 @@ export interface PmAddEvidenceInput {
   note?: string;
 }
 
+export interface PmTaskArtifactsInput {
+  actor: string;
+  expected_updated_at: string;
+  branch?: string | null;
+  commit_sha?: string | null;
+  pr_ref?: string | null;
+  pr_url?: string | null;
+}
+
 export const pmCreateTask = (body: Record<string, unknown>) => call<PmTaskDetail>('POST', '/api/pm/tasks', body);
 export const pmUpdateTask = (id: string, body: Record<string, unknown>) =>
   call<PmTaskDetail>('PATCH', `/api/pm/tasks/${encodeURIComponent(id)}`, body);
+/** A literal POST keeps this task mutation visible to the static capability scanner. */
+export async function pmUpdateTaskArtifacts(id: string, body: PmTaskArtifactsInput): Promise<PmResult<PmTaskDetail>> {
+  try {
+    const res = await fetch(`${pmBase()}/api/pm/tasks/${encodeURIComponent(id)}/artifacts`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-PM-Client': 'starq-command' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(PM_TIMEOUT_MS),
+    });
+    let payload: Record<string, unknown> | null = null;
+    try { payload = (await res.json()) as Record<string, unknown> | null; } catch { payload = null; }
+    if (res.ok) return { ok: true, data: payload as unknown as PmTaskDetail };
+    return {
+      ok: false,
+      state: res.status === 503 ? 'UNAVAILABLE' : 'REJECTED',
+      status: res.status,
+      code: String(payload?.error ?? 'ERROR'),
+      message: String(payload?.message ?? `PM service returned ${res.status}`),
+      errors: Array.isArray(payload?.errors) ? payload.errors as string[] : undefined,
+      current_updated_at: typeof payload?.current_updated_at === 'string' ? payload.current_updated_at : undefined,
+    };
+  } catch (err: unknown) {
+    const isAbort = err !== null && typeof err === 'object' && 'name' in err
+      && ((err as Record<string, unknown>).name === 'TimeoutError' || (err as Record<string, unknown>).name === 'AbortError');
+    return isAbort
+      ? { ok: false, state: 'TIMEOUT', status: 0, code: 'TIMEOUT', message: `PM request timed out after ${PM_TIMEOUT_MS}ms` }
+      : { ok: false, state: 'UNAVAILABLE', status: 0, code: 'UNREACHABLE', message: 'The PM service (127.0.0.1:5176) is not reachable. Nothing was saved.' };
+  }
+}
 export const pmLinkRoom = (id: string, body: PmLinkRoomInput | Record<string, unknown>) => {
   const b = body as Record<string, unknown>;
   const eventId = String(b.eventId || b.event_id || b.token || '');

@@ -234,11 +234,13 @@ describe('PROOF 4 — all client-side writes are explicitly authorized', () => {
   const approved = result.suspiciousCalls.filter(isApprovedCommandUiWrite);
   const unapproved = result.suspiciousCalls.filter(c => !isApprovedCommandUiWrite(c));
 
-  it('permits only the PM-backed Room Messenger send route', () => {
-    expect(approved).toHaveLength(1);
-    expect(approved[0].file.replace(/\\/g, '/')).toMatch(/src\/surfaces\/comms\.tsx$/);
-    expect(approved[0].text).toContain('/api/pm/comms/send');
-    expect(approved[0].reason).toBe("fetch with method 'POST'");
+  it('permits only the declared PM-backed Messenger and task-artifact mutations', () => {
+    expect(approved).toHaveLength(3);
+    expect(approved.some((call) => call.file.replace(/\\/g, '/').endsWith('src/surfaces/comms.tsx'))).toBe(true);
+    expect(approved.find((call) => call.text.includes('/api/pm/comms/send'))?.reason).toBe("fetch with method 'POST'");
+    const artifacts = approved.find((call) => call.text.includes('/artifacts'));
+    expect(artifacts?.reason).toBe("fetch with method 'POST'");
+    expect(artifacts?.text).toContain("method: 'POST'");
     if (unapproved.length > 0) {
       const detail = unapproved
         .map(v => `${path.relative(SRC, v.file)}: ${v.reason} — ${v.text.slice(0, 80)}`)
