@@ -83,7 +83,7 @@ describe('Command project boards', () => {
 
   it('lists live boards on the Projects surface', async () => {
     const registered = [
-      project('command', 'Starq Command', 'CMD', 'BLOCKED'),
+      { ...project('command', 'Starq Command', 'CMD', 'BLOCKED'), open: 3, total: 4, unassigned: 2 },
       project('erp', 'starqERP', 'SERP'),
       project('hoadha', 'Hoadha', 'DHIV'),
     ];
@@ -111,6 +111,63 @@ describe('Command project boards', () => {
     expect(host.textContent).toContain('starqERP');
     expect(host.textContent).toContain('Hoadha');
     expect(host.textContent).toContain('To Do');
+    expect(host.textContent).toContain('3 open');
+    expect(host.textContent).toContain('1 blocked');
+    expect(host.textContent).toContain('2 unassigned');
+    expect(host.textContent).toContain('4 total');
+    expect(host.querySelector('[data-pm-daily-actions]')).not.toBeNull();
+    expect(host.querySelector('[data-project="erp"]')?.textContent).toContain('ACTIVE');
+    expect(host.querySelector('[data-nav-group="Historical Products"]')?.textContent).toContain('StarqBooks');
+  });
+
+  it('reports unavailable and missing Command rows without presenting fake counts', async () => {
+    const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: [project('erp', 'starqERP', 'SERP')] };
+    let unavailable = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return unavailable
+        ? { ok: false, status: 503, json: async () => ({ message: 'PM service offline' }) }
+        : { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/nexus/sources')) return { ok: true, json: async () => ({ sources: [] }) };
+      return { ok: false, status: 404, json: async () => ({ message: `unexpected route: ${url}` }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => { root?.render(<PmPortfolioSurface />); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(host.textContent).toContain('Command project row missing.');
+    expect(host.querySelector('[data-pm-daily-actions]')?.textContent).not.toContain('0 open');
+
+    unavailable = true;
+    await act(async () => { host.querySelector<HTMLButtonElement>('button.go-link')?.click(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(host.querySelector('[data-pm-daily-actions]')?.textContent).toContain('PM portfolio unavailable.');
+    expect(host.querySelector('[data-pm-daily-actions]')?.textContent).not.toContain('Loading Command actions…');
+    expect(host.querySelector('[data-pm-daily-actions]')?.textContent).not.toContain('0 open');
+  });
+
+  it('shows the Command source gap alongside actual portfolio counts', async () => {
+    const command = { ...project('command', 'Starq Command', 'CMD'), source_gap: 'Imported source rows need reconciliation.' };
+    const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: [command] };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/nexus/sources')) return { ok: true, json: async () => ({ sources: [] }) };
+      return { ok: false, status: 404, json: async () => ({ message: 'unexpected route' }) };
+    }));
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>');
+    vi.stubGlobal('window', dom.window); vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => { root?.render(<PmPortfolioSurface />); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(host.textContent).toContain('Imported source rows need reconciliation.');
+    expect(host.textContent).toContain('0 open');
+    expect(host.textContent).toContain('0 total');
   });
 
   it('opens the linked task detail only when it belongs to the selected PM board', async () => {

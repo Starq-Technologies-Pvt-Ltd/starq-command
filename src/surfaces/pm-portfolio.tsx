@@ -243,6 +243,43 @@ export function PmPortfolioSnapshot() {
   );
 }
 
+export function CommandDailyActions({ data, problem, loading }: {
+  data: PmPortfolio | null;
+  problem: string | null;
+  loading: boolean;
+}) {
+  const commandProject = (data?.projects ?? []).find((p) => p.id === 'command');
+  const openCount = commandProject?.open ?? 0;
+  const blockedCount = commandProject?.blocked ?? 0;
+  const unassignedCount = commandProject?.unassigned ?? 0;
+  const totalCount = commandProject?.total ?? 0;
+  const sourceGap = commandProject?.source_gap ?? null;
+
+  return (
+    <section aria-label="Command daily actions" data-pm-daily-actions="">
+      <Panel title="Command daily actions" count={commandProject ? `${openCount} open` : 'PM summary UNKNOWN'}>
+        <div className="body grid gap-2">
+          {problem ? <SourceGap reason="PM portfolio unavailable." detail={problem} /> : null}
+          {commandProject ? (
+            <>
+              <div className="flex flex-wrap gap-2 text-2xs">
+                <Chip value={`${openCount} open`} tone="room" />
+                <Chip value={`${blockedCount} blocked`} tone={blockedCount > 0 ? 'hold' : 'muted'} />
+                <Chip value={`${unassignedCount} unassigned`} tone={unassignedCount > 0 ? 'stale' : 'muted'} />
+                <Chip value={`${totalCount} total`} tone="muted" />
+              </div>
+              {sourceGap ? <SourceGap reason="Source gap." detail={String(sourceGap)} /> : null}
+            </>
+          ) : problem ? null : loading ? (
+            <p className="text-2xs text-muted-foreground" role="status">Loading Command actions…</p>
+          ) : (
+            <SourceGap reason="Command project row missing." detail="PM portfolio returned no project with id command; counts are unavailable." />
+          )}
+        </div>
+      </Panel>
+    </section>
+  );
+}
 export function PmPortfolioSurface() {
   const [data, setData] = React.useState<PmPortfolio | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
@@ -253,7 +290,7 @@ export function PmPortfolioSurface() {
     setLoading(true);
     const res = await pmPortfolio();
     if (res.ok) { setData(res.data); setProblem(null); }
-    else { setProblem(res.message); }
+    else { setData(null); setProblem(res.message); }
     setLoading(false);
   }, []);
   React.useEffect(() => { void load(); }, [load]);
@@ -375,6 +412,7 @@ export function PmPortfolioSurface() {
           </div>
         ) : null}
       </Panel>
+      <CommandDailyActions data={data} problem={problem} loading={loading} />
       <PmSourceArchivePanel />
     </section>
   );
