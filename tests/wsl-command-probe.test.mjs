@@ -46,3 +46,17 @@ test('probe records errors without throwing', async () => {
   assert.equal(out.results[0].ok, false);
   assert.equal(out.results[0].error, 'boom');
 });
+
+import { execFileSync } from 'node:child_process';
+
+test('isWsl uses injected readFile', () => {
+  const r = isWsl({ platform: 'linux', readFile: () => 'Linux version 5.10.0 generic kernel' });
+  assert.equal(r, false);
+});
+
+test('CLI invocation emits JSON', () => {
+  const out = execFileSync(process.execPath, ['scripts/lifecycle/wsl-command-probe.mjs', 'lifecycle.config.json'], { encoding: 'utf8', timeout: 60000 });
+  const parsed = JSON.parse(out);
+  assert.ok(parsed.generatedAt);
+  assert.ok(Array.isArray(parsed.results));
+});

@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import http from 'node:http';
 import { execSync } from 'node:child_process';
 
-export function isWsl({ env = process.env, platform = process.platform } = {}) {
+export function isWsl({ env = process.env, platform = process.platform, readFile = (p) => fs.readFileSync(p, 'utf8') } = {}) {
   if (platform !== 'linux') return false;
   try {
-    const v = fs.readFileSync('/proc/version', 'utf8');
+    const v = readFile('/proc/version');
     return /microsoft/i.test(v) || /wsl/i.test(v);
   } catch {
     return Boolean(env.WSL_DISTRO_NAME || env.WSL_INTEROP);
@@ -78,7 +78,10 @@ function defaultHttpGet(host, port, pathname, { timeoutMs = 3000 } = {}) {
 }
 
 // CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+import { pathToFileURL } from 'node:url';
+import path from 'node:path';
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (import.meta.url === pathToFileURL(invokedPath).href) {
   const cfgPath = process.argv[2] || 'lifecycle.config.json';
   const config = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
   const out = await probe({ config });
