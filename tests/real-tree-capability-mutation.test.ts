@@ -367,12 +367,13 @@ describe('PART A — real application tree is clean before mutation', () => {
     ).toEqual([]);
   });
 
-  it('records only the specifically authorized PM-backed Messenger write', () => {
+  it('records only the specifically authorized Messenger and task-artifact writes', () => {
     const { approvedTransport } = scanRealTree();
-    expect(approvedTransport).toHaveLength(1);
-      expect(approvedTransport[0]).toContain('surfaces/comms.tsx');
-    expect(approvedTransport[0]).toContain("fetch with method 'POST'");
-    expect(approvedTransport[0]).toContain('/api/pm/comms/send');
+    expect(approvedTransport).toHaveLength(2);
+    expect(approvedTransport.some((call) => call.includes('surfaces/comms.tsx')
+      && call.includes("fetch with method 'POST'") && call.includes('/api/pm/comms/send'))).toBe(true);
+    expect(approvedTransport.some((call) => call.includes('lib/pm-client.ts')
+      && call.includes("fetch with method 'POST'") && call.includes('/artifacts'))).toBe(true);
   });
 
   it('the mutant target paths do not pre-exist in the real tree', () => {
@@ -448,7 +449,7 @@ describe('PART B/C — real-tree mutation: guard goes red per mutant, green afte
         after.transport,
         `transport guard did not return to green after removing ${m.target}:\n${after.transport.join('\n')}`,
       ).toEqual([]);
-      expect(after.approvedTransport).toHaveLength(1);
+      expect(after.approvedTransport).toHaveLength(2);
     });
   }
 });

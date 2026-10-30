@@ -285,10 +285,19 @@ export type PmResult<T> =
     };
 
 /** Internal helper to perform a single PM request. Timeout covers headers + body parsing via AbortSignal.timeout. */
-async function fetchWithTimeout<T>(url: string, options: RequestInit, timeoutMs: number = PM_TIMEOUT_MS): Promise<PmResult<T>> {
+async function fetchWithTimeout<T>(
+  method: 'GET' | 'POST' | 'PATCH',
+  url: string,
+  headers: Record<string, string> | undefined,
+  body: string | undefined,
+  timeoutMs: number = PM_TIMEOUT_MS,
+): Promise<PmResult<T>> {
   try {
     const res = await fetch(url, {
-      ...options,
+      method,
+      cache: 'no-store',
+      headers,
+      body,
       signal: AbortSignal.timeout(timeoutMs),
     });
     let payload: Record<string, unknown> | null = null;
@@ -344,12 +353,9 @@ async function fetchWithTimeout<T>(url: string, options: RequestInit, timeoutMs:
 }
 
 async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown, attempt: number = 1): Promise<PmResult<T>> {
-  const result = await fetchWithTimeout<T>(`${pmBase()}${path}`, {
-    method,
-    cache: 'no-store',
-    headers: method === 'GET' ? undefined : { 'Content-Type': 'application/json', 'X-PM-Client': 'starq-command' },
-    body: method === 'GET' ? undefined : JSON.stringify(body ?? {}),
-  });
+  const headers = method === 'GET' ? undefined : { 'Content-Type': 'application/json', 'X-PM-Client': 'starq-command' };
+  const encodedBody = method === 'GET' ? undefined : JSON.stringify(body ?? {});
+  const result = await fetchWithTimeout<T>(method, `${pmBase()}${path}`, headers, encodedBody);
   if (result.ok) return result;
   const isRetryable = method === 'GET' && (result.state === 'TIMEOUT' || result.state === 'UNAVAILABLE');
   if (isRetryable && attempt <= PM_MAX_SAFE_GET_RETRIES) {

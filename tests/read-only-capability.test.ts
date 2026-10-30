@@ -235,7 +235,9 @@ describe('PROOF 4 — all client-side writes are explicitly authorized', () => {
   const unapproved = result.suspiciousCalls.filter(c => !isApprovedCommandUiWrite(c));
 
   it('permits only the declared PM-backed Messenger and task-artifact mutations', () => {
-    expect(approved).toHaveLength(3);
+    expect(approved).toHaveLength(2);
+    expect(approved.every((call) => call.file.replace(/\\/g, '/').endsWith('src/surfaces/comms.tsx')
+      || (call.file.replace(/\\/g, '/').endsWith('src/lib/pm-client.ts') && call.text.includes('/artifacts')))).toBe(true);
     expect(approved.some((call) => call.file.replace(/\\/g, '/').endsWith('src/surfaces/comms.tsx'))).toBe(true);
     expect(approved.find((call) => call.text.includes('/api/pm/comms/send'))?.reason).toBe("fetch with method 'POST'");
     const artifacts = approved.find((call) => call.text.includes('/artifacts'));

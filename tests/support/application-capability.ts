@@ -451,8 +451,6 @@ export interface TransportWriteCapability {
  */
 export function isApprovedCommandUiWrite(call: { file: string; text: string; reason: string }): boolean {
   const source = path.relative(process.cwd(), call.file).replace(/\\/g, '/');
-  if (source === 'src/lib/pm-client.ts' && call.reason === 'fetch options contain a spread — method cannot be statically verified'
-    && call.text.startsWith('fetch(url, {') && call.text.includes('AbortSignal.timeout(timeoutMs)')) return true;
   return call.reason === "fetch with method 'POST'"
     && /method\s*:\s*['"]POST['"]/.test(call.text)
     && ((source === 'src/surfaces/comms.tsx' && call.text.includes('/api/pm/comms/send'))
