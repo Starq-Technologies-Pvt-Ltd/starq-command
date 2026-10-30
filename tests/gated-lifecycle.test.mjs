@@ -99,8 +99,39 @@ test('work cannot start without a Room authorization reference', () => {
   assert.equal(r.code, 'AUTHORIZATION_REQUIRED');
 });
 
+test('work cannot start with an authorization for an unrelated or overlapping task ID', async (t) => {
+  for (const [caseName, mentions_task] of [
+    ['unrelated task', false],
+    ['overlapping task ID', false],
+  ]) {
+    await t.test(caseName, () => {
+      const r = ev({ to: 'IN_PROGRESS', t: task({
+        stage: 'READY',
+        room_authorization_ref: {
+          kind: 'authorization', root_authority: true, mentions_task,
+        },
+      }) });
+      assert.equal(r.ok, false);
+      assert.equal(r.code, 'AUTHORIZATION_REQUIRED');
+    });
+  }
+});
+
+test('work cannot start from evidence or a non-root Room reference', () => {
+  for (const ref of [
+    { kind: 'evidence', root_authority: true, mentions_task: true },
+    { kind: 'authorization', root_authority: false, mentions_task: true },
+  ]) {
+    const r = ev({ to: 'IN_PROGRESS', t: task({ stage: 'READY', room_authorization_ref: ref }) });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'AUTHORIZATION_REQUIRED');
+  }
+});
+
 test('work cannot start while a dependency is open', () => {
-  const t = task({ stage: 'READY', room_authorization_ref: { sequence: 1 }, depends_on: ['CMD-000'] });
+  const t = task({ stage: 'READY', room_authorization_ref: {
+    sequence: 1, kind: 'authorization', root_authority: true, mentions_task: true,
+  }, depends_on: ['CMD-000'] });
   const r = ev({ to: 'IN_PROGRESS', t, stageOf: () => 'IN_PROGRESS' });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'DEPENDENCY_OPEN');

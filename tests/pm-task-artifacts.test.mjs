@@ -99,6 +99,43 @@ test('PM task repository artifacts', async (t) => {
     } finally { cleanup(); }
   });
 
+  await t.test('authorization links reject unrelated and overlapping task IDs', () => {
+    setup();
+    try {
+      for (const body of [`Authorization for OTHER-${taskId}`, `Authorization for ${taskId}0`]) {
+        const eventId = 'd'.repeat(64);
+        setRoomLookupForTesting((sequence) => ({
+          sequence, eventId, recordHash: 'e'.repeat(64), senderHandle: 'ali', body,
+          hashVerified: true, authorityAllowed: true, registryLevel: 'ROOT_GENESIS', isRoot: true,
+          receivedAt: '2026-10-30T00:00:00Z',
+        }));
+        assert.throws(() => linkRoom(taskId, {
+          actor: 'reviewer', expected_updated_at: expected, sequence: 16876, eventId,
+          purpose: 'Authorize PM-CMD task work', kind: 'authorization',
+        }), (error) => error.status === 422 && error.code === 'ROOM_TASK_MISMATCH');
+      }
+      assert.equal(taskDetail(taskId).task.room_authorization_ref, null);
+      assert.equal(taskDetail(taskId).history.filter((event) => event.event_type === 'ROOM_AUTHORIZATION_LINKED').length, 0);
+    } finally { cleanup(); }
+  });
+
+  await t.test('ordinary evidence links retain behavior when they do not mention a task', () => {
+    setup();
+    try {
+      const eventId = 'f'.repeat(64);
+      setRoomLookupForTesting((sequence) => ({
+        sequence, eventId, recordHash: 'a'.repeat(64), senderHandle: 'reviewer', body: 'Related discussion only',
+        hashVerified: true, authorityAllowed: true, registryLevel: 'L1', isRoot: false,
+        receivedAt: '2026-10-30T00:00:00Z',
+      }));
+      const linked = linkRoom(taskId, {
+        actor: 'reviewer', expected_updated_at: expected, sequence: 16877, eventId,
+        purpose: 'Related evidence', kind: 'evidence',
+      });
+      assert.equal(linked.task.evidence_refs.at(-1).mentions_task, false);
+    } finally { cleanup(); }
+  });
+
   await t.test('rejects Room eventId mismatch and stale Room links without mutation', () => {
     setup();
     try {

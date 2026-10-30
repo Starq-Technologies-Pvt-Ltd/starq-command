@@ -862,12 +862,23 @@ function parseRoomRef(raw, { requirePurpose = true, taskId = null } = {}) {
   if (kind === 'authorization' && !found.isRoot) {
     throw new HttpError(422, 'ROOM_AUTHORITY_INSUFFICIENT', `Room #${raw.sequence} was sent by ${found.senderHandle ?? 'UNKNOWN'} (${found.registryLevel}). An authorization reference must be an authenticated ROOT_GENESIS record.`);
   }
+  const mentionsTask = taskId ? hasExactTaskMention(found.body, taskId) : false;
+  if (kind === 'authorization' && !mentionsTask) {
+    throw new HttpError(422, 'ROOM_TASK_MISMATCH', `Room #${raw.sequence} does not identify task ${taskId} exactly.`);
+  }
   return {
     sequence: found.sequence, eventId: found.eventId, recordHash: found.recordHash,
     senderHandle: found.senderHandle, purpose, kind, verified_at: nowIso(),
     received_at: found.receivedAt, authority_level: found.registryLevel,
-    root_authority: found.isRoot, mentions_task: taskId ? found.body.includes(taskId) : false,
+    root_authority: found.isRoot, mentions_task: mentionsTask,
   };
+}
+
+/** Match a task id as a complete token so prefixes/suffixes cannot authorize another task. */
+function hasExactTaskMention(body, taskId) {
+  if (typeof body !== 'string') return false;
+  const escaped = taskId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9._:-])${escaped}(?=$|[^A-Za-z0-9._:-])`).test(body);
 }
 function dependsField(body, project, selfId) {
   const v = body.depends_on;

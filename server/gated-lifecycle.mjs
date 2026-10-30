@@ -206,9 +206,13 @@ export function evaluateStageTransition({
   }
 
   if (to === 'IN_PROGRESS') {
-    if (!task.room_authorization_ref) {
+    const authorization = task.room_authorization_ref;
+    if (!authorization
+      || authorization.kind !== 'authorization'
+      || authorization.root_authority !== true
+      || authorization.mentions_task !== true) {
       return refuse(409, 'AUTHORIZATION_REQUIRED',
-        'A verified Room authorization reference is required before work starts.');
+        `A verified ROOT_GENESIS Room authorization naming ${task.id} is required before work starts.`);
     }
     const open = (task.depends_on ?? []).filter((dep) => stageOf(dep) !== 'CLOSED');
     if (open.length) {
