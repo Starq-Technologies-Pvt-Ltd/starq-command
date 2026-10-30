@@ -55,7 +55,7 @@ describe('Command project boards', () => {
   });
 
   it('shows board counts on the compact overview', async () => {
-    const registered = [project('command', 'Starq Command', 'CMD', 'BLOCKED'), project('erp', 'starqERP', 'SERP')];
+    const registered = [project('command', 'Starq Command', 'CMD', 'BLOCKED'), project('erp', 'starqERP', 'SERP'), project('starqbooks', 'StarqBooks', 'SB')];
     const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: registered };
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -78,6 +78,7 @@ describe('Command project boards', () => {
     expect(host.textContent).toContain('Starq Command');
     expect(host.textContent).toContain('starqERP');
     expect(host.textContent).toContain('Blocked 1');
+    expect(host.textContent).not.toContain('StarqBooks');
     expect(host.querySelector('[data-project-snapshot="command"] a')?.getAttribute('href')).toContain('#studio/command');
   });
 
@@ -86,11 +87,13 @@ describe('Command project boards', () => {
       { ...project('command', 'Starq Command', 'CMD', 'BLOCKED'), open: 3, total: 4, unassigned: 2 },
       project('erp', 'starqERP', 'SERP'),
       project('hoadha', 'Hoadha', 'DHIV'),
+      project('starqbooks', 'StarqBooks', 'SB'),
     ];
     const portfolio = { generated_at: '2026-10-15T00:00:00.000Z', pending_room_sync: 0, statuses, projects: registered };
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith('/api/pm/portfolio')) return { ok: true, json: async () => portfolio };
+      if (url.endsWith('/api/pm/projects')) return { ok: true, json: async () => ({ projects: [{ id: 'starqbooks', name: 'StarqBooks', prefix: 'SB', description: '', source_gap: null, hold: project('starqbooks', 'StarqBooks', 'SB').hold }] }) };
       if (url.endsWith('/api/pm/nexus/sources')) return { ok: true, json: async () => ({ sources: [] }) };
       return { ok: false, status: 404, json: async () => ({ message: `unexpected route: ${url}` }) };
     });
@@ -117,7 +120,8 @@ describe('Command project boards', () => {
     expect(host.textContent).toContain('4 total');
     expect(host.querySelector('[data-pm-daily-actions]')).not.toBeNull();
     expect(host.querySelector('[data-project="erp"]')?.textContent).toContain('ACTIVE');
-    expect(host.querySelector('[data-nav-group="Historical Products"]')?.textContent).toContain('StarqBooks');
+    expect(host.querySelector('[data-nav-group="Historical Products"]')?.textContent).not.toContain('StarqBooks');
+    expect(host.textContent).not.toContain('StarqBooks');
   });
 
   it('reports unavailable and missing Command rows without presenting fake counts', async () => {

@@ -37,7 +37,7 @@ export const PROJECT_GROUPS: readonly ProjectGroup[] = [
   { name: 'Services', ids: ['dynamics'] },
   { name: 'Future Companies', ids: ['academy', 'pay'] },
   { name: 'Personal', ids: ['antrac-erp', 'orgsync', 'biography'] },
-  { name: 'Historical Products', ids: ['portal', 'pos', 'starqbooks'] },
+  { name: 'Historical Products', ids: ['portal', 'pos'] },
 ];
 
 const KNOWN_LABELS: Record<string, string> = {
@@ -59,7 +59,6 @@ const KNOWN_LABELS: Record<string, string> = {
   biography: 'Biography',
   portal: 'Portal',
   pos: 'StarqPOS',
-  starqbooks: 'StarqBooks',
 };
 
 export function getOperationalQualifier(
@@ -135,7 +134,7 @@ export function PmNav({ current }: { current: string }) {
 
   const knownGroupIds = React.useMemo(() => new Set<string>(PROJECT_GROUPS.flatMap((g) => g.ids)), []);
   const extraProjects = React.useMemo(() => {
-    return projects.filter((p) => !knownGroupIds.has(p.id));
+    return projects.filter((p) => p.id !== 'starqbooks' && !knownGroupIds.has(p.id));
   }, [projects, knownGroupIds]);
 
   const allGroups = React.useMemo(() => {
@@ -206,17 +205,19 @@ export function PmPortfolioSnapshot() {
     return () => { active = false; };
   }, []);
 
+  const visibleProjects = (data?.projects ?? []).filter((project) => project.id !== 'starqbooks');
+
   return (
     <section aria-label="Project boards" data-pm-portfolio-snapshot="">
       <Panel
         title="Project boards"
-        count={data ? `${data.projects.length} boards` : 'PM summary UNKNOWN'}
+        count={data ? `${visibleProjects.length} boards` : 'PM summary UNKNOWN'}
         toolbar={<GoLink href="#studio/projects">Open all boards →</GoLink>}
       >
         <div className="body grid gap-2">
           {problem ? <SourceGap reason="PM boards unavailable." detail={problem} /> : null}
           <ul className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {(data?.projects ?? []).map((project) => {
+            {visibleProjects.map((project) => {
               const qualifier = getOperationalQualifier(project.id, project.hold?.state, project.execution_qualifier, project.hold?.authority_update);
               return (
                 <li key={project.id} className="rounded border border-border p-2" data-project-snapshot={project.id}>
@@ -296,6 +297,7 @@ export function PmPortfolioSurface() {
   React.useEffect(() => { void load(); }, [load]);
 
   const visible = (data?.projects ?? []).filter((project) => {
+    if (project.id === 'starqbooks') return false;
     const query = search.trim().toLocaleLowerCase();
     if (!query) return true;
     return `${project.name} ${project.id} ${project.prefix}`.toLocaleLowerCase().includes(query);
