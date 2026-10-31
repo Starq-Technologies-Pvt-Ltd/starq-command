@@ -99,7 +99,7 @@ describe('Phase 7 — both real project rooms instantiate (Room seq 8358)', () =
     // OpenCode F3: an unrecognised hash used to leave the previous view
     // rendered with nothing indicating the link was not honoured.
     const route = parseBuildingRoute('#not-a-real-view');
-    expect(route.view).toBe('overview');
+    expect(route.view).toBe('home');
     expect(route.room).toBeNull();
   });
 });

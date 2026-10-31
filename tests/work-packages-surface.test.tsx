@@ -189,7 +189,7 @@ describe('CMD-DI-3-2b · Work stays off Evidence → Rooms', () => {
     expect(parseBuildingRoute('#evidence/rooms')).toEqual({ view: 'evidence', room: null, tab: 'Rooms' });
     expect(parseBuildingRoute('#evidence/work')).toEqual({ view: 'evidence', room: null, tab: 'Sources' });
     expect(parseBuildingRoute('#studio/work').projectId).toBe('work');
-    expect(parseBuildingRoute('#not-a-real-view').view).toBe('overview');
+    expect(parseBuildingRoute('#not-a-real-view').view).toBe('home');
     expect(STUDIO_TABS).toEqual(['Overview', 'Staff', 'Projects', 'Capacity', 'Activity', 'Herdr']);
     expect(EVIDENCE_TABS).toEqual(['Sources', 'Projection', 'Decisions', 'Rooms', 'Hashes']);
     expect(existsSync(path.join(process.cwd(), 'src', 'surfaces', 'room.tsx'))).toBe(false);
