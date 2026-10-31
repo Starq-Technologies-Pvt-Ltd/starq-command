@@ -5,12 +5,26 @@
 /**
  * The supported Command lifecycle pins PM at :5176. Disposable verification
  * instances can use :5190–:5199 and must always use a separate PM_DB_PATH.
+ *
+ * A scratch port, once seen in the hash, is kept for the life of the tab.
+ * The router rebuilds the hash on every navigation (`routeHash`) and drops the
+ * query, so reading the hash alone meant one click silently switched a
+ * "disposable" session back to the LIVE PM on :5176 — every later write would
+ * land in the real database. A new tab starts on :5176 again.
  */
+const SCRATCH_PORT_KEY = 'starq.command.pm_port';
+const isScratchPort = (v: string | null): v is string => Boolean(v && /^519\d$/.test(v));
+
 export function pmPort(): number {
   try {
     const q = window.location.hash.split('?')[1] ?? '';
     const v = new URLSearchParams(q).get('pm_port');
-    if (v && /^519\d$/.test(v)) return Number(v);
+    if (isScratchPort(v)) {
+      try { window.sessionStorage.setItem(SCRATCH_PORT_KEY, v); } catch { /* unpersisted, still scratch now */ }
+      return Number(v);
+    }
+    const kept = window.sessionStorage.getItem(SCRATCH_PORT_KEY);
+    if (isScratchPort(kept)) return Number(kept);
   } catch {
     /* default */
   }

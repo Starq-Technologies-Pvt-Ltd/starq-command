@@ -469,6 +469,11 @@ test('owner recoverForce recovers interrupted startup state and transitions clea
         treeSignalSafe: async () => true,
         proveInstance: async () => ({ ok: true, detail: 'mock instance proven' }),
         brokerRequest: async () => ({ ok: true }),
+        // Every other process fact here is simulated; the listener table must be
+        // too. Reading the machine's real netstat made `ports_free` depend on
+        // whatever else was bound to 5173-5188 at that instant, including other
+        // suites running in parallel under the same `node --test`.
+        listListeners: async () => [],
       },
     });
 

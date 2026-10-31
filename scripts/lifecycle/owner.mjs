@@ -32,6 +32,7 @@ import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
 import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
 import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
+import { provablyGoneAcrossBoot } from './boot-closeout.mjs';
 
 const [herdrStatusComponent, herdrLauncherComponent, herdrContainmentComponent] = await Promise.all([
   importExternalComponent('herdr-floor', 'src/herdr-status.mjs'),
@@ -116,7 +117,24 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     sleep: deps.sleep ?? sleepReal,
     pollMs: deps.pollMs ?? 250,
     selfPid: deps.selfPid ?? process.pid,
-    treeClosed: deps.treeClosed ?? (async (child) => child.containment ? (await jobs().status(child.containment)).closed === true : false),
+    treeClosed: deps.treeClosed ?? (async (child) => {
+      if (!child.containment) return false;
+      if ((await jobs().status(child.containment)).closed === true) return true;
+      // The guardian can only prove closeout from its `closed.json` receipt,
+      // which an unclean shutdown never writes — so its `closed:false` means
+      // "still open" OR "cannot tell", indistinguishably. Consult the reboot
+      // proof, which needs no receipt, and journal its basis either way so a
+      // settled child always says why it was settled.
+      const cfg = cfgOf();
+      const verdict = await provablyGoneAcrossBoot(child, {
+        expectedExe: cfg.node,
+        port: comp(cfg, child.name)?.port ?? null,
+        inspect: d.inspect,
+        listListeners: d.listListeners,
+      });
+      journal('closeout.boot_proof', { name: child.name, proven: verdict.proven, reason: verdict.reason, ...verdict.basis });
+      return verdict.proven;
+    }),
     treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
     prerequisites: deps.prerequisites ?? ((cfg) => {
       if (cfg.profile?.name === OBSERVATION_PROFILE) return readObservationGates(cfg.workspace_root, cfg);
