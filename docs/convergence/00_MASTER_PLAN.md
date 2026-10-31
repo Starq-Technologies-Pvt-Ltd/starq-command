@@ -1,7 +1,7 @@
 # Starq Command — Local Operating System Convergence Plan
 
 **Status:** Founder-directed (Founder directive "Final Convergence", 31 Oct 2026). Prepared by Claude Code, independent architecture & reliability. Vision remains Development Lead and final integrator.
-**Base for all candidates:** `review/command-working-snapshot-20261031` @ `2746c90f538b7fdbe8fb374562964b956325223e`. Its tree is byte-for-byte canonical's current working source (verified by blob compare; `.gitignore` differs only in line endings).
+**Base for all candidates:** `review/command-working-snapshot-20261031`, now @ `fb3cd4f` (the Founder merged Claude's PR #9 into it on 31 Oct 2026). `2746c90f538b7fdbe8fb374562964b956325223e` is the pre-candidate reference point. Its tree is byte-for-byte canonical's current working source (verified by blob compare; `.gitignore` differs only in line endings).
 **Evidence:** `CLAUDE_INDEPENDENT_REVIEW_2026-10-31.md` (this folder). **Claude's T1 candidate:** `2746c90..4706b47` on `claude/command-convergence`.
 **Companion documents (this folder):** `01_HANDOVER_ANTIGRAVITY.md` · `02_HANDOVER_CURSOR.md` · `03_CLAUDE_PACKAGE.md` · `04_KANBAN_RECONCILIATION.md` · `05_ROOM_BRIEFING.md` · `06_INTEGRATION_AND_ACCEPTANCE.md`
 
