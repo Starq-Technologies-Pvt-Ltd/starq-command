@@ -1,6 +1,6 @@
 # Claude Code — independent architecture and reliability package
 
-**Branch:** `claude/command-convergence` (worktree `.claude/worktrees/starq-command-review-dc6d5b`), based on `2746c90`. **Code commits for review (T1):** `2664894` test isolation · `9e7a829` lifecycle recovery · `6acde9e` ungated start + local-evidence fix · `4706b47` scratch-port fix. Review with `git log 2746c90..4706b47` and `git diff 2746c90 4706b47`. Isolated until independently reviewed and integrated by Vision (merge train T1/T3 in `06_INTEGRATION_AND_ACCEPTANCE.md`). Claude does not merge, push or post in Room under any identity.
+**Branch:** `claude/command-convergence` (worktree `.claude/worktrees/starq-command-review-dc6d5b`), based on `2746c90`. **Code commits for review (T1):** `2664894` test isolation · `9e7a829` lifecycle recovery · `6acde9e` ungated start + local-evidence fix · `4706b47` scratch-port fix. Review with `git log 2746c90..4706b47` and `git diff 2746c90 4706b47`. Isolated until independently reviewed and integrated by Vision (merge train T1/T3 in `06_INTEGRATION_AND_ACCEPTANCE.md`). Founder direction (31 Oct 2026): every local commit on this branch is pushed to GitHub (`origin/claude/command-convergence`, draft PR) so local and GitHub stay identical. Claude does not merge into `main` or any shared branch, and does not post in Room under any identity.
 
 ## Delivered in this candidate (train T1)
 
