@@ -172,9 +172,12 @@ const refuse = (status, code, message, extra) => ({ ok: false, status, code, mes
  * @param {boolean}  a.holdBlocks    whether that hold blocks progress
  * @param {(id:string)=>string|null} a.stageOf        a dependency's stage
  * @param {(stage:string)=>string|null} a.enteredAt   ISO time this task entered a stage
+ * @param {boolean?} a.startRequiresAuthorization  enterprise policy: demand a Room
+ *        authorization reference before work starts. Off in the local operating mode.
  */
 export function evaluateStageTransition({
   task, to, note, project, hold, holdBlocks, stageOf, enteredAt,
+  startRequiresAuthorization = false,
 }) {
   // HISTORY IS NOT GATED. An imported Nexus card moves like a Nexus card.
   if (task.provenance === PROVENANCE.HISTORICAL) {
@@ -205,10 +208,23 @@ export function evaluateStageTransition({
       `A note of at least 5 characters is required for ${rejecting ? 'a rejection' : to}.`);
   }
 
+  /*
+    Starting work is an ORDINARY operation (Founder decision, 2026-10-31: ungate
+    task start in the private single-Founder operating mode). It is audited, not
+    authorised: the caller records which basis applied. The enterprise policy
+    that demands a Room authorization first is kept behind
+    `startRequiresAuthorization`, not deleted. Judgement gates below —
+    verifier attestation and Founder closure — are unaffected.
+  */
+  let startAuthorization;
   if (to === 'IN_PROGRESS') {
-    if (!task.room_authorization_ref) {
+    if (task.room_authorization_ref) {
+      startAuthorization = 'ROOM_AUTHORIZED';
+    } else if (startRequiresAuthorization) {
       return refuse(409, 'AUTHORIZATION_REQUIRED',
         'A verified Room authorization reference is required before work starts.');
+    } else {
+      startAuthorization = 'NOT_REQUIRED_LOCAL_POLICY';
     }
     const open = (task.depends_on ?? []).filter((dep) => stageOf(dep) !== 'CLOSED');
     if (open.length) {
@@ -231,9 +247,15 @@ export function evaluateStageTransition({
     post-date the stage entry, so a record written before the work was even
     submitted cannot be reused as its attestation.
   */
+  // A LOCAL_LEDGER ref is minted by the PM service from the caller's own
+  // `actor` field whenever Room posting is off — which the supported lifecycle
+  // always sets. It records a claim; it is not a Room-authenticated sender, so
+  // it can never attest. Without this check, choosing "mustarq" in the
+  // "Acting as" picker produced Founder-authority evidence.
   const attests = (ref, stage, senderOk) => {
     const since = enteredAt(stage);
     return ref.kind === 'evidence'
+      && ref.authority !== 'LOCAL_LEDGER'
       && senderOk(ref)
       && ref.mentions_task === true
       && since !== null
@@ -263,7 +285,10 @@ export function evaluateStageTransition({
     }
   }
 
-  return { ok: true, rejecting, ungated: false };
+  return {
+    ok: true, rejecting, ungated: false,
+    ...(startAuthorization ? { start_authorization: startAuthorization } : {}),
+  };
 }
 
 /** Owner/verifier are frozen once a task is being judged. */

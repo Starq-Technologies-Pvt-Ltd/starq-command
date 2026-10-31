@@ -39,10 +39,10 @@ function task(over = {}) {
   };
 }
 
-function ev({ to, note = null, t = task(), hold = null, holdBlocks = false, stageOf = () => 'CLOSED', entered = () => ENTERED }) {
+function ev({ to, note = null, t = task(), hold = null, holdBlocks = false, stageOf = () => 'CLOSED', entered = () => ENTERED, startRequiresAuthorization = undefined }) {
   return evaluateStageTransition({
     task: t, to, note, project: { name: 'Starq Command' }, hold, holdBlocks,
-    stageOf, enteredAt: entered,
+    stageOf, enteredAt: entered, startRequiresAuthorization,
   });
 }
 
@@ -93,17 +93,44 @@ test('a LIVE card may not skip from BACKLOG to CLOSED', () => {
   assert.equal(r.code, 'TRANSITION_NOT_ALLOWED');
 });
 
-test('work cannot start without a Room authorization reference', () => {
+test('local operating mode: work starts without a Room authorization, and says so', () => {
+  // Founder decision 2026-10-31: ungate ordinary task start.
   const r = ev({ to: 'IN_PROGRESS', t: task({ stage: 'READY' }) });
+  assert.equal(r.ok, true);
+  assert.equal(r.start_authorization, 'NOT_REQUIRED_LOCAL_POLICY', 'the basis is recorded, not implied');
+});
+
+test('a linked Room authorization is still recognised as the basis for a start', () => {
+  const r = ev({ to: 'IN_PROGRESS', t: task({ stage: 'READY', room_authorization_ref: { sequence: 1 } }) });
+  assert.equal(r.ok, true);
+  assert.equal(r.start_authorization, 'ROOM_AUTHORIZED');
+});
+
+test('enterprise policy keeps the Room authorization requirement for a start', () => {
+  const r = ev({ to: 'IN_PROGRESS', t: task({ stage: 'READY' }), startRequiresAuthorization: true });
   assert.equal(r.ok, false);
   assert.equal(r.code, 'AUTHORIZATION_REQUIRED');
 });
 
-test('work cannot start while a dependency is open', () => {
-  const t = task({ stage: 'READY', room_authorization_ref: { sequence: 1 }, depends_on: ['CMD-000'] });
-  const r = ev({ to: 'IN_PROGRESS', t, stageOf: () => 'IN_PROGRESS' });
+test('work cannot start while a dependency is open — with or without authorization', () => {
+  for (const ref of [null, { sequence: 1 }]) {
+    const t = task({ stage: 'READY', room_authorization_ref: ref, depends_on: ['CMD-000'] });
+    const r = ev({ to: 'IN_PROGRESS', t, stageOf: () => 'IN_PROGRESS' });
+    assert.equal(r.ok, false);
+    assert.equal(r.code, 'DEPENDENCY_OPEN');
+  }
+});
+
+test('ungating start does not ungate closure: CLOSED still needs a Room authorization', () => {
+  const r = ev({
+    to: 'CLOSED',
+    t: task({
+      stage: 'ACCEPTANCE', owner: 'codex', verifier: 'claude', room_authorization_ref: null,
+      evidence_refs: [{ kind: 'evidence', root_authority: true, mentions_task: true, received_at: AFTER }],
+    }),
+  });
   assert.equal(r.ok, false);
-  assert.equal(r.code, 'DEPENDENCY_OPEN');
+  assert.equal(r.code, 'AUTHORIZATION_REQUIRED');
 });
 
 test('review requires an owner', () => {
@@ -175,6 +202,34 @@ test('CLOSED requires an authenticated Founder record', () => {
     t: task({ ...base, evidence_refs: [{ kind: 'evidence', root_authority: true, mentions_task: true, received_at: AFTER }] }),
   });
   assert.equal(r.ok, true);
+});
+
+test('a LOCAL_LEDGER record never attests, whatever handle it claims', () => {
+  // With Room posting off — the supported lifecycle's default — the PM service
+  // mints LOCAL_LEDGER evidence whose senderHandle is the caller's own `actor`.
+  // Before this guard, picking the verifier or "mustarq" in the Acting-as
+  // picker satisfied acceptance and Founder closure.
+  const local = (over) => ({
+    authority: 'LOCAL_LEDGER', kind: 'evidence', mentions_task: true, received_at: AFTER, ...over,
+  });
+
+  let r = ev({
+    to: 'ACCEPTANCE',
+    t: task({
+      stage: 'VERIFICATION', owner: 'codex', verifier: 'claude', room_authorization_ref: { sequence: 1 },
+      evidence_refs: [local({ senderHandle: 'claude' })],
+    }),
+  });
+  assert.equal(r.code, 'VERIFIER_ATTESTATION_REQUIRED', 'a claimed verifier is not an authenticated one');
+
+  r = ev({
+    to: 'CLOSED',
+    t: task({
+      stage: 'ACCEPTANCE', owner: 'codex', verifier: 'claude', room_authorization_ref: { sequence: 1 },
+      evidence_refs: [local({ senderHandle: 'mustarq', root_authority: true })],
+    }),
+  });
+  assert.equal(r.code, 'FOUNDER_CLOSURE_REQUIRED', 'a claimed Founder is not an authenticated one');
 });
 
 test('a project on hold cannot progress past READY', () => {

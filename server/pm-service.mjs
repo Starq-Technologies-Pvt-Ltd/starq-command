@@ -155,11 +155,6 @@ function identityLevels() {
     throw new HttpError(503, 'UNAVAILABLE', 'Identity registry unreadable; writes refused (fail closed).');
   }
 }
-const FOUNDER_LEVELS = new Set(['ROOT_GENESIS', 'FOUNDER', 'OWNER']);
-function isFounderHandle(handle) {
-  const level = identityLevels().get(handle);
-  return FOUNDER_LEVELS.has(level) || handle === 'ali' || handle === 'mustarq';
-}
 function knownHandles() {
   const ids = new Set(identityLevels().keys());
   if (db) for (const h of orgPeopleHandles(db)) ids.add(h);
@@ -178,7 +173,9 @@ function localLedgerRef({ actor, purpose, kind, taskId }) {
     verified_at: nowIso(),
     received_at: nowIso(),
     authority_level: identityLevels().get(actor) ?? 'LOCAL_COMMAND',
-    root_authority: isFounderHandle(actor),
+    // `actor` is caller-supplied, so a local record is never root authority,
+    // whatever handle it names.
+    root_authority: false,
     mentions_task: true,
     task_id: taskId ?? null,
   };
@@ -1038,7 +1035,12 @@ function updateTask(id, body) {
         type: verdict.rejecting ? 'REJECTED' : 'STAGE_CHANGED',
         from: task.stage,
         to: targetStage,
-        detail: { note: note ?? null, board_column: next.status, ungated: verdict.ungated === true },
+        detail: {
+          note: note ?? null,
+          board_column: next.status,
+          ungated: verdict.ungated === true,
+          ...(verdict.start_authorization ? { start_authorization: verdict.start_authorization } : {}),
+        },
         post: false,
       });
     } else if (body.status !== undefined && body.status !== task.status) {
