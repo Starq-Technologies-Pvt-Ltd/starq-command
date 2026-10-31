@@ -267,8 +267,8 @@ async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: un
       ok: false,
       state: res.status === 503 ? 'UNAVAILABLE' : 'REJECTED',
       status: res.status,
-      code: String(payload?.error ?? 'ERROR'),
-      message: String(payload?.message ?? `PM service returned ${res.status}`),
+      code: String(payload?.code ?? payload?.error ?? 'ERROR'),
+      message: String(payload?.message ?? payload?.error ?? `PM service returned ${res.status}`),
       errors: Array.isArray(payload?.errors) ? (payload?.errors as string[]) : undefined,
       current_updated_at: typeof payload?.current_updated_at === 'string' ? payload.current_updated_at : undefined,
     };
@@ -317,6 +317,14 @@ export interface PmOrgPerson {
   handle: string;
   display_name: string;
   kind: PmPersonKind | string;
+  role_note?: string | null;
+  harness?: string | null;
+  capabilities?: string[];
+  status?: 'active' | 'inactive' | string;
+  source?: string | null;
+  room_handle?: string | null;
+  archived_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface PmOrgAppointment {
@@ -327,12 +335,15 @@ export interface PmOrgAppointment {
 
 export interface PmOrg {
   company: PmOrgCompany | PmOrgCompany[] | null;
+  companies?: PmOrgCompany[];
   units: PmOrgUnit[];
   positions: PmOrgPosition[];
   people: PmOrgPerson[];
   appointments: PmOrgAppointment[];
+  ended_appointments?: PmOrgAppointment[];
   generated_at: string;
-  room_post: string;
+  room_post?: string;
+  state?: string;
 }
 
 export interface PmAttentionAction {
@@ -410,7 +421,9 @@ export interface PmLocalEvidenceBody {
 
 /** Normalize GET /api/pm/org `company` which may be one row or a list. */
 export function pmOrgCompanies(org: PmOrg | null | undefined): PmOrgCompany[] {
-  if (!org?.company) return [];
+  if (!org) return [];
+  if (Array.isArray(org.companies) && org.companies.length > 0) return org.companies;
+  if (!org.company) return [];
   return Array.isArray(org.company) ? org.company : [org.company];
 }
 
@@ -424,7 +437,8 @@ export const pmNexusSources = (file?: string) => call<{ sources: PmNexusSource[]
   'GET', `/api/pm/nexus/sources${file ? `?file=${encodeURIComponent(file)}` : ''}`,
 );
 export const pmPortfolio = () => call<PmPortfolio>('GET', '/api/pm/portfolio');
-export const pmOrg = () => call<PmOrg>('GET', '/api/pm/org');
+export const pmOrg = (opts?: { includeArchived?: boolean }) =>
+  call<PmOrg>('GET', `/api/pm/org${opts?.includeArchived ? '?include=archived' : ''}`);
 export const pmAttention = () => call<PmAttention>('GET', '/api/pm/attention');
 export const pmCreateCompany = (body: PmCreateCompanyBody) =>
   call<PmOrgCompany>('POST', '/api/pm/org/companies', body);
@@ -557,3 +571,114 @@ export function pmTaskHref(projectId: string, taskId: string): string {
   if (pmIsScratch()) params.set('pm_port', String(pmPort()));
   return `${route}?${params.toString()}`;
 }
+
+export interface PmActorBody {
+  actor: string;
+  channel?: 'ui' | 'api' | 'automation';
+}
+
+export interface PmOrgHistoryEntry {
+  id: number;
+  entity: string;
+  entity_id: string;
+  action: string;
+  actor: string;
+  channel: string;
+  before?: unknown;
+  after?: unknown;
+  timestamp: string;
+}
+
+export interface PmMilestone {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string;
+  due_date?: string | null;
+  status: 'planned' | 'active' | 'done' | 'missed' | string;
+  ordinal?: number;
+  total_tasks?: number;
+  done_tasks?: number;
+  open_tasks?: number;
+  blocked_tasks?: number;
+  percent_complete?: number;
+  overdue?: boolean;
+  at_risk?: boolean;
+  updated_at?: string;
+}
+
+export interface PmDigestSummary {
+  date?: string;
+  generated_at?: string;
+  completed_last_24h?: Array<Record<string, unknown>>;
+  started_last_24h?: Array<Record<string, unknown>>;
+  blocked_tasks?: Array<Record<string, unknown>>;
+  unassigned_open_tasks?: Array<Record<string, unknown>>;
+  at_risk_milestones?: Array<Record<string, unknown>>;
+  person_load?: Array<Record<string, unknown>>;
+  counts?: Record<string, number>;
+}
+
+export interface PmDigest {
+  id: string;
+  generated_at: string;
+  trigger?: string;
+  summary?: PmDigestSummary;
+  delivery_state?: string;
+  delivery_detail?: string | null;
+}
+
+export interface PmWorkforceSummary {
+  state?: string;
+  person: PmOrgPerson;
+  appointments?: { active?: PmOrgAppointment[]; ended?: PmOrgAppointment[] };
+  tasks?: {
+    owned_open?: Array<Record<string, unknown>>;
+    verifying_open?: Array<Record<string, unknown>>;
+    blocked?: Array<Record<string, unknown>>;
+    counts?: Record<string, number>;
+  };
+  recent_activity?: Array<Record<string, unknown>>;
+}
+
+export const pmOrgHistory = (query?: { entity?: string; id?: string; limit?: number }) => {
+  const params = new URLSearchParams();
+  if (query?.entity) params.set('entity', query.entity);
+  if (query?.id) params.set('id', query.id);
+  if (query?.limit) params.set('limit', String(query.limit));
+  const q = params.toString();
+  return call<{ state?: string; count?: number; history: PmOrgHistoryEntry[] }>('GET', `/api/pm/org/history${q ? `?${q}` : ''}`);
+};
+
+export const pmPatchCompany = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ company: PmOrgCompany }>('PATCH', `/api/pm/org/companies/${encodeURIComponent(id)}`, body);
+export const pmPatchUnit = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ unit: PmOrgUnit }>('PATCH', `/api/pm/org/units/${encodeURIComponent(id)}`, body);
+export const pmPatchPosition = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ position: PmOrgPosition }>('PATCH', `/api/pm/org/positions/${encodeURIComponent(id)}`, body);
+export const pmPatchPerson = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ person: PmOrgPerson }>('PATCH', `/api/pm/org/people/${encodeURIComponent(id)}`, body);
+export const pmEndAppointment = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ ended_appointment: PmOrgAppointment; new_appointment?: PmOrgAppointment | null }>(
+    'POST',
+    `/api/pm/org/appointments/${encodeURIComponent(id)}/end`,
+    body,
+  );
+export const pmImportIdentities = (body: PmActorBody) =>
+  call<{ state: string; reason?: string; source?: string | null; created?: unknown[]; skipped?: unknown[]; conflicts?: unknown[] }>(
+    'POST',
+    '/api/pm/org/people/import-identities',
+    body,
+  );
+export const pmWorkforceSummary = (personId: string) =>
+  call<PmWorkforceSummary>('GET', `/api/pm/workforce/${encodeURIComponent(personId)}/summary`);
+export const pmMilestones = (projectId?: string) =>
+  call<{ milestones: PmMilestone[] }>('GET', `/api/pm/milestones${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`);
+export const pmCreateMilestone = (body: PmActorBody & Record<string, unknown>) =>
+  call<{ milestone: PmMilestone }>('POST', '/api/pm/milestones', body);
+export const pmPatchMilestone = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ milestone: PmMilestone }>('PATCH', `/api/pm/milestones/${encodeURIComponent(id)}`, body);
+export const pmPatchProject = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ project: PmProject }>('PATCH', `/api/pm/projects/${encodeURIComponent(id)}`, body);
+export const pmLatestDigest = () => call<{ digest: PmDigest }>('GET', '/api/pm/digests/latest');
+export const pmDigests = () => call<{ digests: PmDigest[] }>('GET', '/api/pm/digests');

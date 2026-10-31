@@ -153,8 +153,11 @@ describe('E2E readback baseline (disposable fixtures, no Room access)', () => {
     expect(text).toContain('Attach Evidence');
     expect(text).toContain('GATED LIFECYCLE (ENFORCED)');
     expect(text).toContain('Room Auth: #10663');
-    expect(text).toContain('→ Done');
-    expect(text).toContain('→ Next Up');
+    expect(text).not.toContain('→ Done');
+    expect(text).not.toContain('→ Next Up');
+    expect(text).toContain('Column: In Progress');
+    expect(text).toContain('VERIFICATION');
+    expect(text).toContain('READY');
     expect(text).toContain('NO EXECUTION RECORD');
 
     writeHtml('e2e-board.html', `<html><body><pre>${host.innerHTML}</pre></body></html>`);

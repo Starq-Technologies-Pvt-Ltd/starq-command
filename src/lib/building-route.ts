@@ -1,4 +1,10 @@
 export const COMPANY_VIEWS = [
+  'home',
+  'organization',
+  'workforce',
+  'projects',
+  'activity',
+  'records',
   'overview',
   'company',
   'library',
@@ -115,7 +121,7 @@ export function parseBuildingRoute(hash: string): BuildingRoute {
       tab: tabs.find((t) => t.toLowerCase() === selected?.toLowerCase()) ?? 'Overview',
     };
   }
-  const companyView = COMPANY_VIEWS.includes(view as (typeof COMPANY_VIEWS)[number]) ? view : 'overview';
+  const companyView = COMPANY_VIEWS.includes(view as (typeof COMPANY_VIEWS)[number]) ? view : 'home';
   const peers =
     companyView === 'attention'
       ? ATTENTION_TABS
