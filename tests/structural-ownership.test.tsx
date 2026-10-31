@@ -39,6 +39,7 @@ import { BuildingSurface } from '@/surfaces/building';
 import { parseBuildingRoute } from '@/lib/building-route';
 import type { CommandSurface } from '@/lib/contracts';
 import { FLOOR_FIXTURE } from './fixtures/floor-fixture';
+import { workspacePath } from './support/workspace';
 
 const APP_ROOT = path.resolve(import.meta.dirname, '..');
 const SRC = path.join(APP_ROOT, 'src');
@@ -648,10 +649,10 @@ describe('method text is structurally behind a closed disclosure', () => {
  * governed.
  * ═══════════════════════════════════════════════════════════════════════════ */
 describe('the baseline census still describes a reachable product', () => {
-  const censusPath = path.resolve(
-    process.cwd(),
-    '../../../STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md',
-  );
+  // Resolved from the workspace root, not by counting `../` levels off the
+  // current working directory: the latter only lands on the census when the
+  // checkout sits at its one canonical absolute path.
+  const censusPath = workspacePath('STARQ_COMMAND_BASELINE_TO_ROUTE_CENSUS_2026-10-01.md');
   const census = readFileSync(censusPath, 'utf8');
   /**
    * The DISPOSITION table only, scoped to the text before the gate rule.

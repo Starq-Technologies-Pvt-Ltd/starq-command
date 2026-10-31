@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { classifyRoomLedgerRelation, LEDGER_RELATION } from '../server/room-ledger-relation.mjs';
-import { readRoomBoundSnapshot, readRoomRawPrefix } from '../../../../agent-comms/scripts/room.mjs';
+import { readRoomBoundSnapshot, readRoomRawPrefix } from '@workspace/agent-comms/scripts/room.mjs';
 
 function rec(seq: number, eventId: string) {
   return { brokerSequence: seq, eventId };
