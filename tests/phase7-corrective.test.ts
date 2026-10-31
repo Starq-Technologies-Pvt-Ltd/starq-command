@@ -181,8 +181,8 @@ describe('R3 (Goose, P2) — every rail button is named at every width', () => {
     expect(shellSrc).not.toMatch(/title=\{expanded \? undefined/);
   });
 
-  it('all ten current nav entries carry a name', () => {
-    expect(NAV).toHaveLength(10);
+  it('every nav entry carries a name', () => {
+    expect(NAV.length).toBeGreaterThan(0);
     for (const item of NAV) {
       expect(item.label.length, item.id).toBeGreaterThan(0);
       expect(item.hint.length, item.id).toBeGreaterThan(0);
@@ -302,14 +302,16 @@ describe('R7 (Goose, P3) — the dead phase field and its unreachable badge are 
     expect(shellSrc).not.toContain('P{item.phase}');
   });
 
-  it('nav order is preserved, not re-sorted by phase', () => {
-    // Reordering would have been an unrequested UX change; the field died, the
-    // operator order did not move.
-    //
-    // The current sequence is the operator order from shell.tsx. It is not
-    // sorted by phase; Company, Library, Cortex, and Comms retain their product
-    // positions alongside the original Studio surfaces.
+  it('nav order is the operator order, not a phase sort', () => {
+    // Founder convergence puts daily work first. Governance views keep their
+    // previous relative order after that. The list is still not sorted by phase.
     expect(NAV.map((i) => i.id)).toEqual([
+      'home',
+      'organization',
+      'workforce',
+      'projects',
+      'activity',
+      'records',
       'overview',
       'company',
       'building',

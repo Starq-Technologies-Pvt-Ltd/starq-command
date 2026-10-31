@@ -1,11 +1,12 @@
 /**
- * Governed & High-Fidelity PM Kanban Board.
- * Supports multi-agent assignment, governance stages, fidelity metadata,
- * filtering/sorting, structured acceptance criteria, and gated lifecycle operability controls.
+ * Project board. Stage is the only move. The selected task opens in a
+ * right-side drawer with its own scroll so detail is reachable at 1280×720.
  */
 import * as React from 'react';
-import { Panel, Chip, SourceGap, type Tone } from '@/components/console';
+import { Panel, Chip, type Tone } from '@/components/console';
+import { PmEmpty, PmLoading, PmRejected, PmSaved, PmUnavailable } from '@/components/pm-feedback';
 import { PmNav } from '@/surfaces/pm-portfolio';
+import { readClaimedActor, storeClaimedActor } from '@/lib/acting-as';
 import {
   PM_STATUSES,
   PM_STATUS_LABELS,
@@ -13,6 +14,8 @@ import {
   pmCreateTask,
   pmIsScratch,
   pmMeta,
+  pmMilestones,
+  pmOrg,
   pmPort,
   pmProjects,
   pmTask,
@@ -21,13 +24,15 @@ import {
   pmUpdateTask,
   pmLinkRoom,
   pmAddEvidence,
+  type PmMilestone,
+  type PmOrgPerson,
   type PmPriority,
   type PmProject,
   type PmResult,
-  type PmStatus,
   type PmTask,
   type PmTaskDetail,
 } from '@/lib/pm-client';
+import { refusalFix } from '@/lib/stage-refusal';
 
 function requestedTaskId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -36,16 +41,79 @@ function requestedTaskId(): string | null {
   return id && /^[A-Za-z0-9._:-]{2,40}$/.test(id) ? id : null;
 }
 
-const ACTOR_KEY = 'starq.pm.actor';
-function readActor(): string {
-  try { return window.localStorage.getItem(ACTOR_KEY) ?? ''; } catch { return ''; }
-}
-function storeActor(value: string) {
-  try { window.localStorage.setItem(ACTOR_KEY, value); } catch { /* convenience only */ }
+const BOARD_STAGES = [
+  'BACKLOG',
+  'READY',
+  'IN_PROGRESS',
+  'REVIEW',
+  'VERIFICATION',
+  'ACCEPTANCE',
+  'CLOSED',
+  'BLOCKED',
+  'FOUNDER_GATE',
+] as const;
+
+const STAGE_COLUMN_LABEL: Record<string, string> = {
+  BACKLOG: 'To Do',
+  READY: 'Next Up',
+  IN_PROGRESS: 'In Progress',
+  REVIEW: 'In Progress',
+  VERIFICATION: 'In Progress',
+  ACCEPTANCE: 'Done',
+  CLOSED: 'Done',
+  BLOCKED: 'Blocked',
+  FOUNDER_GATE: 'Blocked',
+};
+
+const DRAWER_STYLE: React.CSSProperties = {
+  position: 'fixed',
+  top: 0,
+  right: 0,
+  height: '100vh',
+  width: 'min(36rem, 100vw)',
+  overflowY: 'auto',
+  zIndex: 40,
+  background: 'hsl(var(--background))',
+};
+
+function columnLabel(stage: string): string {
+  return STAGE_COLUMN_LABEL[stage] ?? 'UNKNOWN';
 }
 
-function failureLines(res: Extract<PmResult<unknown>, { ok: false }>): string[] {
-  return [`${res.code}: ${res.message}`, ...(res.errors ?? [])];
+function milestoneIdOf(task: PmTask): string {
+  const id = (task as PmTask & { milestone_id?: string | null }).milestone_id;
+  return typeof id === 'string' ? id : '';
+}
+
+function needsNote(task: PmTask, stage: string): boolean {
+  const rejecting = stage === 'READY' && (task.stage === 'REVIEW' || task.stage === 'VERIFICATION' || task.stage === 'ACCEPTANCE');
+  return rejecting || stage === 'BLOCKED' || stage === 'FOUNDER_GATE';
+}
+
+function usablePeople(people: PmOrgPerson[]): PmOrgPerson[] {
+  const seen = new Set<string>();
+  const out: PmOrgPerson[] = [];
+  for (const person of people) {
+    if (!person?.handle || person.archived_at || seen.has(person.handle)) continue;
+    seen.add(person.handle);
+    out.push(person);
+  }
+  return out;
+}
+
+function personOptionLabel(person: PmOrgPerson): string {
+  const name = person.display_name && person.display_name !== person.handle
+    ? `${person.display_name} (${person.handle})`
+    : person.handle;
+  return person.kind ? `${name} · ${person.kind}` : name;
+}
+
+function refusalOf(res: Extract<PmResult<unknown>, { ok: false }>): { code: string; message: string } {
+  const extra = (res.errors ?? []).filter((line) => line && line !== res.message);
+  return {
+    code: res.code,
+    message: extra.length ? `${res.message} ${extra.join(' ')}` : res.message,
+  };
 }
 
 interface ParsedAcceptanceItem {
@@ -54,11 +122,11 @@ interface ParsedAcceptanceItem {
 }
 
 function parseAcceptance(rawJson?: string | null, nexusAttr?: Record<string, unknown> | null): ParsedAcceptanceItem[] {
-  let raw: any = null;
+  let raw: unknown = null;
   if (rawJson) {
     try { raw = JSON.parse(rawJson); } catch { raw = rawJson; }
-  } else if (nexusAttr && (nexusAttr as any).acceptance) {
-    raw = (nexusAttr as any).acceptance;
+  } else if (nexusAttr && (nexusAttr as { acceptance?: unknown }).acceptance) {
+    raw = (nexusAttr as { acceptance?: unknown }).acceptance;
   }
   if (!raw) return [];
   if (Array.isArray(raw)) {
@@ -70,9 +138,10 @@ function parseAcceptance(rawJson?: string | null, nexusAttr?: Record<string, unk
         return { text: cleanText, done: isBox ? isChecked : undefined };
       }
       if (item && typeof item === 'object') {
+        const row = item as Record<string, unknown>;
         return {
-          text: item.text || item.title || item.requirement || item.criterion || JSON.stringify(item),
-          done: item.done ?? item.completed ?? item.checked ?? undefined,
+          text: String(row.text || row.title || row.requirement || row.criterion || JSON.stringify(item)),
+          done: (row.done ?? row.completed ?? row.checked) as boolean | undefined,
         };
       }
       return { text: String(item) };
@@ -90,29 +159,85 @@ function parseAcceptance(rawJson?: string | null, nexusAttr?: Record<string, unk
   return [{ text: JSON.stringify(raw) }];
 }
 
+function PersonSelect({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  people,
+  unavailable,
+  includeUnassigned = true,
+}: {
+  label: string;
+  ariaLabel?: string;
+  value: string;
+  onChange: (value: string) => void;
+  people: PmOrgPerson[] | null;
+  unavailable: string | null;
+  includeUnassigned?: boolean;
+}) {
+  const name = ariaLabel ?? label;
+  if (unavailable) {
+    return (
+      <label className="grid gap-1 text-2xs text-muted-foreground">
+        {label}
+        <span className="flex flex-wrap items-center gap-2">
+          <select aria-label={name} value={value} disabled>
+            <option value={value}>{value || 'UNASSIGNED'}</option>
+          </select>
+          <PmUnavailable reason={unavailable} />
+        </span>
+      </label>
+    );
+  }
+  const directory = usablePeople(people ?? []);
+  const known = new Set(directory.map((person) => person.handle));
+  const extra = value && value !== 'UNASSIGNED' && !known.has(value) ? value : null;
+  const selected = directory.find((person) => person.handle === value);
+  return (
+    <label className="grid gap-1 text-2xs text-muted-foreground">
+      {label}
+      <span className="flex flex-wrap items-center gap-2">
+        <select aria-label={name} value={value} onChange={(e) => onChange(e.target.value)}>
+          {includeUnassigned ? <option value="UNASSIGNED">UNASSIGNED</option> : null}
+          {directory.map((person) => (
+            <option key={person.id || person.handle} value={person.handle}>{personOptionLabel(person)}</option>
+          ))}
+          {extra ? <option value={extra}>{extra}</option> : null}
+        </select>
+        {selected?.kind ? <span className="chip" data-person-kind={selected.kind}>{selected.kind}</span> : null}
+      </span>
+    </label>
+  );
+}
+
 export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [project, setProject] = React.useState<PmProject | null>(null);
   const [tasks, setTasks] = React.useState<PmTask[] | null>(null);
-  const [handles, setHandles] = React.useState<string[]>([]);
+  const [orgPeople, setOrgPeople] = React.useState<PmOrgPerson[] | null>(null);
+  const [orgProblem, setOrgProblem] = React.useState<string | null>(null);
+  const [milestones, setMilestones] = React.useState<PmMilestone[] | null>(null);
+  const [milestonesProblem, setMilestonesProblem] = React.useState<string | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<PmTaskDetail | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [errors, setErrors] = React.useState<string[]>([]);
-  const [flash, setFlash] = React.useState<string | null>(null);
-  const [actor, setActorState] = React.useState(readActor());
+  const [clientErrors, setClientErrors] = React.useState<string[]>([]);
+  const [refusal, setRefusal] = React.useState<{ code: string; message: string } | null>(null);
+  const [saved, setSaved] = React.useState<string | null>(null);
+  const [rereadProblem, setRereadProblem] = React.useState<string | null>(null);
+  const [actor, setActorState] = React.useState(readClaimedActor);
   const [query, setQuery] = React.useState('');
   const [draft, setDraft] = React.useState({ title: '', owner: 'UNASSIGNED', description: '', priority: 'P2' as PmPriority });
 
-  // Detail edits
   const [editTitle, setEditTitle] = React.useState('');
   const [editOwner, setEditOwner] = React.useState('');
   const [editVerifier, setEditVerifier] = React.useState('');
   const [editPriority, setEditPriority] = React.useState<PmPriority>('P2');
   const [editDescription, setEditDescription] = React.useState('');
+  const [editMilestoneId, setEditMilestoneId] = React.useState('');
 
-  // WP-2 Operability UI dialog states
   const [showLinkRoom, setShowLinkRoom] = React.useState(false);
   const [roomSeq, setRoomSeq] = React.useState('');
   const [roomEventId, setRoomEventId] = React.useState('');
@@ -123,24 +248,34 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [evidenceSha, setEvidenceSha] = React.useState('');
   const [evidenceDesc, setEvidenceDesc] = React.useState('');
 
-  // Filtering & Sorting
   const [filterPriority, setFilterPriority] = React.useState<string>('ALL');
   const [filterWorker, setFilterWorker] = React.useState<string>('ALL');
   const [filterEpicMilestone, setFilterEpicMilestone] = React.useState<string>('ALL');
+  const [filterMilestone, setFilterMilestone] = React.useState<string>('ALL');
   const [filterStage, setFilterStage] = React.useState<string>('ALL');
   const [filterProvenance, setFilterProvenance] = React.useState<string>('ALL');
   const [sortBy, setSortBy] = React.useState<'DEFAULT' | 'PRIORITY' | 'ID' | 'UPDATED'>('DEFAULT');
 
-  const [executionByTask, setExecutionByTask] = React.useState<Record<string, any>>({});
+  const [executionByTask, setExecutionByTask] = React.useState<Record<string, { state?: string; builderSeat?: string; verifierSeat?: string; herdrSessionId?: string; verifierSessionId?: string; workspacePath?: string; verifierWorkspacePath?: string; leaseId?: string; candidateSha?: string; branch?: string }>>({});
 
-  const setActor = (value: string) => { setActorState(value); storeActor(value); };
+  const setActor = (value: string) => { setActorState(value); storeClaimedActor(value); };
+  const who = actor;
+
+  const fillEdits = (task: PmTask) => {
+    setEditTitle(task.title);
+    setEditOwner(task.owner || 'UNASSIGNED');
+    setEditVerifier(task.verifier || 'UNASSIGNED');
+    setEditPriority(task.priority || 'P2');
+    setEditDescription(task.description ?? '');
+    setEditMilestoneId(milestoneIdOf(task));
+  };
 
   const loadExecution = React.useCallback(async () => {
     try {
       const response = await fetch(`/api/command/tasks?project=${encodeURIComponent(projectId)}`);
       if (!response.ok) return;
       const body = await response.json();
-      const next: Record<string, any> = {};
+      const next: Record<string, { state?: string; builderSeat?: string; branch?: string }> = {};
       for (const task of body.tasks ?? []) {
         if (task.taskId && task.execution) next[task.taskId] = task.execution;
       }
@@ -149,38 +284,45 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   }, [projectId]);
 
   const load = React.useCallback(async (keepSelected?: string | null) => {
-    const [m, p, t] = await Promise.all([pmMeta(), pmProjects(), pmTasks(projectId)]);
+    const [m, p, t, orgRes, msRes] = await Promise.all([
+      pmMeta(),
+      pmProjects(),
+      pmTasks(projectId),
+      pmOrg(),
+      pmMilestones(projectId),
+    ]);
     if (!m.ok) { setProblem(m.message); return; }
     if (!p.ok) { setProblem(p.message); return; }
     if (!t.ok) { setProblem(t.message); return; }
     setProblem(null);
-    const retired = new Set(['ali', 'nexus']);
-    const active = m.data.handles.filter((h) => !retired.has(h));
-    setHandles(active);
-    const stored = readActor();
-    if (!stored || retired.has(stored)) {
-      if (active.includes('antigravity')) setActor('antigravity');
-      else if (active[0]) setActor(active[0]);
-      else setActor('');
+    if (!orgRes.ok) {
+      setOrgPeople(null);
+      setOrgProblem(orgRes.message);
+    } else {
+      setOrgPeople(Array.isArray(orgRes.data.people) ? orgRes.data.people : []);
+      setOrgProblem(null);
+    }
+    if (!msRes.ok) {
+      setMilestones(null);
+      setMilestonesProblem(msRes.message);
+    } else {
+      setMilestones(Array.isArray(msRes.data.milestones) ? msRes.data.milestones : []);
+      setMilestonesProblem(null);
     }
     setProject(p.data.projects.find((x) => x.id === projectId) ?? null);
     setTasks(t.data.tasks);
     const id = keepSelected && t.data.tasks.some((task) => task.id === keepSelected) ? keepSelected : null;
     setSelectedId(id);
     setDetail(null);
-    setErrors(keepSelected && !id ? [`Task ${keepSelected} is not recorded on the ${projectId} board.`] : []);
+    setClientErrors(keepSelected && !id ? [`Task ${keepSelected} is not recorded on the ${projectId} board.`] : []);
     if (id) {
       const d = await pmTask(id);
       if (d.ok && d.data.task.project_id === projectId) {
         setDetail(d.data);
-        setEditTitle(d.data.task.title);
-        setEditOwner(d.data.task.owner);
-        setEditVerifier(d.data.task.verifier || 'UNASSIGNED');
-        setEditPriority(d.data.task.priority || 'P2');
-        setEditDescription(d.data.task.description);
+        fillEdits(d.data.task);
       } else {
         setSelectedId(null);
-        setErrors([d.ok ? `Task ${id} belongs to ${d.data.task.project_id}, not ${projectId}.` : d.message]);
+        setClientErrors([d.ok ? `Task ${id} belongs to ${d.data.task.project_id}, not ${projectId}.` : d.message]);
       }
     }
   }, [projectId]);
@@ -196,126 +338,166 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     return () => window.clearInterval(timer);
   }, [loadExecution]);
 
+  const applyRead = (data: PmTaskDetail, replaceEdits: boolean) => {
+    setDetail(data);
+    setSelectedId(data.task.id);
+    if (replaceEdits) fillEdits(data.task);
+  };
+
+  const finishWrite = async (res: PmResult<PmTaskDetail>, success: string, replaceEdits: boolean) => {
+    setBusy(false);
+    if (!res.ok) {
+      setSaved(null);
+      setRefusal(refusalOf(res));
+      setClientErrors([]);
+      return false;
+    }
+    setRefusal(null);
+    setClientErrors([]);
+    setSaved(success);
+    setCreating(false);
+    setShowLinkRoom(false);
+    setShowAddEvidence(false);
+    const id = res.data.task.id;
+    setSelectedId(id);
+    const reread = await pmTask(id);
+    if (!reread.ok) {
+      setRereadProblem(reread.message);
+      return true;
+    }
+    setRereadProblem(null);
+    applyRead(reread.data, replaceEdits);
+    const fresh = reread.data.task;
+    const list = await pmTasks(projectId);
+    setTasks((prev) => {
+      const base = list.ok ? list.data.tasks : (prev ?? []);
+      if (!base.some((task) => task.id === fresh.id)) return [fresh, ...base];
+      return base.map((task) => (task.id === fresh.id ? { ...task, ...fresh } : task));
+    });
+    return true;
+  };
+
   const select = async (id: string) => {
     if (selectedId === id) { setSelectedId(null); setDetail(null); return; }
-    setSelectedId(id); setCreating(false); setErrors([]);
+    setSelectedId(id); setCreating(false); setClientErrors([]); setRefusal(null); setSaved(null); setRereadProblem(null);
     setShowLinkRoom(false); setShowAddEvidence(false);
     const d = await pmTask(id);
     if (d.ok) {
       setDetail(d.data);
-      setEditTitle(d.data.task.title);
-      setEditOwner(d.data.task.owner);
-      setEditVerifier(d.data.task.verifier || 'UNASSIGNED');
-      setEditPriority(d.data.task.priority || 'P2');
-      setEditDescription(d.data.task.description);
-    } else setErrors(failureLines(d));
+      fillEdits(d.data.task);
+    } else setRefusal(refusalOf(d));
   };
 
-  const finish = async (res: PmResult<PmTaskDetail>, success: string) => {
+  const closeDrawer = () => {
+    setSelectedId(null);
+    setDetail(null);
+    setRefusal(null);
+    setSaved(null);
+    setRereadProblem(null);
+    setShowLinkRoom(false);
+    setShowAddEvidence(false);
+  };
+
+  const reloadAndReapply = async () => {
+    if (!selectedId) return;
+    setBusy(true);
+    const d = await pmTask(selectedId);
     setBusy(false);
-    if (!res.ok) {
-      setErrors(failureLines(res));
-      if (res.code === 'STALE_EDIT') await load(selectedId);
-      return false;
-    }
-    setErrors([]); setFlash(success);
-    setDetail(res.data); setSelectedId(res.data.task.id); setCreating(false);
-    setShowLinkRoom(false); setShowAddEvidence(false);
-    setEditTitle(res.data.task.title);
-    setEditOwner(res.data.task.owner);
-    setEditVerifier(res.data.task.verifier || 'UNASSIGNED');
-    setEditPriority(res.data.task.priority || 'P2');
-    setEditDescription(res.data.task.description);
-    await load(res.data.task.id);
-    return true;
-  };
-
-  const who = actor;
-
-  const move = async (task: PmTask, to: PmStatus, explicitStage?: string) => {
-    if (!who) {
-      setErrors(['Select an active handle in "Acting as" before moving cards.']);
+    if (!d.ok) {
+      setRefusal(refusalOf(d));
       return;
     }
-    const isRejecting = (to === 'NEXT' || explicitStage === 'READY') && ['REVIEW', 'VERIFICATION', 'ACCEPTANCE'].includes(task.stage);
-    const isBlockedOrGate = to === 'BLOCKED' || explicitStage === 'BLOCKED' || explicitStage === 'FOUNDER_GATE';
-    let note: string | undefined;
+    applyRead(d.data, false);
+    setRefusal(null);
+  };
 
-    if (isRejecting || isBlockedOrGate) {
-      const promptMsg = isRejecting
-        ? `Rejection note (required, min 5 chars) for returning ${task.id} to READY:`
-        : `Reason note (required, min 5 chars) for moving ${task.id} to ${explicitStage || to}:`;
-      const entered = window.prompt(promptMsg);
+  const move = async (task: PmTask, stage: string) => {
+    if (!who) {
+      setClientErrors(['Claimed actor is missing.']);
+      return;
+    }
+    let note: string | undefined;
+    if (needsNote(task, stage)) {
+      const entered = window.prompt(`Reason note (required, min 5 chars) for moving ${task.id} to ${stage}:`);
       if (entered === null) return;
       if (entered.trim().length < 5) {
-        setErrors(['A note of at least 5 characters is required. Transition aborted.']);
+        setClientErrors(['A note of at least 5 characters is required. Transition aborted.']);
         return;
       }
       note = entered.trim();
     }
-
     setBusy(true);
+    setSaved(null);
+    setRefusal(null);
     const body: Record<string, unknown> = {
       actor: who,
+      stage,
       expected_updated_at: task.updated_at,
     };
-    if (explicitStage) {
-      body.stage = explicitStage;
-    } else {
-      body.status = to;
-    }
     if (note) body.note = note;
-
-    const res = await pmUpdateTask(task.id, body);
-    await finish(res, `Moved ${task.id} to ${explicitStage ? explicitStage : PM_STATUS_LABELS[to]}.`);
+    await finishWrite(await pmUpdateTask(task.id, body), `Moved ${task.id} to ${stage}.`, false);
   };
 
   const create = async () => {
     if (!who) {
-      setErrors(['Select an active handle in "Acting as" before creating cards.']);
+      setClientErrors(['Claimed actor is missing.']);
       return;
     }
-    if (draft.title.trim().length < 3) { setErrors(['Title needs at least 3 characters.']); return; }
+    if (draft.title.trim().length < 3) { setClientErrors(['Title needs at least 3 characters.']); return; }
     setBusy(true);
-    await finish(await pmCreateTask({
+    setSaved(null);
+    setRefusal(null);
+    const added = await finishWrite(await pmCreateTask({
       project_id: projectId,
       actor: who,
       title: draft.title,
       description: draft.description,
       owner: draft.owner,
       priority: draft.priority,
-    }), 'Task added.');
-    setDraft({ title: '', owner: 'UNASSIGNED', description: '', priority: 'P2' });
+    }), 'Task added.', true);
+    if (added) setDraft({ title: '', owner: 'UNASSIGNED', description: '', priority: 'P2' });
   };
 
   const save = async () => {
     if (!detail) return;
     if (!who) {
-      setErrors(['Select an active handle in "Acting as" before saving edits.']);
+      setClientErrors(['Claimed actor is missing.']);
       return;
     }
     setBusy(true);
+    setSaved(null);
+    setRefusal(null);
     const t = detail.task;
-    const body: Record<string, unknown> = { actor: who, expected_updated_at: t.updated_at };
+    const body: Record<string, unknown> = {
+      actor: who,
+      expected_updated_at: t.updated_at,
+    };
+    // The current task update route rejects unknown fields. Send milestone_id
+    // only after the milestones route has loaded and the selection changed.
+    if (!milestonesProblem && milestones && editMilestoneId !== milestoneIdOf(t)) {
+      body.milestone_id = editMilestoneId || null;
+    }
     if (editTitle !== t.title) body.title = editTitle;
     if (editOwner !== t.owner) body.owner = editOwner;
     if (editVerifier !== t.verifier) body.verifier = editVerifier;
     if (editPriority !== t.priority) body.priority = editPriority;
     if (editDescription !== t.description) body.description = editDescription;
-    await finish(await pmUpdateTask(t.id, body), 'Saved.');
+    await finishWrite(await pmUpdateTask(t.id, body), 'Saved.', true);
   };
 
   const handleLinkRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detail) return;
     if (!who) {
-      setErrors(['Select an active handle in "Acting as" before linking Room authorization.']);
+      setClientErrors(['Claimed actor is missing.']);
       return;
     }
     const seq = parseInt(roomSeq, 10);
-    if (!seq || seq <= 0) { setErrors(['Room sequence must be a positive integer.']); return; }
-    if (!/^[a-f0-9]{64}$/i.test(roomEventId.trim())) { setErrors(['Event ID / token must be 64 hex characters.']); return; }
+    if (!seq || seq <= 0) { setClientErrors(['Room sequence must be a positive integer.']); return; }
+    if (!/^[a-f0-9]{64}$/i.test(roomEventId.trim())) { setClientErrors(['Event ID / token must be 64 hex characters.']); return; }
     setBusy(true);
+    setSaved(null);
+    setRefusal(null);
     const res = await pmLinkRoom(detail.task.id, {
       actor: who,
       expected_updated_at: detail.task.updated_at,
@@ -325,21 +507,23 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       purpose: roomPurpose.trim() || `Authorization for ${detail.task.id}`,
       kind: 'authorization',
     });
-    await finish(res, `Linked Room #${seq} authorization.`);
+    await finishWrite(res, `Linked Room #${seq} authorization.`, false);
   };
 
   const handleAddEvidence = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!detail) return;
     if (!who) {
-      setErrors(['Select an active handle in "Acting as" before attaching evidence.']);
+      setClientErrors(['Claimed actor is missing.']);
       return;
     }
     if (evidenceDesc.trim().length < 5 && !evidencePath.trim()) {
-      setErrors(['Evidence requires a description (min 5 chars) or artifact path.']);
+      setClientErrors(['Evidence requires a description (min 5 chars) or artifact path.']);
       return;
     }
     setBusy(true);
+    setSaved(null);
+    setRefusal(null);
     const res = await pmAddEvidence(detail.task.id, {
       actor: who,
       expected_updated_at: detail.task.updated_at,
@@ -347,15 +531,28 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       sha256: evidenceSha.trim(),
       description: evidenceDesc.trim() || 'Attached verification evidence',
     });
-    await finish(res, 'Evidence attached.');
+    await finishWrite(res, 'Evidence attached.', false);
   };
+
+  const directory = usablePeople(orgPeople ?? []);
+  const actorOptions = directory.map((person) => person.handle);
+  if (actor && !actorOptions.includes(actor)) actorOptions.push(actor);
+
+  const refusalBlock = refusal ? (
+    <div className="grid gap-2">
+      <PmRejected code={refusal.code} message={refusal.message} fix={refusalFix(refusal.code)} />
+      {refusal.code === 'STALE_EDIT' || refusal.code === 'STALE_WRITE' ? (
+        <button type="button" className="go-link" onClick={() => void reloadAndReapply()}>Reload and reapply</button>
+      ) : null}
+    </div>
+  ) : null;
 
   if (problem && !tasks) {
     return (
       <section className="command-stack" aria-label="Project board" data-pm="unavailable">
         <Panel title="Project board" count="UNAVAILABLE">
           <PmNav current={projectId} />
-          <SourceGap reason="PM service unavailable." detail={<>{problem} Start it with <code>npm run os:start</code>.</>} />
+          <div className="body"><PmUnavailable reason={problem} /></div>
         </Panel>
       </section>
     );
@@ -363,29 +560,33 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   if (!tasks || !project) {
     return (
       <section className="command-stack" aria-label="Project board">
-        <Panel title="Project board" count="LOADING"><div className="body"><p className="prose-note">Reading the board…</p></div></Panel>
+        <Panel title="Project board" count="LOADING">
+          <div className="body"><PmLoading label="Reading the board…" /></div>
+        </Panel>
       </section>
     );
   }
 
-  const retired = new Set(['ali', 'nexus']);
-  const activeHandles = handles.filter((h) => h !== 'UNASSIGNED' && !retired.has(h));
-  const people = ['UNASSIGNED', ...activeHandles];
-  const uniqueOwners = [...new Set(tasks.map((t) => t.owner).filter((o) => o && o !== 'UNASSIGNED' && !retired.has(o)))];
-  for (const owner of uniqueOwners) if (!people.includes(owner)) people.push(owner);
-
-  // Derive unique filter options
   const allWorkers = [...new Set(tasks.flatMap((t) => (t.workers && t.workers.length ? t.workers : [t.owner])).filter(Boolean))].sort();
   const allStages = [...new Set(tasks.map((t) => t.stage).filter(Boolean))].sort();
   const allEpics = [...new Set(tasks.map((t) => t.epic).filter(Boolean) as string[])].sort();
   const allMilestones = [...new Set(tasks.map((t) => t.milestone).filter(Boolean) as string[])].sort();
   const allEpicsMilestones = [...new Set([...allEpics, ...allMilestones])];
+  const milestoneFilterOptions = new Map<string, string>();
+  for (const task of tasks) {
+    const id = milestoneIdOf(task);
+    if (id) {
+      const title = milestones?.find((row) => row.id === id)?.title ?? id;
+      milestoneFilterOptions.set(`id:${id}`, title);
+    } else if (task.milestone) {
+      milestoneFilterOptions.set(`legacy:${task.milestone}`, `${task.milestone} (legacy text)`);
+    }
+  }
 
-  // Filter tasks
   const q = query.trim().toLowerCase();
   let visible = tasks.filter((t) => {
     if (q) {
-      const matchText = `${t.id} ${t.title} ${t.owner} ${t.status} ${t.stage ?? ''} ${(t.workers || []).join(' ')} ${t.epic ?? ''} ${t.milestone ?? ''}`.toLowerCase();
+      const matchText = `${t.id} ${t.title} ${t.owner} ${t.status} ${t.stage ?? ''} ${(t.workers || []).join(' ')} ${t.epic ?? ''} ${t.milestone ?? ''} ${milestoneIdOf(t)}`.toLowerCase();
       if (!matchText.includes(q)) return false;
     }
     if (filterPriority !== 'ALL' && t.priority !== filterPriority) return false;
@@ -399,10 +600,14 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     if (filterEpicMilestone !== 'ALL') {
       if (t.epic !== filterEpicMilestone && t.milestone !== filterEpicMilestone) return false;
     }
+    if (filterMilestone !== 'ALL') {
+      const id = milestoneIdOf(t);
+      const key = id ? `id:${id}` : t.milestone ? `legacy:${t.milestone}` : '';
+      if (key !== filterMilestone) return false;
+    }
     return true;
   });
 
-  // Sort tasks
   if (sortBy === 'PRIORITY') {
     const pOrder: Record<string, number> = { P0: 0, P1: 1, P2: 2, P3: 3 };
     visible = [...visible].sort((a, b) => (pOrder[a.priority] ?? 4) - (pOrder[b.priority] ?? 4));
@@ -412,230 +617,259 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     visible = [...visible].sort((a, b) => Date.parse(b.updated_at || '0') - Date.parse(a.updated_at || '0'));
   }
 
+  const execution = detail ? executionByTask[detail.task.id] : undefined;
+
   return (
-    <section className="command-stack" aria-label={`${project.name} project board`} data-pm="board" data-project={projectId}>
-      <Panel
-        title={project.name}
-        count={`${visible.length} of ${tasks.length} cards`}
-        toolbar={(
-          <>
-            {pmIsScratch() ? <Chip value={`SCRATCH :${pmPort()}`} tone="drift" /> : null}
-            <Chip value="KANBAN" tone="room" />
-          </>
-        )}
-      >
-        <PmNav current={projectId} />
-        {project.id === 'erp' ? (
-          <p className="mx-3 mb-2 text-2xs text-muted-foreground">
-            General DEC-100 ERP implementation freeze was lifted per Founder Room #14394. CP2 HOLD #12690 remains active for payment-command/payment-dispatch scope.
-          </p>
-        ) : null}
-
-        {/* Action and Search Bar */}
-        <div className="flex flex-wrap items-end gap-2 border-b border-border p-2.5">
-          <label className="grid min-w-32 gap-1 text-2xs text-muted-foreground">
-            Acting as
-            <select aria-label="Acting as" value={actor} onChange={(e) => setActor(e.target.value)}>
-              <option value="">— choose —</option>
-              {people.map((h) => <option key={h} value={h}>{h}</option>)}
-            </select>
-          </label>
-          <label className="grid min-w-40 flex-1 gap-1 text-2xs text-muted-foreground">
-            Search
-            <input aria-label="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ID, title, owner, epic, worker" />
-          </label>
-          <button type="button" className="go-link" disabled={busy} onClick={() => { setCreating(true); setSelectedId(null); setDetail(null); }}>New card</button>
-          <button type="button" className="go-link" onClick={() => { void load(selectedId); void loadExecution(); }}>Refresh</button>
-        </div>
-
-        {/* WP-1 Filter & Sort Controls */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-card/10 px-3 py-2 text-2xs">
-          <span className="font-semibold text-muted-foreground">Filter:</span>
-          <select aria-label="Filter Priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="ALL">Priority: All</option>
-            <option value="P0">P0 (Critical)</option>
-            <option value="P1">P1 (High)</option>
-            <option value="P2">P2 (Normal)</option>
-            <option value="P3">P3 (Low)</option>
-          </select>
-          <select aria-label="Filter Provenance" value={filterProvenance} onChange={(e) => setFilterProvenance(e.target.value)}>
-            <option value="ALL">Provenance: All</option>
-            <option value="LIVE">Live Work</option>
-            <option value="HISTORICAL">Historical Nexus</option>
-          </select>
-          <select aria-label="Filter Stage" value={filterStage} onChange={(e) => setFilterStage(e.target.value)}>
-            <option value="ALL">Stage: All</option>
-            {allStages.map((st) => <option key={st} value={st}>{st}</option>)}
-          </select>
-          <select aria-label="Filter Worker" value={filterWorker} onChange={(e) => setFilterWorker(e.target.value)}>
-            <option value="ALL">Worker: All</option>
-            {allWorkers.map((w) => <option key={w} value={w}>{w}</option>)}
-          </select>
-          {allEpicsMilestones.length > 0 ? (
-            <select aria-label="Filter Epic/Milestone" value={filterEpicMilestone} onChange={(e) => setFilterEpicMilestone(e.target.value)}>
-              <option value="ALL">Epic/Milestone: All</option>
-              {allEpicsMilestones.map((em) => <option key={em} value={em}>{em}</option>)}
-            </select>
+    <>
+      <section className="command-stack" aria-label={`${project.name} project board`} data-pm="board" data-project={projectId}>
+        <Panel
+          title={project.name}
+          count={`${visible.length} of ${tasks.length} cards`}
+          toolbar={(
+            <>
+              {pmIsScratch() ? <Chip value={`SCRATCH :${pmPort()}`} tone="drift" /> : null}
+              <Chip value="KANBAN" tone="room" />
+            </>
+          )}
+        >
+          <PmNav current={projectId} />
+          {project.id === 'erp' ? (
+            <p className="mx-3 mb-2 text-2xs text-muted-foreground">
+              General DEC-100 ERP implementation freeze was lifted per Founder Room #14394. CP2 HOLD #12690 remains active for payment-command/payment-dispatch scope.
+            </p>
           ) : null}
-          <span className="ml-auto font-semibold text-muted-foreground">Sort:</span>
-          <select aria-label="Sort cards" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}>
-            <option value="DEFAULT">Default</option>
-            <option value="PRIORITY">Priority (P0 first)</option>
-            <option value="ID">ID / Sequence</option>
-            <option value="UPDATED">Most Recently Updated</option>
-          </select>
-        </div>
 
-        {flash ? <p role="status" className="px-3 pt-2 text-xs text-truth-ok">{flash}</p> : null}
-        {errors.length && !detail ? <ul role="alert" className="px-3 pt-2 text-xs text-truth-drift">{errors.map((error) => <li key={error}>{error}</li>)}</ul> : null}
+          <div className="flex flex-wrap items-end gap-2 border-b border-border p-2.5">
+            <label className="grid min-w-32 gap-1 text-2xs text-muted-foreground">
+              Claimed actor — not authentication
+              <span className="flex flex-wrap items-center gap-2">
+                <select aria-label="Claimed actor — not authentication" value={actor} onChange={(e) => setActor(e.target.value)}>
+                  {actorOptions.map((handle) => <option key={handle} value={handle}>{handle}</option>)}
+                </select>
+                {orgProblem ? <PmUnavailable reason={orgProblem} /> : null}
+              </span>
+            </label>
+            <label className="grid min-w-40 flex-1 gap-1 text-2xs text-muted-foreground">
+              Search
+              <input aria-label="Search tasks" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="ID, title, owner, epic, worker" />
+            </label>
+            <button type="button" className="go-link" disabled={busy} onClick={() => { setCreating(true); setSelectedId(null); setDetail(null); }}>New card</button>
+            <button type="button" className="go-link" onClick={() => { void load(selectedId); void loadExecution(); }}>Refresh</button>
+          </div>
 
-        {creating ? (
-          <form className="grid gap-2 border-b border-border p-3" aria-label="New task" onSubmit={(e) => { e.preventDefault(); void create(); }}>
-            <input aria-label="Task title" value={draft.title} maxLength={800} placeholder="Card title" onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
-            <div className="grid grid-cols-2 gap-2">
-              <select aria-label="Owner" value={draft.owner} onChange={(e) => setDraft({ ...draft, owner: e.target.value })}>
-                {people.map((h) => <option key={h} value={h}>{h}</option>)}
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-card/10 px-3 py-2 text-2xs">
+            <span className="font-semibold text-muted-foreground">Filter:</span>
+            <select aria-label="Filter Priority" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+              <option value="ALL">Priority: All</option>
+              <option value="P0">P0 (Critical)</option>
+              <option value="P1">P1 (High)</option>
+              <option value="P2">P2 (Normal)</option>
+              <option value="P3">P3 (Low)</option>
+            </select>
+            <select aria-label="Filter Provenance" value={filterProvenance} onChange={(e) => setFilterProvenance(e.target.value)}>
+              <option value="ALL">Provenance: All</option>
+              <option value="LIVE">Live Work</option>
+              <option value="HISTORICAL">Historical Nexus</option>
+            </select>
+            <select aria-label="Filter Stage" value={filterStage} onChange={(e) => setFilterStage(e.target.value)}>
+              <option value="ALL">Stage: All</option>
+              {allStages.map((st) => <option key={st} value={st}>{st}</option>)}
+            </select>
+            <select aria-label="Filter Worker" value={filterWorker} onChange={(e) => setFilterWorker(e.target.value)}>
+              <option value="ALL">Worker: All</option>
+              {allWorkers.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <select aria-label="Filter milestone" value={filterMilestone} onChange={(e) => setFilterMilestone(e.target.value)}>
+              <option value="ALL">Milestone: All</option>
+              {[...milestoneFilterOptions.entries()].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+            {allEpicsMilestones.length > 0 ? (
+              <select aria-label="Filter Epic/Milestone" value={filterEpicMilestone} onChange={(e) => setFilterEpicMilestone(e.target.value)}>
+                <option value="ALL">Epic/Milestone: All</option>
+                {allEpicsMilestones.map((em) => <option key={em} value={em}>{em}</option>)}
               </select>
-              <select aria-label="Priority" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as PmPriority })}>
-                {PM_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </div>
-            <textarea aria-label="Description" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Optional description" />
-            <div className="flex gap-2">
-              <button type="submit" className="go-link" disabled={busy || !actor}>Add card</button>
-              <button type="button" className="go-link" onClick={() => setCreating(false)}>Cancel</button>
-            </div>
-          </form>
-        ) : null}
+            ) : null}
+            <span className="ml-auto font-semibold text-muted-foreground">Sort:</span>
+            <select aria-label="Sort cards" value={sortBy} onChange={(e) => setSortBy(e.target.value as 'DEFAULT' | 'PRIORITY' | 'ID' | 'UPDATED')}>
+              <option value="DEFAULT">Default</option>
+              <option value="PRIORITY">Priority (P0 first)</option>
+              <option value="ID">ID / Sequence</option>
+              <option value="UPDATED">Most Recently Updated</option>
+            </select>
+          </div>
 
-        {/* Kanban Board Grid */}
-        <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3 xl:grid-cols-5">
-          {PM_STATUSES.map((s) => {
-            const col = visible.filter((t) => t.status === s);
-            return (
-              <section
-                key={s}
-                className="min-w-0 rounded border border-border bg-background/40"
-                aria-label={`${PM_STATUS_LABELS[s]} lane`}
-                data-lane={s}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  const id = e.dataTransfer.getData('text/plain');
-                  const task = tasks.find((row) => row.id === id);
-                  if (task && task.status !== s) void move(task, s);
-                }}
-              >
-                <header className="flex items-center justify-between border-b border-border bg-card px-2.5 py-2">
-                  <h3 className="font-mono text-[10px] font-semibold tracking-wide">{PM_STATUS_LABELS[s]}</h3>
-                  <span className="chip" data-tone="muted">{col.length}</span>
-                </header>
-                <ul className="grid max-h-[55vh] content-start gap-1.5 overflow-y-auto p-1.5">
-                  {col.map((t) => {
-                    const priorityTone: Tone =
-                      t.priority === 'P0' ? 'drift' :
-                      t.priority === 'P1' ? 'stale' : 'muted';
-                    const priorityDisplay = t.priority_raw && t.priority_raw !== t.priority
-                      ? `${t.priority} (${t.priority_raw})`
-                      : t.priority;
-                    const isLive = t.provenance === 'LIVE';
+          {saved && !detail ? <PmSaved label={saved} /> : null}
+          {refusal && !detail ? refusalBlock : null}
+          {clientErrors.length && !detail ? <ul role="alert" className="px-3 pt-2 text-xs text-truth-drift">{clientErrors.map((error) => <li key={error}>{error}</li>)}</ul> : null}
 
-                    return (
-                      <li key={t.id}>
-                        <button
-                          type="button"
-                          draggable
-                          onDragStart={(e) => e.dataTransfer.setData('text/plain', t.id)}
-                          aria-pressed={selectedId === t.id}
-                          onClick={() => void select(t.id)}
-                          className={`w-full rounded border p-2 text-left transition-colors ${
-                            selectedId === t.id
-                              ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]'
-                              : 'border-border bg-card hover:border-border-hover'
-                          }`}
-                        >
-                          {/* Card Header: ID, Priority, Provenance & Stage Indicator */}
-                          <div className="flex flex-wrap items-center justify-between gap-1">
-                            <span className="font-mono text-[10px] font-semibold text-[hsl(var(--room))]">{t.id}</span>
-                            <div className="flex items-center gap-1">
-                              <Chip value={priorityDisplay} tone={priorityTone} />
-                              <span className="chip" data-tone={isLive ? 'room' : 'muted'}>
-                                {isLive ? 'LIVE' : 'HISTORICAL'}
+          {creating ? (
+            <form className="grid gap-2 border-b border-border p-3" aria-label="New task" onSubmit={(e) => { e.preventDefault(); void create(); }}>
+              <input aria-label="Task title" value={draft.title} maxLength={800} placeholder="Card title" onChange={(e) => setDraft({ ...draft, title: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <PersonSelect
+                  label="Owner"
+                  value={draft.owner}
+                  onChange={(owner) => setDraft({ ...draft, owner })}
+                  people={orgPeople}
+                  unavailable={orgProblem}
+                />
+                <select aria-label="Priority" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as PmPriority })}>
+                  {PM_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <textarea aria-label="Description" rows={3} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Optional description" />
+              <div className="flex gap-2">
+                <button type="submit" className="go-link" disabled={busy}>Add card</button>
+                <button type="button" className="go-link" onClick={() => setCreating(false)}>Cancel</button>
+              </div>
+            </form>
+          ) : null}
+
+          {tasks.length === 0 ? <PmEmpty label="No tasks on this board." /> : null}
+          {tasks.length > 0 && visible.length === 0 ? <PmEmpty label="No cards match these filters." /> : null}
+
+          <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3 xl:grid-cols-5">
+            {PM_STATUSES.map((s) => {
+              const col = visible.filter((t) => t.status === s);
+              return (
+                <section
+                  key={s}
+                  className="min-w-0 rounded border border-border bg-background/40"
+                  aria-label={`${PM_STATUS_LABELS[s]} lane`}
+                  data-lane={s}
+                >
+                  <header className="flex items-center justify-between border-b border-border bg-card px-2.5 py-2">
+                    <h3 className="font-mono text-[10px] font-semibold tracking-wide">{PM_STATUS_LABELS[s]}</h3>
+                    <span className="chip" data-tone="muted">{col.length}</span>
+                  </header>
+                  <ul className="grid max-h-96 content-start gap-1.5 overflow-y-auto p-1.5">
+                    {col.map((t) => {
+                      const priorityTone: Tone =
+                        t.priority === 'P0' ? 'drift' :
+                        t.priority === 'P1' ? 'stale' : 'muted';
+                      const priorityDisplay = t.priority_raw && t.priority_raw !== t.priority
+                        ? `${t.priority} (${t.priority_raw})`
+                        : t.priority;
+                      const isLive = t.provenance === 'LIVE';
+                      const cardExecution = executionByTask[t.id];
+                      return (
+                        <li key={t.id}>
+                          <button
+                            type="button"
+                            aria-pressed={selectedId === t.id}
+                            onClick={() => void select(t.id)}
+                            className={`w-full rounded border p-2 text-left transition-colors ${
+                              selectedId === t.id
+                                ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]'
+                                : 'border-border bg-card hover:border-border-hover'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-1">
+                              <span className="font-mono text-[10px] font-semibold text-[hsl(var(--room))]">{t.id}</span>
+                              <div className="flex items-center gap-1">
+                                <Chip value={priorityDisplay} tone={priorityTone} />
+                                <span className="chip" data-tone={isLive ? 'room' : 'muted'}>
+                                  {isLive ? 'LIVE' : 'HISTORICAL'}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
+                            {(t.epic || t.milestone) ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {t.epic ? <span className="chip" data-tone="room">Epic: {t.epic}</span> : null}
+                                {t.milestone ? <span className="chip" data-tone="muted">M: {t.milestone}</span> : null}
+                              </div>
+                            ) : null}
+                            <div className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {(t.workers && t.workers.length > 1 ? t.workers : [t.owner]).map((w) => (
+                                  <span key={w} className="rounded border border-border/70 bg-surface-0/60 px-1 py-0.2 font-mono text-[9px] text-muted-foreground">
+                                    {w}
+                                  </span>
+                                ))}
+                              </div>
+                              <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                [{t.stage ?? t.status}]
                               </span>
                             </div>
-                          </div>
+                            {cardExecution ? (
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state={cardExecution.state}>
+                                <Chip value={`EXEC ${cardExecution.state}`} tone={cardExecution.state === 'BLOCKED' ? 'drift' : 'room'} />
+                                <span className="text-[10px] text-muted-foreground">{cardExecution.builderSeat ?? 'NO BUILDER'} · {cardExecution.branch ?? 'NO WORKTREE'}</span>
+                              </span>
+                            ) : t.status === 'IN_PROGRESS' ? (
+                              <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state="NONE">
+                                <Chip value="NO EXECUTION RECORD" tone="stale" />
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        </Panel>
+      </section>
 
-                          {/* Card Title */}
-                          <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
-
-                          {/* Epics / Milestones */}
-                          {(t.epic || t.milestone) ? (
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {t.epic ? <span className="chip" data-tone="room">Epic: {t.epic}</span> : null}
-                              {t.milestone ? <span className="chip" data-tone="muted">M: {t.milestone}</span> : null}
-                            </div>
-                          ) : null}
-
-                          {/* Multi-Agent Workers & Governance Stage indicator */}
-                          <div className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
-                            <div className="flex flex-wrap items-center gap-1">
-                              {(t.workers && t.workers.length > 1 ? t.workers : [t.owner]).map((w) => (
-                                <span key={w} className="rounded border border-border/70 bg-surface-0/60 px-1 py-0.2 font-mono text-[9px] text-muted-foreground">
-                                  {w}
-                                </span>
-                              ))}
-                            </div>
-                            <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                              [{t.stage ?? t.status}]
-                            </span>
-                          </div>
-
-                          {/* Execution Floor Integration */}
-                          {executionByTask[t.id] ? (
-                            <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state={executionByTask[t.id].state}>
-                              <Chip value={`EXEC ${executionByTask[t.id].state}`} tone={executionByTask[t.id].state === 'BLOCKED' ? 'drift' : 'room'} />
-                              <span className="text-[10px] text-muted-foreground">{executionByTask[t.id].builderSeat ?? 'NO BUILDER'} · {executionByTask[t.id].branch ?? 'NO WORKTREE'}</span>
-                            </span>
-                          ) : t.status === 'IN_PROGRESS' ? (
-                            <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state="NONE">
-                              <Chip value="NO EXECUTION RECORD" tone="stale" />
-                            </span>
-                          ) : null}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
-      </Panel>
-
-      {/* Task Detail Panel */}
       {detail && selectedId ? (
-        <section className="command-panel" aria-label={`Task ${detail.task.id}`} data-task-id={detail.task.id}>
-          <div className="head">
-            <div className="flex items-center gap-2">
-              <h3>{detail.task.id}</h3>
-              <Chip
-                value={detail.task.provenance === 'LIVE' ? 'LIVE' : 'HISTORICAL'}
-                tone={detail.task.provenance === 'LIVE' ? 'room' : 'muted'}
-              />
-              <Chip value={`STAGE: ${detail.task.stage}`} tone={detail.task.gated ? 'room' : 'muted'} />
-            </div>
+        <aside
+          data-task-drawer=""
+          aria-label={`Task ${detail.task.id}`}
+          data-task-id={detail.task.id}
+          style={DRAWER_STYLE}
+        >
+          <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border bg-background px-3 py-2">
+            <h3 className="font-mono text-sm">{detail.task.id}</h3>
+            <Chip
+              value={detail.task.provenance === 'LIVE' ? 'LIVE' : 'HISTORICAL'}
+              tone={detail.task.provenance === 'LIVE' ? 'room' : 'muted'}
+            />
+            <Chip value={`STAGE: ${detail.task.stage}`} tone={detail.task.gated ? 'room' : 'muted'} />
             <span className="spacer" />
-            <Chip value={PM_STATUS_LABELS[detail.task.status]} />
+            <button type="button" className="go-link" aria-label="Close task" onClick={closeDrawer}>Close</button>
           </div>
 
           <div className="grid gap-3 p-3">
-            {executionByTask[detail.task.id] ? (
-              <Panel title="Software factory execution" count={executionByTask[detail.task.id].state}>
+            <p data-task-title="" className="text-sm font-medium">{detail.task.title}</p>
+            <p data-task-stage="" className="font-mono text-2xs">Stage: {detail.task.stage}</p>
+            <p data-derived-column="" className="text-2xs text-muted-foreground">Column: {columnLabel(detail.task.stage)}</p>
+
+            <div className="flex flex-wrap gap-1" role="group" aria-label="Stage">
+              {BOARD_STAGES.map((stage) => {
+                const enabled = (detail.task.allowed_stage_next ?? []).includes(stage);
+                const current = detail.task.stage === stage;
+                return (
+                  <button
+                    key={stage}
+                    type="button"
+                    className="go-link"
+                    aria-label={`Move to ${stage}`}
+                    aria-current={current ? 'step' : undefined}
+                    data-stage={stage}
+                    disabled={busy || !enabled}
+                    onClick={() => void move(detail.task, stage)}
+                  >
+                    {stage}
+                  </button>
+                );
+              })}
+            </div>
+
+            {saved ? <PmSaved label={saved} /> : null}
+            {rereadProblem ? <PmUnavailable reason={rereadProblem} /> : null}
+            {refusalBlock}
+            {clientErrors.length ? <ul role="alert" className="text-xs text-truth-drift">{clientErrors.map((error) => <li key={error}>{error}</li>)}</ul> : null}
+
+            {execution ? (
+              <Panel title="Software factory execution" count={execution.state}>
                 <dl className="body grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div><dt className="meta">Builder / verifier</dt><dd className="mono">{executionByTask[detail.task.id].builderSeat ?? 'UNKNOWN'} / {executionByTask[detail.task.id].verifierSeat ?? 'UNKNOWN'}</dd></div>
-                  <div><dt className="meta">Herdr sessions</dt><dd className="mono">{executionByTask[detail.task.id].herdrSessionId ?? 'UNKNOWN'} / {executionByTask[detail.task.id].verifierSessionId ?? 'NOT ASSIGNED'}</dd></div>
-                  <div><dt className="meta">Worktrees</dt><dd className="mono break-all">{executionByTask[detail.task.id].workspacePath ?? 'NOT PROVISIONED'}{executionByTask[detail.task.id].verifierWorkspacePath ? ` · ${executionByTask[detail.task.id].verifierWorkspacePath}` : ''}</dd></div>
-                  <div><dt className="meta">Lease / candidate</dt><dd className="mono break-all">{executionByTask[detail.task.id].leaseId ?? 'NO LEASE'} / {executionByTask[detail.task.id].candidateSha ?? 'NO CANDIDATE'}</dd></div>
+                  <div><dt className="meta">Builder / verifier</dt><dd className="mono">{execution.builderSeat ?? 'UNKNOWN'} / {execution.verifierSeat ?? 'UNKNOWN'}</dd></div>
+                  <div><dt className="meta">Herdr sessions</dt><dd className="mono">{execution.herdrSessionId ?? 'UNKNOWN'} / {execution.verifierSessionId ?? 'NOT ASSIGNED'}</dd></div>
+                  <div><dt className="meta">Worktrees</dt><dd className="mono break-all">{execution.workspacePath ?? 'NOT PROVISIONED'}{execution.verifierWorkspacePath ? ` · ${execution.verifierWorkspacePath}` : ''}</dd></div>
+                  <div><dt className="meta">Lease / candidate</dt><dd className="mono break-all">{execution.leaseId ?? 'NO LEASE'} / {execution.candidateSha ?? 'NO CANDIDATE'}</dd></div>
                 </dl>
               </Panel>
             ) : detail.task.status === 'IN_PROGRESS' ? (
@@ -646,9 +880,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </Panel>
             ) : null}
 
-            {errors.length ? <ul role="alert" className="text-xs text-truth-drift">{errors.map((e) => <li key={e}>{e}</li>)}</ul> : null}
-
-            {/* Structured Stage & Gated Lifecycle Indicator */}
             <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-card/20 p-2 text-2xs">
               <span className="font-semibold text-muted-foreground">Lifecycle:</span>
               <Chip
@@ -663,7 +894,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               ) : null}
             </div>
 
-            {/* Epics, Sprints, Milestones, Release Track */}
             <dl className="grid grid-cols-2 gap-2 rounded border border-border bg-card/30 p-2 text-2xs sm:grid-cols-4">
               <div>
                 <dt className="text-muted-foreground">Epic</dt>
@@ -674,8 +904,8 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                 <dd className="mono font-medium text-foreground">{detail.task.sprint || '—'}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Milestone</dt>
-                <dd className="mono font-medium text-foreground">{detail.task.milestone || '—'}</dd>
+                <dt className="text-muted-foreground">Legacy milestone</dt>
+                <dd className="mono font-medium text-foreground" data-legacy-milestone="">{detail.task.milestone || '—'}</dd>
               </div>
               <div>
                 <dt className="text-muted-foreground">Release Track</dt>
@@ -683,17 +913,13 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </div>
             </dl>
 
-            {/* Multi-Agent Workers Array */}
             <div className="flex flex-wrap items-center gap-1.5 rounded border border-border/60 bg-surface-0/40 p-2 text-2xs">
               <span className="font-semibold text-muted-foreground">Assigned Workers / Team:</span>
               {(detail.task.workers && detail.task.workers.length > 0 ? detail.task.workers : [detail.task.owner]).map((w) => (
-                <span key={w} className="chip" data-tone={w === 'UNASSIGNED' ? 'muted' : 'room'}>
-                  {w}
-                </span>
+                <span key={w} className="chip" data-tone={w === 'UNASSIGNED' ? 'muted' : 'room'}>{w}</span>
               ))}
             </div>
 
-            {/* Form Edit Fields */}
             <label className="grid gap-1 text-2xs text-muted-foreground">
               Title
               <input aria-label="Task title" value={editTitle} maxLength={800} onChange={(e) => setEditTitle(e.target.value)} />
@@ -702,35 +928,28 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <label className="grid gap-1 text-2xs text-muted-foreground">
                 Priority
-                <select
-                  aria-label="Priority"
-                  value={editPriority}
-                  onChange={(e) => setEditPriority(e.target.value as PmPriority)}
-                >
+                <select aria-label="Priority" value={editPriority} onChange={(e) => setEditPriority(e.target.value as PmPriority)}>
                   {PM_PRIORITIES.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
                 {detail.task.priority_raw && detail.task.priority_raw !== detail.task.priority ? (
                   <span className="text-[10px] text-muted-foreground">Raw: {detail.task.priority_raw}</span>
                 ) : null}
               </label>
-
-              <label className="grid gap-1 text-2xs text-muted-foreground">
-                Owner
-                <input aria-label="Owner" list="kanban-owners" value={editOwner} onChange={(e) => setEditOwner(e.target.value)} />
-                <datalist id="kanban-owners">{people.map((h) => <option key={h} value={h} />)}</datalist>
-              </label>
-
-              <label className="grid gap-1 text-2xs text-muted-foreground">
-                Assign Independent Verifier
-                <input
-                  aria-label="Independent Verifier"
-                  list="kanban-verifiers"
-                  value={editVerifier}
-                  onChange={(e) => setEditVerifier(e.target.value)}
-                  placeholder="UNASSIGNED"
-                />
-                <datalist id="kanban-verifiers">{people.map((h) => <option key={h} value={h} />)}</datalist>
-              </label>
+              <PersonSelect
+                label="Owner"
+                value={editOwner}
+                onChange={setEditOwner}
+                people={orgPeople}
+                unavailable={orgProblem}
+              />
+              <PersonSelect
+                label="Independent Verifier"
+                ariaLabel="Independent Verifier"
+                value={editVerifier}
+                onChange={setEditVerifier}
+                people={orgPeople}
+                unavailable={orgProblem}
+              />
             </div>
 
             {editOwner !== 'UNASSIGNED' && editOwner === editVerifier ? (
@@ -739,135 +958,54 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </p>
             ) : null}
 
+            <div className="grid gap-1 text-2xs text-muted-foreground">
+              Milestone
+              {milestonesProblem ? (
+                <PmUnavailable reason={milestonesProblem} />
+              ) : (
+                <select aria-label="Milestone" value={editMilestoneId} onChange={(e) => setEditMilestoneId(e.target.value)}>
+                  <option value="">No milestone</option>
+                  {(milestones ?? []).map((row) => <option key={row.id} value={row.id}>{row.title}</option>)}
+                  {editMilestoneId && !(milestones ?? []).some((row) => row.id === editMilestoneId) ? (
+                    <option value={editMilestoneId}>{editMilestoneId}</option>
+                  ) : null}
+                </select>
+              )}
+            </div>
+
             <label className="grid gap-1 text-2xs text-muted-foreground">
               Description
               <textarea aria-label="Description" rows={5} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
             </label>
 
-            {/* Move Task & Save Actions */}
-            {!actor ? (
-              <p className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-2xs text-amber-200">
-                Select an active handle in &quot;Acting as&quot; above to move cards, save changes, link Room, or attach evidence.
-              </p>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Move task">
-              {detail.task.allowed_next.map((to) => (
-                <button key={to} type="button" className="go-link" disabled={busy || !actor} onClick={() => void move(detail.task, to)}>
-                  → {PM_STATUS_LABELS[to]}
-                </button>
-              ))}
-              <button type="button" className="go-link font-semibold" disabled={busy || !actor} onClick={() => void save()}>Save Changes</button>
-            </div>
-
-            {/* Allowed Governance Stage Moves */}
-            {detail.task.allowed_stage_next && detail.task.allowed_stage_next.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-2xs">
-                <span className="text-muted-foreground">Advance Stage:</span>
-                {detail.task.allowed_stage_next.map((targetStage) => (
-                  <button
-                    key={targetStage}
-                    type="button"
-                    className="go-link"
-                    disabled={busy || !actor}
-                    onClick={() => void move(detail.task, detail.task.status, targetStage)}
-                  >
-                    → {targetStage}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {/* WP-2 Operability Controls: Link Room & Attach Evidence buttons */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="go-link font-semibold" disabled={busy} onClick={() => void save()}>Save Changes</button>
               <button
                 type="button"
                 className="go-link"
-                disabled={busy || !actor}
-                onClick={() => { setShowLinkRoom(!showLinkRoom); setShowAddEvidence(false); }}
-              >
-                {showLinkRoom ? 'Cancel Link Room' : 'Link Room Authorization'}
-              </button>
-              <button
-                type="button"
-                className="go-link"
-                disabled={busy || !actor}
+                disabled={busy}
                 onClick={() => { setShowAddEvidence(!showAddEvidence); setShowLinkRoom(false); }}
               >
                 {showAddEvidence ? 'Cancel Evidence' : 'Attach Evidence'}
               </button>
             </div>
 
-            {/* Link Room Form */}
-            {showLinkRoom ? (
-              <form onSubmit={handleLinkRoom} className="grid gap-2 rounded border border-border bg-card/40 p-3 text-2xs" aria-label="Link Room Authorization">
-                <h4 className="font-semibold text-foreground">Link Room Authorization Record</h4>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <label className="grid gap-1">
-                    Room Sequence #
-                    <input
-                      type="number"
-                      required
-                      placeholder="e.g. 10663"
-                      value={roomSeq}
-                      onChange={(e) => setRoomSeq(e.target.value)}
-                    />
-                  </label>
-                  <label className="grid gap-1">
-                    Event ID / Token (64 hex characters)
-                    <input
-                      required
-                      placeholder="64-character SHA-256 event ID"
-                      value={roomEventId}
-                      onChange={(e) => setRoomEventId(e.target.value)}
-                    />
-                  </label>
-                </div>
-                <label className="grid gap-1">
-                  Authorization Purpose
-                  <input
-                    placeholder={`Authorization for ${detail.task.id}`}
-                    value={roomPurpose}
-                    onChange={(e) => setRoomPurpose(e.target.value)}
-                  />
-                </label>
-                <div className="flex gap-2">
-                  <button type="submit" className="go-link" disabled={busy}>Authorize in Room</button>
-                  <button type="button" className="go-link" onClick={() => setShowLinkRoom(false)}>Cancel</button>
-                </div>
-              </form>
-            ) : null}
-
-            {/* Attach Evidence Form */}
             {showAddEvidence ? (
               <form onSubmit={handleAddEvidence} className="grid gap-2 rounded border border-border bg-card/40 p-3 text-2xs" aria-label="Attach Evidence">
                 <h4 className="font-semibold text-foreground">Attach Verification Evidence</h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label className="grid gap-1">
                     Artifact / File Path
-                    <input
-                      placeholder="e.g. 00_STARQ_HQ/evidence/WP-1.md"
-                      value={evidencePath}
-                      onChange={(e) => setEvidencePath(e.target.value)}
-                    />
+                    <input placeholder="e.g. 00_STARQ_HQ/evidence/WP-1.md" value={evidencePath} onChange={(e) => setEvidencePath(e.target.value)} />
                   </label>
                   <label className="grid gap-1">
                     SHA-256 Digest
-                    <input
-                      placeholder="SHA-256 checksum or commit SHA"
-                      value={evidenceSha}
-                      onChange={(e) => setEvidenceSha(e.target.value)}
-                    />
+                    <input placeholder="SHA-256 checksum or commit SHA" value={evidenceSha} onChange={(e) => setEvidenceSha(e.target.value)} />
                   </label>
                 </div>
                 <label className="grid gap-1">
                   Evidence Description / Attestation Note
-                  <textarea
-                    rows={2}
-                    required
-                    placeholder="Attestation findings or verification summary (min 5 chars)"
-                    value={evidenceDesc}
-                    onChange={(e) => setEvidenceDesc(e.target.value)}
-                  />
+                  <textarea rows={2} required placeholder="Attestation findings or verification summary (min 5 chars)" value={evidenceDesc} onChange={(e) => setEvidenceDesc(e.target.value)} />
                 </label>
                 <div className="flex gap-2">
                   <button type="submit" className="go-link" disabled={busy}>Record Evidence</button>
@@ -876,24 +1014,67 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </form>
             ) : null}
 
-            {/* Existing Evidence List */}
-            {detail.task.evidence_refs && detail.task.evidence_refs.length > 0 ? (
-              <Panel title="Linked Evidence Records" count={`${detail.task.evidence_refs.length} record${detail.task.evidence_refs.length === 1 ? '' : 's'}`}>
-                <ul className="body grid gap-1.5 text-2xs">
-                  {detail.task.evidence_refs.map((ev, idx) => (
-                    <li key={idx} className="rounded border border-border/70 p-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="mono font-semibold">Room #{ev.sequence}</span>
-                        <span className="text-muted-foreground">{ev.senderHandle ?? 'ANON'}</span>
-                      </div>
-                      <p className="mt-0.5 text-muted-foreground">{ev.purpose}</p>
+            <details data-advanced-room="">
+              <summary className="cursor-pointer text-xs text-muted-foreground">Advanced / Room</summary>
+              <div className="mt-2 grid gap-2">
+                <button
+                  type="button"
+                  className="go-link"
+                  disabled={busy}
+                  onClick={() => { setShowLinkRoom(!showLinkRoom); setShowAddEvidence(false); }}
+                >
+                  {showLinkRoom ? 'Cancel Link Room' : 'Link Room Authorization'}
+                </button>
+                {showLinkRoom ? (
+                  <form onSubmit={handleLinkRoom} className="grid gap-2 rounded border border-border bg-card/40 p-3 text-2xs" aria-label="Link Room Authorization">
+                    <h4 className="font-semibold text-foreground">Link Room Authorization Record</h4>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <label className="grid gap-1">
+                        Room Sequence #
+                        <input type="number" required placeholder="e.g. 10663" value={roomSeq} onChange={(e) => setRoomSeq(e.target.value)} />
+                      </label>
+                      <label className="grid gap-1">
+                        Event ID / Token (64 hex characters)
+                        <input required placeholder="64-character SHA-256 event ID" value={roomEventId} onChange={(e) => setRoomEventId(e.target.value)} />
+                      </label>
+                    </div>
+                    <label className="grid gap-1">
+                      Authorization Purpose
+                      <input placeholder={`Authorization for ${detail.task.id}`} value={roomPurpose} onChange={(e) => setRoomPurpose(e.target.value)} />
+                    </label>
+                    <div className="flex gap-2">
+                      <button type="submit" className="go-link" disabled={busy}>Authorize in Room</button>
+                      <button type="button" className="go-link" onClick={() => setShowLinkRoom(false)}>Cancel</button>
+                    </div>
+                  </form>
+                ) : null}
+              </div>
+            </details>
+
+            <section aria-label="Task timeline" className="grid gap-2">
+              <h4 className="text-xs font-semibold">Timeline</h4>
+              {detail.history.length === 0 ? <PmEmpty label="No timeline on this record." /> : (
+                <ol className="grid gap-2">
+                  {detail.history.map((row) => (
+                    <li key={row.id} className="rounded border border-border p-2 text-2xs">
+                      <div className="font-semibold">{row.event_type}</div>
+                      {(row.from_status || row.to_status) ? <div>{row.from_status ?? '—'} → {row.to_status ?? '—'}</div> : null}
+                      <div>{row.actor}</div>
+                      <time dateTime={row.timestamp}>{row.timestamp}</time>
+                      {row.room_ref && row.room_ref.sequence != null ? <div>Room #{row.room_ref.sequence}</div> : null}
                     </li>
                   ))}
+                </ol>
+              )}
+              {detail.task.evidence_refs?.length ? (
+                <ul aria-label="Evidence" className="grid gap-1 text-2xs">
+                  {detail.task.evidence_refs.map((ev, idx) => (
+                    <li key={`${ev.eventId}-${idx}`}>Room #{ev.sequence} · {ev.senderHandle ?? 'UNKNOWN'} · {ev.purpose}</li>
+                  ))}
                 </ul>
-              </Panel>
-            ) : null}
+              ) : null}
+            </section>
 
-            {/* Structured Acceptance Criteria Checklist */}
             {(() => {
               const items = parseAcceptance(detail.task.acceptance_json, detail.task.nexus_attributes);
               if (!items.length) return null;
@@ -905,15 +1086,11 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
                         <span className={`mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border font-mono text-[9px] ${
                           item.done === true
                             ? 'border-truth-ok bg-truth-ok/20 font-bold text-truth-ok'
-                            : item.done === false
-                              ? 'border-border bg-card text-muted-foreground'
-                              : 'border-border text-muted-foreground'
+                            : 'border-border bg-card text-muted-foreground'
                         }`}>
                           {item.done === true ? '✓' : item.done === false ? '○' : '•'}
                         </span>
-                        <span className={item.done ? 'line-through text-muted-foreground' : 'text-foreground'}>
-                          {item.text}
-                        </span>
+                        <span className={item.done ? 'line-through text-muted-foreground' : 'text-foreground'}>{item.text}</span>
                       </li>
                     ))}
                   </ul>
@@ -923,7 +1100,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
             {detail.task.notes ? <p className="whitespace-pre-wrap text-2xs text-muted-foreground">{detail.task.notes}</p> : null}
 
-            {/* Dependencies */}
             {detail.task.depends_on.length ? (
               <Panel title="Dependencies" count={`${detail.task.depends_on.length} linked task${detail.task.depends_on.length === 1 ? '' : 's'}`}>
                 <ul className="body grid gap-1">
@@ -934,7 +1110,6 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </Panel>
             ) : null}
 
-            {/* Original Nexus Source Payload */}
             {detail.source_record ? (
               <details className="rounded border border-border p-3" data-nexus-source-record="">
                 <summary className="cursor-pointer text-xs text-muted-foreground">
@@ -950,8 +1125,8 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               </details>
             ) : null}
           </div>
-        </section>
+        </aside>
       ) : null}
-    </section>
+    </>
   );
 }
