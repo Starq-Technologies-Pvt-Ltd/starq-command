@@ -406,14 +406,107 @@ test('org API: authorization — missing actor rejected', async () => {
   assert.notEqual(res.status, 201);
 });
 
-test('org API: audit history gap — org record changes have no history table', async () => {
-  // pm_status_log exists for tasks. Verify org tables have no audit trigger.
+test('org API: CV-AG1 PATCH company, unit (cycle + archive), position (cycle), person, appointment end/reassign, and org_audit history', async () => {
+  // 1. PATCH company
+  const patchCo = await api('PATCH', '/api/pm/org/companies/starq-technologies', {
+    actor: 'ali',
+    channel: 'ui',
+    notes: 'Updated via PATCH company test',
+  });
+  assert.equal(patchCo.status, 200);
+  assert.equal(patchCo.body.notes, 'Updated via PATCH company test');
+
+  // 2. Unit cycle check (409 UNIT_CYCLE) and soft archive
+  const childUnit = await api('POST', '/api/pm/org/units', {
+    actor: 'ali',
+    id: 'unit-cycle-child',
+    company_id: 'starq-technologies',
+    parent_id: 'starq-dev-studio',
+    kind: 'OFFICE',
+    name: 'Test Office Child',
+  });
+  assert.equal(childUnit.status, 201);
+  assert.equal(childUnit.body.kind, 'OFFICE');
+
+  const cycleUnit = await api('PATCH', '/api/pm/org/units/starq-dev-studio', {
+    actor: 'ali',
+    parent_id: 'unit-cycle-child',
+  });
+  assert.equal(cycleUnit.status, 409);
+  assert.equal(cycleUnit.body.error, 'UNIT_CYCLE');
+
+  // Soft archive child unit
+  const archUnit = await api('PATCH', '/api/pm/org/units/unit-cycle-child', {
+    actor: 'ali',
+    archived: true,
+  });
+  assert.equal(archUnit.status, 200);
+  assert.ok(archUnit.body.archived_at);
+
+  const defaultOrg = await api('GET', '/api/pm/org');
+  assert.ok(!defaultOrg.body.units.some((u) => u.id === 'unit-cycle-child'), 'archived unit hidden by default');
+  const fullOrg = await api('GET', '/api/pm/org?include=archived');
+  assert.ok(fullOrg.body.units.some((u) => u.id === 'unit-cycle-child'), 'archived unit shown with ?include=archived');
+
+  // 3. Position cycle check (409 POSITION_CYCLE)
+  const cyclePos = await api('PATCH', '/api/pm/org/positions/pos-md', {
+    actor: 'ali',
+    reports_to_position_id: 'pos-engineer',
+  });
+  assert.equal(cyclePos.status, 409);
+  assert.equal(cyclePos.body.error, 'POSITION_CYCLE');
+
+  // 4. PATCH person
+  const patchPerson = await api('PATCH', '/api/pm/org/people/api-tester', {
+    actor: 'ali',
+    display_name: 'API Tester (Senior)',
+    role_note: 'QA Lead',
+    capabilities: ['verifier', 'qa'],
+  });
+  assert.equal(patchPerson.status, 200);
+  assert.equal(patchPerson.body.display_name, 'API Tester (Senior)');
+  assert.deepEqual(patchPerson.body.capabilities, ['verifier', 'qa']);
+
+  // 5. End and reassign appointment
+  const posForEnd = await api('POST', '/api/pm/org/positions', {
+    actor: 'ali',
+    unit_id: 'starq-dev-studio',
+    title: 'Rotation Engineer',
+  });
+  assert.equal(posForEnd.status, 201);
+  const apptInitial = await api('POST', '/api/pm/org/appointments', {
+    actor: 'ali',
+    position_id: posForEnd.body.id,
+    person_id: 'person-cursor',
+    notes: 'First holder',
+  });
+  assert.equal(apptInitial.status, 201);
+
+  const endedRes = await api('POST', `/api/pm/org/appointments/${apptInitial.body.id}/end`, {
+    actor: 'ali',
+    notes: 'Handover complete',
+    reassign_to_person_id: 'person-codex',
+    reassign_notes: 'Second holder',
+  });
+  assert.equal(endedRes.status, 200);
+  assert.equal(endedRes.body.ended.status, 'ENDED');
+  assert.ok(endedRes.body.ended.ended_at);
+  assert.equal(endedRes.body.reassigned.status, 'ACTIVE');
+  assert.equal(endedRes.body.reassigned.person_id, 'person-codex');
+
+  // 6. Verify org_audit table and GET /api/pm/org/history
   const src = fs.readFileSync(path.join(ROOT, 'server', 'operating-org.mjs'), 'utf8');
-  // There should be no org_audit_log or similar table
-  assert.doesNotMatch(src, /org_audit_log|org_history|audit_org/);
-  // The org schema init does not create a history/audit table for org records
-  assert.doesNotMatch(src, /CREATE TABLE IF NOT EXISTS org_audit/);
-  info('Gap confirmed: operating-org.mjs has no org-level audit history table or trigger');
+  assert.match(src, /CREATE TABLE IF NOT EXISTS org_audit/);
+  assert.match(src, /org_audit_no_delete/);
+  assert.match(src, /org_audit_no_update/);
+
+  const histRes = await api('GET', '/api/pm/org/history?entity=unit&id=unit-cycle-child');
+  assert.equal(histRes.status, 200);
+  assert.ok(Array.isArray(histRes.body.history));
+  assert.ok(histRes.body.history.length >= 2, 'should contain CREATE and ARCHIVE audit records');
+  assert.equal(histRes.body.history[0].action, 'ARCHIVE');
+  assert.equal(histRes.body.history[1].action, 'CREATE');
+  info(`org_audit verified: ${histRes.body.history.length} events for unit-cycle-child`);
 });
 
 test('org API: production route task history exists for PM tasks (not org records)', async () => {
