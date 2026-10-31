@@ -43,6 +43,22 @@ function getObservationOwner() {
   return observationOwner;
 }
 
+// command-local/v1 — the Founder's standalone daily-driver profile (CV-C1c).
+// Separate state/logs, but the SAME lifecycle lock as the full profile so the
+// two can never run at once and fight for the shared ports (5173/5176/5177).
+const localConfigFile = path.join(PACKAGE_ROOT, 'lifecycle.command-local.config.json');
+let localOwner = null;
+function getLocalOwner() {
+  if (localOwner) return localOwner;
+  loadConfig(localConfigFile); // validate early; throws a clear error if the profile config is missing/invalid
+  localOwner = createOwner({
+    configFile: localConfigFile,
+    runtimeDir: path.join(PACKAGE_ROOT, '.command-runtime-local'),
+    lockFile: path.join(PACKAGE_ROOT, '.command-runtime', 'lifecycle.lock'),
+  });
+  return localOwner;
+}
+
 const [command = 'status', ...flags] = process.argv.slice(2);
 const json = flags.includes('--json');
 const known = new Set(['--json', '--stop-agents', '--force']);
@@ -98,6 +114,10 @@ async function main() {
     process.stderr.write('observation commands accept only --json; worker/force flags are not applicable\n');
     return 1;
   }
+  if (['local-start', 'local-status', 'local-stop', 'local-restart'].includes(command) && flags.some((f) => f !== '--json')) {
+    process.stderr.write('local commands accept only --json; --stop-agents is not applicable (the local profile has no agents) and only local-recover takes --force\n');
+    return 1;
+  }
   if (command === 'start') { const r = await owner.start(); emit(r); return EXIT[r.result]; }
   if (command === 'stop') { const r = await owner.stop({ stopAgents: flags.includes('--stop-agents') }); emit(r); return EXIT[r.result]; }
   if (command === 'restart') {
@@ -117,6 +137,25 @@ async function main() {
     const r = await owner.status(); emit(r);
     return r.overall === 'RUNNING' ? 0 : r.overall === 'STOPPED' ? 10 : 20;
   }
+  if (command === 'local-start') { const r = await getLocalOwner().start(); emit(r); return EXIT[r.result]; }
+  if (command === 'local-stop') { const r = await getLocalOwner().stop(); emit(r); return EXIT[r.result]; }
+  if (command === 'local-restart') {
+    const s = await getLocalOwner().stop();
+    emit(s);
+    if (s.result !== RESULT.STOPPED) return EXIT[s.result];
+    const r = await getLocalOwner().start(); emit(r); return EXIT[r.result];
+  }
+  if (command === 'local-recover') {
+    if (!flags.includes('--force')) {
+      process.stderr.write('local-recover requires --force: it is the explicit forced-termination recovery path. For a graceful stop use `local-stop`.\n');
+      return 1;
+    }
+    const r = await getLocalOwner().recoverForce(); emit(r); return EXIT[r.result];
+  }
+  if (command === 'local-status') {
+    const r = await getLocalOwner().status(); emit(r);
+    return r.overall === 'RUNNING' ? 0 : r.overall === 'STOPPED' ? 10 : 20;
+  }
   if (command === 'observation-start') { const r = await getObservationOwner().start(); emit(r); return EXIT[r.result]; }
   if (command === 'observation-stop') {
     const r = await getObservationOwner().stop({ stopAgents: flags.includes('--stop-agents') }); emit(r); return EXIT[r.result];
@@ -125,7 +164,7 @@ async function main() {
     const r = await getObservationOwner().status(); emit(r);
     return r.overall === 'RUNNING' ? 0 : r.overall === 'STOPPED' ? 10 : 20;
   }
-  process.stderr.write(`unknown command ${command}; use start | stop [--stop-agents] | restart | status [--json] | preflight [--json] | recover --force | observation-start | observation-status | observation-stop\n`);
+  process.stderr.write(`unknown command ${command}; use start | stop [--stop-agents] | restart | status [--json] | preflight [--json] | recover --force | observation-start | observation-status | observation-stop | local-start | local-status | local-stop | local-restart | local-recover --force\n`);
   return 1;
 }
 

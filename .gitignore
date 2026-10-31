@@ -35,6 +35,12 @@ dist-observation-hardening-*/
 # Command runtime observation state (sibling of .command-runtime/)
 .command-runtime-observation/
 
+# Command runtime state for the command-local/v1 daily-driver profile (CV-C1c)
+.command-runtime-local/
+
+# Local backup-on-start snapshots of the operating database (CV-C1c)
+data/backups/
+
 # Nested agent-comms placeholder — the canonical comms root is D:\StarqTech\agent-comms,
 # not a copy inside this product directory.
 /agent-comms/

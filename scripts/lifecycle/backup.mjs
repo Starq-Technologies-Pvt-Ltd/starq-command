@@ -224,6 +224,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--force') out.force = true;
+    else if (a === '--if-exists') out.ifExists = true;
     else if (a === '--db') out.db = argv[++i];
     else if (a === '--file') out.file = argv[++i];
     else if (a === '--keep') out.keep = Number(argv[++i]);
@@ -239,6 +240,12 @@ async function main(argv) {
   const keep = Number.isInteger(args.keep) ? args.keep : DEFAULT_KEEP;
 
   if (cmd === 'backup') {
+    // Backup-on-start uses --if-exists so a fresh install (no DB yet) is a
+    // clean no-op rather than an error that would block the first launch.
+    if (args.ifExists && !fs.existsSync(dbPath)) {
+      console.log(JSON.stringify({ skipped: 'no operating database yet', db: dbPath }));
+      return 0;
+    }
     const r = createBackup(dbPath, { keep });
     console.log(JSON.stringify(r));
     return 0;

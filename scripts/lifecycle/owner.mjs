@@ -22,14 +22,14 @@ import http from 'node:http';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE } from './config.mjs';
+import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE, COMMAND_LOCAL_PROFILE, COMMAND_LOCAL_REQUIRED } from './config.mjs';
 import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from './state.mjs';
 import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
 import { proveInstance, requestShutdown } from './control.mjs';
 import { checkHealth } from './health.mjs';
 import { buildHealthPreflight, buildRepositoryPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
-import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
+import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate, readCommandLocalGates } from './gates.mjs';
 import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
 import { provablyGoneAcrossBoot } from './boot-closeout.mjs';
@@ -138,6 +138,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
     prerequisites: deps.prerequisites ?? ((cfg) => {
       if (cfg.profile?.name === OBSERVATION_PROFILE) return readObservationGates(cfg.workspace_root, cfg);
+      if (cfg.profile?.name === COMMAND_LOCAL_PROFILE) return readCommandLocalGates(cfg.workspace_root, cfg);
       if (effectiveTier() === 'development') return readDevelopmentGates(cfg.workspace_root, cfg);
       return readGates(cfg.workspace_root);
     }),
@@ -303,6 +304,8 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     return withLock('start', async () => {
       let cfg;
       try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
+      const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
+      const optionalNames = new Set(localProfile ? (cfg.profile?.optional_components ?? []) : []);
       if (cfg.profile?.name === OBSERVATION_PROFILE) {
         const hazards = findObservationEnvHazards(env);
         if (hazards.length) return refuse(`observer environment is contaminated: ${hazards.join(', ')}`, { code: 'OBSERVATION_ENV_UNSAFE', hazards });
@@ -320,7 +323,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         if (JSON.stringify(names) !== JSON.stringify(['data', 'building', 'ui'])) {
           return refuse('observation profile component graph changed after validation', { code: 'OBSERVATION_COMPOSITION' });
         }
-      } else {
+      } else if (!localProfile) {
         try {
           const man = JSON.parse(d.readFile(cfg.abs(comp(cfg, 'herdrBroker').manifest)));
           const auto = (man.agents ?? []).filter((a) => a.startup_policy === 'AUTO').map((a) => a.id);
@@ -341,7 +344,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
 
       let listeners;
       try { listeners = await d.listListeners(); } catch (err) { return refuse(`listener inspection failed: ${err.message}`, { code: 'INSPECTION_FAILED' }); }
-      const ports = new Set(cfg.components.map((c) => c.port));
+      // Required ports still fail closed on any pre-launch occupant. An occupied
+      // OPTIONAL port (local profile) is not a global blocker: that optional
+      // service is simply skipped at launch time.
+      const ports = new Set(cfg.components.filter((c) => !optionalNames.has(c.name)).map((c) => c.port));
       const busy = listeners.filter((l) => ports.has(l.port));
       if (busy.length) return refuse(`ports occupied: ${busy.map((b) => `${b.port}<-pid ${b.pid}`).join(', ')}`, { code: 'PORT_CONFLICT', busy });
 
@@ -361,6 +367,20 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         try {
           await launchOne(cfg, doc, c);
         } catch (err) {
+          if (optionalNames.has(c.name)) {
+            // Optional service: tolerate, but gracefully stop any half-started
+            // child of this launch so nothing is left running unproven, then
+            // continue. Local readiness never depends on an optional service.
+            const halfStarted = doc.children.find((x) => x.name === c.name && x.attempt_id === doc.attempt_id && x.status !== 'EXITED');
+            if (halfStarted) {
+              const r = await stopChild(cfg, doc, halfStarted);
+              appendEvent(doc, 'start.optional_unwound', { name: c.name, ...r }); save(doc);
+            }
+            (doc.optional_skipped ??= []).push({ name: c.name, reason: err.message });
+            appendEvent(doc, 'start.optional_skipped', { name: c.name, reason: err.message }); save(doc);
+            journal('start.optional_skipped', { name: c.name, reason: err.message });
+            continue;
+          }
           failure = { component: c.name, error: err.message };
           appendEvent(doc, 'start.component_failed', failure); save(doc);
           break;
@@ -604,6 +624,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       let cfg;
       try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
       if (cfg.profile?.name === OBSERVATION_PROFILE) return refuse('forced recovery is disabled for the observation-only profile', { code: 'OBSERVATION_NO_FORCE_RECOVERY' });
+      const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
       const st = readState(statePath);
       if (st.kind !== 'OK') return refuse(`state file ${st.kind}${st.reason ? `: ${st.reason}` : ''}; recovery needs a provable record`, { code: 'STATE_' + st.kind });
       const doc = st.state;
@@ -667,7 +688,9 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         } else {
           return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
         }
-      } else if (!await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+      } else if (!localProfile && !await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+        // The local profile has no broker/agents, so there is no agent closeout
+        // to prove; required services are recovered directly below.
         return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'missing broker record is not agent closeout proof' };
       }
       for (const name of topoOrder(cfg.components).map((c) => c.name).reverse()) {
@@ -730,8 +753,9 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       report.config = { valid: false, error: err.message }; report.overall = 'UNKNOWN'; report.problems.push('config invalid'); return report;
     }
     const observationOnly = cfg.profile?.name === OBSERVATION_PROFILE;
-    // The observation profile never probes standalone Herdr. Full-floor status
-    // keeps the pre-existing read-only standalone probe behavior.
+    const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
+    // The observation and command-local profiles never probe standalone Herdr.
+    // Full-floor status keeps the pre-existing read-only standalone probe.
     let shGate = { resolved: false, detail: 'not evaluated' };
     let shObserved = { state: 'NOT_PROBED', detail: 'not evaluated' };
     let shEntry = null;
@@ -739,7 +763,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       herdrExecutable: null,
       scriptsRoot: cfg.workspace_root ? path.join(cfg.workspace_root, 'agent-comms', 'scripts') : null,
     };
-    if (!observationOnly) {
+    if (!observationOnly && !localProfile) {
       shEntry = standaloneHerdr(cfg);
       infraPins.herdrExecutable = shEntry?.executable ?? null;
       try { shGate = await d.standaloneHerdrGate(cfg); } catch (err) { shGate = { resolved: false, detail: `G-PROFILE: ${err.message}` }; }
@@ -762,10 +786,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         declared_external: ['standalone-herdr', 'starqbot-gateway', 'room-watcher'],
         note: 'Declared Starq infrastructure is not a Command child and is not an unowned Command blocker unless it holds a Command control-plane port.',
       };
-    } else {
+    } else if (observationOnly) {
       report.observation_profile = {
         name: cfg.profile.name, ready: false, services: cfg.components.map((c) => c.name),
         worker_admission: false, herdr_probe: 'NOT_PERFORMED',
+      };
+    } else {
+      // command-local/v1: no standalone-Herdr, no WSL, no infrastructure policy.
+      report.local_profile = {
+        name: cfg.profile.name, ready: false,
+        required: cfg.profile?.required_components ?? [],
+        optional: cfg.profile?.optional_components ?? [],
+        detail: 'ready requires the control plane RUNNING on the required services (data, pm, ui); optional services never gate readiness and standalone Herdr is not consulted',
       };
     }
     report.env_overrides = findEnvOverrides(env, cfg);
@@ -787,7 +819,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       try { listenerInfos = await d.inspect(listenerPids); }
       catch (err) { fail(`listener processes: ${err.message}`); }
     }
-    if (!observationOnly) {
+    if (!observationOnly && !localProfile) {
       try {
         const rows = await d.inspectInfrastructure(infraPins);
         report.live_infrastructure = (rows ?? []).map((info) => ({
@@ -804,7 +836,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     for (const [name, v] of verdicts) if (v.verdict === 'UNKNOWN') fail(`${name}: ${v.detail}`);
 
     report.components = [];
-    const componentNames = observationOnly ? cfg.components.map((c) => c.name) : REQUIRED_COMPONENTS;
+    const componentNames = (observationOnly || localProfile) ? cfg.components.map((c) => c.name) : REQUIRED_COMPONENTS;
     for (const name of componentNames) {
       const c = comp(cfg, name);
       const rec = children.find((x) => x.name === name);
@@ -835,7 +867,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       report.components.push(entry);
     }
     if (doc) {
-      const missing = componentNames.filter((n) => !children.some((x) => x.name === n));
+      // In the local profile only the required services must be present for a
+      // valid READY; optional services that were skipped are not "missing".
+      const mustHave = localProfile ? componentNames.filter((n) => COMMAND_LOCAL_REQUIRED.includes(n)) : componentNames;
+      const missing = mustHave.filter((n) => !children.some((x) => x.name === n));
       if (doc.state === 'READY' && missing.length) report.problems.push(`READY state is missing components: ${missing.join(', ')}`);
     }
     const brokerEntry = report.components.find((x) => x.name === 'herdrBroker');
@@ -852,8 +887,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     }
 
     const all = report.components;
-    const componentsReady = all.every((x) => x.ownership === 'OWNED' && x.health?.ok && x.listener?.owned);
-    const running = doc?.state === 'READY' && componentsReady && (observationOnly || (report.broker.reachable && report.broker.admission === 'OPEN'));
+    // Local readiness is judged on the required services only; optional services never gate RUNNING.
+    const readinessSet = localProfile ? all.filter((x) => COMMAND_LOCAL_REQUIRED.includes(x.name)) : all;
+    const componentsReady = readinessSet.length > 0 && readinessSet.every((x) => x.ownership === 'OWNED' && x.health?.ok && x.listener?.owned);
+    const running = doc?.state === 'READY' && componentsReady && (observationOnly || localProfile || (report.broker.reachable && report.broker.admission === 'OPEN'));
     const nothingAlive = all.every((x) => ['NOT_RECORDED', 'EXITED', 'GONE', 'FOREIGN'].includes(x.ownership));
     const anyListener = all.some((x) => x.listener?.present);
     const stoppedDeclared = !doc || ['STOPPED', 'START_FAILED'].includes(doc.state);
@@ -863,6 +900,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     else if (stoppedDeclared && nothingAlive && anyListener) { report.overall = 'CONFLICT'; report.problems.push('foreign listener on a control-plane port while stopped'); }
     else report.overall = 'DEGRADED';
     if (observationOnly) report.observation_profile.ready = report.overall === 'RUNNING';
+    else if (localProfile) report.local_profile.ready = report.overall === 'RUNNING';
     else report.normal_profile.ready = report.overall === 'RUNNING' && shGate.resolved === true && shObserved.state === 'AVAILABLE';
     for (const x of all) {
       if (x.ownership === 'OWNED' && x.health && !x.health.ok) report.problems.push(`${x.name} unhealthy: ${x.health.detail}`);
