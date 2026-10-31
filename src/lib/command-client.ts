@@ -145,8 +145,19 @@ export interface WorkforceSeat {
   capacity_class: string;
   normal_host: string;
   role_family: string;
+  // Distinct M4 concepts (never merge). Nullable => UNKNOWN in UI.
+  project_id?: string | null;
+  task_id?: string | null;
+  owner?: string | null;
+  verifier?: string | null;
+  workforce_function?: string | null;
+  runtime_session?: string | null;
+  runtime?: { session_match?: string; session_id?: string | null; observed?: boolean; observed_at?: string | null } | null;
+  pane_binding?: { state?: string; pane?: unknown } | null;
   availability: string;
   availability_reason?: string;
+  availability_source?: string | null;
+  availability_observed_at?: string | null;
   dispatch_eligible: boolean;
   dispatch_blocker?: string | null;
   capabilities: {
@@ -163,6 +174,9 @@ export interface WorkforceSeat {
     source: string;
     reason: string;
   };
+  // Per-seat dynamic source/timestamp (or UNKNOWN).
+  source?: string | null;
+  observed_at?: string | null;
 }
 
 export interface WorkforceData {

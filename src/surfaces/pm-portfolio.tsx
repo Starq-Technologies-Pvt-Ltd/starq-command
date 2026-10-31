@@ -321,7 +321,7 @@ export function PmPortfolioSurface() {
                   <div className="grid gap-1.5 rounded border border-border/60 bg-surface-0/60 p-2 text-2xs">
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>Historical tasks closed:</span>
-                      <span className="mono font-semibold text-foreground">{historicalClosed} / {p.total} ({p.metrics?.claimed?.percent ?? (p.total > 0 ? Math.round((done / p.total) * 100) : 0)}%)</span>
+                      <span className="mono font-semibold text-foreground">{historicalClosed} / {(p.historical_total != null ? p.historical_total : 'UNKNOWN/SOURCE GAP')} (historical only; live accepted-work completion: SOURCE GAP)</span>
                     </div>
                     <div className="flex items-center justify-between text-muted-foreground">
                       <span>Tasks with commit:</span>

@@ -138,6 +138,7 @@ describe('WP-4 / WP-5 Truthful Progress & Operational Qualifiers', () => {
           open: 204,
           counts: { TODO: 100, NEXT: 50, IN_PROGRESS: 54, BLOCKED: 10, DONE: 233 },
           done_historical: 233,
+          historical_total: 437,
           founder_gate: 0,
           blocked: 10,
           pending_room_sync: 0,

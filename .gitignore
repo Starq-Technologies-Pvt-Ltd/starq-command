@@ -70,3 +70,6 @@ scripts/.command-runtime-test/
 # server/nexus-cortex.mjs (graph.json), so the tree must stay in place on disk.
 # It is source-copy evidence, not source code: preserved, never staged.
 /recovered/
+
+# Hermes Kanban isolated worktrees are local execution workspaces, not repo source.
+.worktrees/

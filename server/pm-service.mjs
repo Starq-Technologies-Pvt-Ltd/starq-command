@@ -1338,6 +1338,7 @@ export function portfolio() {
       };
       const done = mine.filter((t) => t.status === 'DONE').length;
       const done_historical = mine.filter((t) => t.status === 'DONE' && t.provenance === PROVENANCE.HISTORICAL).length;
+      const historical_total = mine.filter((t) => t.provenance === PROVENANCE.HISTORICAL).length;
       const withCommit = mine.filter((t) => t.status === 'DONE' && (t.commit_sha || t.commit)).length;
       const withAcceptance = mine.filter((t) => t.status === 'DONE' && (t.acceptance_json || t.accepted_at)).length;
       const capability = p.id === 'erp' ? { implemented: 7, total: 49, percent: 14 } : null;
@@ -1356,6 +1357,7 @@ export function portfolio() {
         source_gap: p.source_gap,
         total: mine.length,
         done_historical,
+        historical_total,
         open: mine.filter((t) => t.status !== 'DONE').length,
         counts,
         stages,
@@ -1484,9 +1486,10 @@ async function handle(req, res) {
     if (req.method === 'GET' && p === '/api/pm/attention') return send(res, 200, attention(), origin);
     if (req.method === 'POST' && p === '/api/pm/org/companies') {
       const body = await readBody(req);
-      only(body, ['actor', 'name', 'legal_name', 'notes']);
+      only(body, ['actor', 'id', 'name', 'legal_name', 'notes']);
       handleField(body, 'actor', { required: true, allowUnassigned: false });
       return send(res, 201, orgWrite((d) => orgCreateCompany(d, {
+        id: str(body, 'id', { max: 64 }),
         name: str(body, 'name', { min: 2, max: 80, required: true }),
         legal_name: str(body, 'legal_name', { max: 120 }),
         notes: str(body, 'notes', { max: 400 }),

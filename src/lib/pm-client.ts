@@ -184,6 +184,7 @@ export interface PmPortfolioProject {
   pending_room_sync: number;
   unassigned: number;
   done_historical?: number;
+  historical_total?: number;
   stages?: Record<string, number>;
   provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
   provenance_counts?: { live: number; historical: number } | Record<string, number>;
