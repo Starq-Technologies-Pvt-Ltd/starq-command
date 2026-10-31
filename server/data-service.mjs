@@ -1237,7 +1237,16 @@ const server = http.createServer(async (req, res) => {
   // ── Communications (the messenger). Read-only projection of the Room. ──────
   if (url.pathname === '/api/comms/channels') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    if (!c.ok) {
+      return sendJson(res, 200, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        tail_sequence: 0,
+        record_count: 0,
+        assembled_at: new Date().toISOString(),
+        channels: { common: { id: 'common', kind: 'common', label: 'Common Room', count: 0 }, projects: [], dms: [] },
+      });
+    }
     return sendJson(res, 200, {
       state: 'OK', tail_sequence: c.tail_sequence, record_count: c.record_count,
       assembled_at: c.assembled_at, channels: listChannels(c.records),
@@ -1246,8 +1255,21 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/comms/messages') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
     const channel = url.searchParams.get('channel') || 'common';
+    if (!c.ok) {
+      return sendJson(res, 200, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        tail_sequence: 0,
+        assembled_at: new Date().toISOString(),
+        channel,
+        total: 0,
+        returned: 0,
+        has_more: false,
+        oldest_sequence: null,
+        messages: [],
+      });
+    }
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 100)));
     const before = url.searchParams.get('before') ? Number(url.searchParams.get('before')) : null;
     const includeCoordination = url.searchParams.get('coordination') !== 'exclude';
@@ -1257,18 +1279,34 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/comms/search') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
     const q = url.searchParams.get('q') || '';
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     const from = url.searchParams.get('from') || null;
     const project = url.searchParams.get('project') || null;
+    if (!c.ok) {
+      return sendJson(res, 200, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        query: q,
+        from,
+        project,
+        returned: 0,
+        messages: [],
+      });
+    }
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     return sendJson(res, 200, { state: 'OK', ...searchMessages(c.records, q, { limit, from, project }) });
   }
 
   if (url.pathname === '/api/comms/people') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
     const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
+    if (!c.ok) {
+      return sendJson(res, 200, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        people: peopleDirectory(identitiesSource.data, []),
+      });
+    }
     return sendJson(res, 200, { state: 'OK', people: peopleDirectory(identitiesSource.data, c.records) });
   }
 
