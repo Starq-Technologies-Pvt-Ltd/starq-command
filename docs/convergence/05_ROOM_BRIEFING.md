@@ -1,15 +1,6 @@
 # Operations Room briefing — Room-ready text for Vision to publish
 
-**Publication:** Claude Code has no canonical Room identity and will not post under anyone else's. Vision publishes the text below **under his own identity**, citing the Founder's authorization. Suggested command (run from `D:\StarqTech`; adjust the instance/session to Vision's verified binding):
-
-```text
-node agent-comms/scripts/send.mjs --room --from vision --instance <vision-stable-session-id> \
-  --subject "STARQ COMMAND — Founder-directed final convergence: lean local operating scope" \
-  --action-required "AG, Cursor, Hermes specialists: read docs/convergence/ and ACK your CV card in Room under your own identity" \
-  --body-file <path-to-the-text-below>
-```
-
-(If `send.mjs` takes the body differently, follow its own help. The body must not start with "Reply to #".)
+**Published (31 Oct 2026):** at the Founder's direction, `claude` claimed its own stale Room lease (startup record **#17336**) and published this briefing as **#17337**, with action required for vision, antigravity and cursor. #17337's reply link points at #17334 by mistake; correction **#17338** threads it under #17335. The Git-author request to Vision is **#17339**. The posted text was updated for the PR #9 merge and the GitHub cleanup. The text below is the original draft, kept for reference.
 
 ---
 
