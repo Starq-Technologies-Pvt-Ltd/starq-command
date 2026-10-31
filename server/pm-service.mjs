@@ -68,6 +68,8 @@ import {
   importLegacyPmSnapshot,
   mapKanbanStatus,
 } from './nexus-kanban.mjs';
+import { initOpsAutomationSchema, startOpsAutomation } from './ops-automation.mjs';
+import { handleOpsRoutes } from './pm-ops-routes.mjs';
 
 // Production is always 5176. A disposable verification instance (PM_DB_PATH set)
 // may use one unused loopback port in 5190-5199 and nothing else.
@@ -156,8 +158,13 @@ function identityLevels() {
   }
 }
 function knownHandles() {
-  const ids = new Set(identityLevels().keys());
+  const ids = new Set();
   if (db) for (const h of orgPeopleHandles(db)) ids.add(h);
+  try {
+    for (const h of identityLevels().keys()) ids.add(h);
+  } catch (e) {
+    if (!ids.size) throw e;
+  }
   return ids;
 }
 function localLedgerRef({ actor, purpose, kind, taskId }) {
@@ -393,6 +400,7 @@ export function initSchema(handle) {
       BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; move them to DONE'); END;
   `);
   initOrgSchema(handle);
+  initOpsAutomationSchema(handle);
   ensureGatedColumns(handle);
   // Founder 28 Oct: promote the full original Nexus record out of raw_payload
   // back into queryable columns, and restore the records the importer's global
@@ -716,6 +724,10 @@ export function hydrate(row, pending = 0) {
   task.epic = row.epic ?? null;
   task.sprint = row.sprint ?? null;
   task.milestone = row.milestone ?? null;
+  task.milestone_id = row.milestone_id ?? null;
+  task.work_package = row.work_package ?? null;
+  task.is_deliverable = Boolean(row.is_deliverable);
+  task.deliverable_kind = row.deliverable_kind ?? null;
   task.release_track = row.release_track ?? null;
   task.priority_raw = row.priority_raw ?? null;
   task.acceptance_json = row.acceptance_json ?? null;
@@ -1460,6 +1472,13 @@ async function handle(req, res) {
       if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) throw new HttpError(415, 'CONTENT_TYPE', 'Content-Type must be application/json.');
     }
 
+    if (await handleOpsRoutes(req, res, {
+      url, p, origin, db: () => requireDb(), tx, send, readBody, HttpError, bad, only, str, handleField,
+      createProject, createTask, updateTask, listProjects, taskDetail, portfolio, hydrate,
+      getProjectRow, getTaskRow, effectiveHold, logEvent, nowIso, ROOT, ROOM_POST,
+      deliverDigest: async (summary) => postToRoom(`PM DAILY DIGEST · ${summary.date}\nCompleted (24h): ${summary.completed_last_24h.length} · Started (24h): ${summary.started_last_24h.length} · Blocked: ${summary.blocked_tasks.length} · At-risk milestones: ${summary.at_risk_milestones.length}`),
+    })) return;
+
     if (req.method === 'GET' && p === '/api/pm/health') return send(res, 200, health(), origin);
     if (req.method === 'GET' && p === '/api/pm/nexus/sources') {
       return send(res, 200, nexusSources(url.searchParams.get('file') || null), origin);
@@ -1628,12 +1647,15 @@ if (isDirectRun) {
   else {
     if (ROOM_POST) requireExplicitRoomWriter();
     startDatabase();
+    const opsAuto = db ? startOpsAutomation(() => db, {
+      deliver: async (summary) => postToRoom(`PM DAILY DIGEST · ${summary.date}\nCompleted (24h): ${summary.completed_last_24h.length} · Started (24h): ${summary.started_last_24h.length} · Blocked: ${summary.blocked_tasks.length} · At-risk milestones: ${summary.at_risk_milestones.length}`),
+    }) : null;
     const server = http.createServer((req, res) => { void handle(req, res); });
     server.listen(PORT, HOST, () => {
       console.log(json({ service: 'starq-command-pm', listening: `${HOST}:${PORT}`, db_state: dbState.state, db: dbState.path, room_post: ROOM_POST ? 'ON' : 'OFF', reason: dbState.reason }));
       setTimeout(enqueueRoomSync, 3000);
     });
-    const shutdown = () => { server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
+    const shutdown = () => { opsAuto?.stop(); server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
   }

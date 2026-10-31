@@ -50,7 +50,7 @@
 const FIDELITY_COLUMNS = [
   'nexus_task_id', 'nexus_source_file', 'nexus_source_key', 'nexus_status',
   'nexus_project', 'nexus_attributes',
-  'phase', 'sprint', 'epic', 'lane', 'milestone', 'release_track', 'module', 'task_group',
+  'phase', 'sprint', 'epic', 'lane', 'milestone', 'release_track', 'module', 'task_group', 'work_package',
   'workers_json', 'priority_raw',
   'dispatched_at', 'dispatched_by', 'started_at', 'claimed_at',
   'completed_at', 'completed_by', 'done_at', 'accepted_at', 'accepted_by',
