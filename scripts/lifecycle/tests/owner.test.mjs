@@ -102,7 +102,9 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
           PM_ROOM_FROM: opts.env.PM_ROOM_FROM ?? null,
           PM_ROOM_INSTANCE: opts.env.PM_ROOM_INSTANCE ?? null,
           PM_ROOM_SEND_SCRIPT: opts.env.PM_ROOM_SEND_SCRIPT ?? null,
+          STARQ_WORKSPACE: opts.env.STARQ_WORKSPACE ?? null,
         },
+        cwd: opts.cwd ?? null,
       });
       procs.set(pid, { found: true, name: 'node.exe', exe, created: iso() });
       pipes.set(pid, { instance: opts.env.STARQ_LC_INSTANCE, name });
@@ -977,5 +979,26 @@ test('STOP completes even when the runtime containment probe can no longer pass'
     assert.equal(r.result, RESULT.STOPPED, `stop failed: ${JSON.stringify(r)}`);
     assert.ok(asked.length > 0, 'the containment companion was never consulted, so this test proved nothing');
     assert.ok(asked.every((v) => v === false), `stop requested the runtime probe: ${JSON.stringify(asked)}`);
+  } finally { w.cleanup(); }
+});
+
+// ── Which workspace a child serves is decided by the lifecycle's workspace_root ──
+test('every child is told the lifecycle workspace_root, which decides which database it opens', async () => {
+  // owner.mjs hands each child STARQ_WORKSPACE = cfg.workspace_root, and
+  // server/paths.mjs lets that variable OVERRIDE directory ancestry. So the
+  // workspace_root in the config - not where a child's code happens to live -
+  // chooses the database PM opens in its production mode. An acceptance harness
+  // once relied on code location instead, kept the real workspace_root, and
+  // opened the Founder's live database from a "disposable" stack. This pins the
+  // contract that such isolation must be built on.
+  const w = world();
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const cfg = JSON.parse(readFileSync(w.configFile, 'utf8'));
+    assert.ok(w.calls.spawn.length >= 4, 'fixture should have launched the services');
+    for (const spawn of w.calls.spawn) {
+      assert.equal(spawn.env.STARQ_WORKSPACE, cfg.workspace_root, `${spawn.name} was not handed the lifecycle workspace_root`);
+      assert.ok(spawn.cwd && path.resolve(spawn.cwd).toLowerCase().startsWith(path.resolve(cfg.workspace_root).toLowerCase()), `${spawn.name} runs outside the workspace: ${spawn.cwd}`);
+    }
   } finally { w.cleanup(); }
 });
