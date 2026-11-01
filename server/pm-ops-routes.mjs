@@ -832,6 +832,14 @@ export async function handleOpsRoutes(req, res, ctx) {
   }
 
   // ── CV-AG8: Organization Snapshot Import ──
+  // The first-run screen probes this path with GET. A missing route is a 404,
+  // which the client treats as "import is absent" even though POST can import.
+  if (isGet && p === '/api/pm/import/organization') {
+    return (send(res, 200, {
+      available: true,
+      path: '/api/pm/import/organization',
+    }, origin), true);
+  }
   if (isPost && p === '/api/pm/import/organization') {
     const body = await readBody(req);
     only(body, ['snapshot', 'snapshot_path', 'dry_run', 'on_conflict', '_injectFailure']);

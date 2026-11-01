@@ -11,6 +11,7 @@ import {
   PM_STATUSES,
   PM_STATUS_LABELS,
   PM_PRIORITIES,
+  pmCreateMilestone,
   pmCreateTask,
   pmIsScratch,
   pmMeta,
@@ -218,6 +219,9 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [orgProblem, setOrgProblem] = React.useState<string | null>(null);
   const [milestones, setMilestones] = React.useState<PmMilestone[] | null>(null);
   const [milestonesProblem, setMilestonesProblem] = React.useState<string | null>(null);
+  const [milestoneTitle, setMilestoneTitle] = React.useState('');
+  const [milestoneDue, setMilestoneDue] = React.useState('');
+  const [milestoneError, setMilestoneError] = React.useState<string | null>(null);
   const [problem, setProblem] = React.useState<string | null>(null);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [detail, setDetail] = React.useState<PmTaskDetail | null>(null);
@@ -331,6 +335,36 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
     setSelectedId(null); setDetail(null); setCreating(false); setTasks(null); setProject(null);
     void load(requestedTaskId());
   }, [projectId, load]);
+
+  const createMilestoneRecord = async () => {
+    const title = milestoneTitle.trim();
+    if (title.length < 2) {
+      setMilestoneError('Milestone title needs at least 2 characters.');
+      return;
+    }
+    if (!actor.trim()) {
+      setMilestoneError('Choose a claimed actor before creating a milestone.');
+      return;
+    }
+    setBusy(true);
+    setMilestoneError(null);
+    const res = await pmCreateMilestone({
+      actor,
+      project_id: projectId,
+      title,
+      ...(milestoneDue.trim() ? { due_date: milestoneDue.trim() } : {}),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      setSaved(null);
+      setMilestoneError(res.message || 'The service rejected the milestone.');
+      return;
+    }
+    setMilestoneTitle('');
+    setMilestoneDue('');
+    setSaved(`Milestone ${title} is recorded.`);
+    await load(selectedId);
+  };
 
   React.useEffect(() => {
     void loadExecution();
@@ -697,6 +731,23 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
               <option value="UPDATED">Most Recently Updated</option>
             </select>
           </div>
+
+          <form
+            aria-label="Create milestone"
+            className="flex flex-wrap items-end gap-2 border-b border-border/70 px-3 py-2"
+            onSubmit={(event) => { event.preventDefault(); void createMilestoneRecord(); }}
+          >
+            <label className="grid min-w-48 flex-1 gap-1 text-2xs text-muted-foreground">
+              Milestone title
+              <input aria-label="Milestone title" value={milestoneTitle} maxLength={120} onChange={(event) => setMilestoneTitle(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-2xs text-muted-foreground">
+              Due date
+              <input aria-label="Milestone due date" value={milestoneDue} maxLength={40} placeholder="YYYY-MM-DD" onChange={(event) => setMilestoneDue(event.target.value)} />
+            </label>
+            <button type="submit" className="go-link" disabled={busy}>Create milestone</button>
+            {milestoneError ? <span role="alert" className="text-xs text-truth-drift">{milestoneError}</span> : null}
+          </form>
 
           {saved && !detail ? <PmSaved label={saved} /> : null}
           {refusal && !detail ? refusalBlock : null}
