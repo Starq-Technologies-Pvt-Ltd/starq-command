@@ -278,8 +278,10 @@ const portFree = (port) => new Promise((resolve) => {
 });
 
 async function http(url) {
+  // Fresh connection every time: a pooled keep-alive socket to a server that was
+    // since stopped and restarted on the same port fails its first request.
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'x-pm-client': 'starq-command', origin: 'http://127.0.0.1:5173' } });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { connection: 'close', 'x-pm-client': 'starq-command', origin: 'http://127.0.0.1:5173' } });
     const text = await res.text();
     let json = null; try { json = JSON.parse(text); } catch { /* html */ }
     return { status: res.status, text, json };
@@ -339,7 +341,7 @@ async function assertPortsFree(label) {
 /** Any process at all whose command line names this disposable workspace. Read-only; never used to signal. */
 function strayProcesses() {
   const needle = WS.toLowerCase().replace(/'/g, "''");
-  const script = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains('${needle}') } | ForEach-Object { "$($_.ProcessId):$($_.Name)" }`;
+  const script = `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains('${needle}') } | ForEach-Object { "$($_.ProcessId):$($_.Name)" }`;
   const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true });
   return String(r.stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 }
