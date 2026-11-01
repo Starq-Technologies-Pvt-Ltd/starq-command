@@ -21,6 +21,7 @@ import {
   workforcePersonSummary,
   recordOrgAudit,
 } from './operating-org.mjs';
+import { importOrganization } from './pm-import.mjs';
 import {
   updateProjectRecord,
   listMilestones,
@@ -828,6 +829,35 @@ export async function handleOpsRoutes(req, res, ctx) {
       channel,
     }));
     return (send(res, 200, { followup: updated }, origin), true);
+  }
+
+  // ── CV-AG8: Organization Snapshot Import ──
+  if (isPost && p === '/api/pm/import/organization') {
+    const body = await readBody(req);
+    only(body, ['snapshot', 'snapshot_path', 'dry_run', 'on_conflict', '_injectFailure']);
+    const targetDb = db();
+    try {
+      const result = importOrganization(targetDb, {
+        snapshot: body.snapshot,
+        snapshot_path: body.snapshot_path,
+        dry_run: body.dry_run,
+        on_conflict: body.on_conflict,
+        _injectFailure: body._injectFailure,
+      });
+      if (!result.ok) {
+        let status = 400;
+        if (result.error === 'IMPORT_CONFLICT' || result.error === 'TARGET_NOT_EMPTY') {
+          status = 409;
+        }
+        return (send(res, status, result, origin), true);
+      }
+      return (send(res, 200, result, origin), true);
+    } catch (e) {
+      if (e.message === 'INJECTED_MID_IMPORT_FAILURE') {
+        return (send(res, 500, { ok: false, error: 'INJECTED_FAILURE', message: e.message }, origin), true);
+      }
+      throw e;
+    }
   }
 
   return false;
