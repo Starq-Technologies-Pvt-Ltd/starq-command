@@ -358,14 +358,19 @@ async function verifyRunning(label, baseline) {
   }
 
   const ui = await http(`http://127.0.0.1:${COMMAND_PORTS.ui}/`);
-  check(ui.status === 200 && ui.text.includes('<title>STARQ // COMMAND</title>'), `${label}: Command UI answers over HTTP`, `status=${ui.status}`);
+  check(ui.status === 200 && ui.text.includes('<title>STARQ // COMMAND</title>'), `${label}: Command UI answers over HTTP`, `status=${ui.status}${ui.status === 0 ? ` (${ui.text})` : ''}`);
 
   const pm = await http(`http://127.0.0.1:${COMMAND_PORTS.pm}/api/pm/health`);
   check(pm.json?.db?.toLowerCase() === DB().toLowerCase(), `${label}: PM serves THIS workspace's database, not the Founder's`, `reports ${pm.json?.db}`);
   check(pm.json?.state === 'OK' && pm.json?.scratch === false, `${label}: PM healthy in production mode`, `state=${pm.json?.state} scratch=${pm.json?.scratch}`);
 
   const data = await http(`http://127.0.0.1:${COMMAND_PORTS.data}/api/health`);
-  check(data.status === 200, `${label}: data service answers`, `status=${data.status} overall=${data.json?.health?.overall}`);
+  // The data service reports the health of its projection CONTENT through its
+  // status: 503 whenever a Starq source (Room, identities, boards) is absent, which
+  // is the honest answer for an installation without them. "Up" means a recognized
+  // verdict, the same rule the lifecycle's own data contract applies.
+  const RECOGNIZED = ['OK', 'UNAVAILABLE', 'STALE', 'DRIFT', 'UNREADABLE'];
+  check([200, 503].includes(data.status) && RECOGNIZED.includes(data.json?.health?.overall), `${label}: data service answers with a recognized verdict`, `status=${data.status} overall=${data.json?.health?.overall}`);
 
   // Only meaningful because the stack is provably up: these compare what STARTUP did to the data.
   const now = dbCounts();
@@ -434,10 +439,19 @@ async function runFull() {
 
     // 1. START through the real one-click launcher.
     const t0 = Date.now();
-    const bat = spawnSync('cmd.exe', ['/d', '/c', path.join(APP(), 'Start-Command.bat')], {
-      cwd: APP(), env: cleanEnv(), encoding: 'utf8', windowsHide: true, timeout: 300_000,
-    });
-    if (bat.status !== 0) console.log(`${bat.stdout}\n${bat.stderr}`.slice(0, 1800));
+    // Output goes to a FILE, not a pipe. The launcher opens the browser, and a
+    // browser started from a piped process inherits the pipe and holds it for its
+    // whole life, so a pipe-reading parent waits out the timeout even though the
+    // launcher finished in seconds. A double-click has no pipe.
+    const batOut = path.join(path.dirname(WS), `${path.basename(WS)}-launcher.log`);
+    const batFd = fs.openSync(batOut, 'w');
+    let bat;
+    try {
+      bat = spawnSync('cmd.exe', ['/d', '/c', path.join(APP(), 'Start-Command.bat')], {
+        cwd: APP(), env: cleanEnv(), stdio: ['ignore', batFd, batFd], windowsHide: true, timeout: 300_000,
+      });
+    } finally { fs.closeSync(batFd); }
+    if (bat.status !== 0) console.log(fs.readFileSync(batOut, 'utf8').slice(0, 1800));
     must(bat.status === 0, 'one click: Start-Command.bat exits 0', `exit=${bat.status} in ${Date.now() - t0}ms`);
     await verifyRunning('after one-click start', baseline);
     const firstKids = children();
