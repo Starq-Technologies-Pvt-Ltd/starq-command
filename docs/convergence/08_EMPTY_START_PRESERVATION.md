@@ -157,3 +157,74 @@ Done: inventory, counts, integrity, verified backups of 11 stores, restoration d
 Not started: every code change. No persistence, schema-init, seed or installation behaviour has been modified.
 
 **Risk I am escalating now (§5):** the live database currently depends on the seed path to re-assert 20 projects and the Starq org. Once CV-C6 lands, that crutch is gone — correctly, but it means the live database must be verified to *already contain* every record it needs rather than being topped up at startup. Its `seed_drift` field already reports differences between `pm-projects.json` and stored rows. CV-C6 will therefore run against a restored copy first and compare with `verify-restore.mjs` before any change reaches the live store.
+
+---
+
+# CONVERGENCE CHECKPOINT — 1 November 2026 (end of Claude's session)
+
+## CV-C6 — DELIVERED AND VERIFIED (pending independent review)
+
+**Commit `f846484`** on `claude/integration-verification-20261101`, inside draft **PR #12** → `integration/command-convergence-20261031`.
+
+Changed: `server/pm-service.mjs` (the guard), `tests/provisioning-guard.test.mjs` (new), `scripts/verify-restore.mjs` (split verdicts), `scripts/run-node-tests.mjs` (serial), and `COMMAND_PROVISION=starq` added to five fixture-dependent suites.
+
+**Verification**
+- `tests/provisioning-guard.test.mjs` **6/6**: A fresh-empty, A2 empty-and-usable, B legacy-classified-never-reseeded, B2 decided-stays-decided, **E deleted project stays deleted across restart**, F user data survives restart.
+- **Against a restored copy of the live database**, started with `COMMAND_PROVISION=starq` (worst case): classified `legacy-seeded`, refused to seed. Every pre-existing table, column and value preserved — 20 projects, 1,349 tasks, 1,356 history rows, 34,979 source versions, unchanged on their original columns; 21 columns added additively. Only `pm_meta` changed (5→6 rows: the marker, by design).
+- Suites at `f846484`: vitest **1194/1194**, typecheck clean, build clean, `test:node` **110 pass / 5 fail** (the five pre-existing).
+- **The live database was never opened for writing.**
+
+**New finding for AG (CV-AG6/AG9):** opening a database writes `org_audit` (55), `pm_followups` (54) and `pm_digests` (1) rows. Additive, so not data loss, but it is a startup write to an existing database and should be controllable.
+
+**Limitations:** the guard is verified on copies, not yet applied to the live database — that happens when PR #12 is accepted and Command is next started. Not independently reviewed; my own tests are not acceptance.
+
+## Baseline and Git state
+
+| Ref | SHA | Meaning |
+|---|---|---|
+| `origin/main` | `4b40d69` | untouched |
+| `origin/review/command-working-snapshot-20261031` | `fb3cd4f` | PR #9 merged here |
+| `origin/integration/command-convergence-20261031` | `3b09b95` | AG + Cursor + Claude merged |
+| local `integration/...` | `8c4ede6` | unreviewed atomicity commit, carried inside PR #12 |
+| `origin/claude/integration-verification-20261101` | **`f846484`** | **the baseline AG and Cursor branch from** |
+
+## Assignments issued
+
+| Package | Owner | Handover | Reviewer |
+|---|---|---|---|
+| CV-AG8 optional organization import | **Antigravity** | `docs/convergence/HANDOVER_ANTIGRAVITY_CV-AG8.md` | Cursor or command-qa |
+| CV-CU6 data lifecycle / CV-CU8 first run | **Cursor** | `docs/convergence/HANDOVER_CURSOR_CV-CU6-CU8.md` | Antigravity |
+| CV-C6 provisioning guard (done) | Claude | this document | **Antigravity** |
+| CV-C7 snapshot exporter | Claude (next) | contract in `HANDOVER_ANTIGRAVITY_CV-AG8.md` §5 | Antigravity |
+
+Both may start immediately and in parallel from `f846484`. Cursor must not block on CV-AG8; the first-run screen offers the import when present and degrades cleanly when absent.
+
+## Room references
+
+| # | Content |
+|---|---|
+| #17407 | Claude session startup, lead role resumed |
+| #17408 | Convergence findings; atomicity red/green |
+| #17409 | Correction to #17408 threading |
+| #17410 | Preservation baseline, seed-on-every-start defect, allocation |
+| #17411 | **Dispatch of these two handovers to @antigravity and @cursor** |
+
+## Outstanding reviews and blockers
+
+1. **PR #12 needs an independent reviewer** — it carries `8c4ede6` (atomicity, unreviewed), `cd53451` (red/green + nav census), `f846484` (CV-C6). Claude is the builder and must not self-accept.
+2. **Five pre-existing `test:node` failures** (CV-AG6) — not investigated by anyone yet.
+3. **CV-C1b, one-click start** — still the top product blocker; this laptop's TCP table does not reliably report loopback listeners, so lifecycle readiness cannot use it. Design in `07_CONVERGENCE_ASSESSMENT_2026-11-01.md` §4.
+4. **Lifecycle containment** (`t_438f5b2a`, `t_48d6933b`) — chain `cd0453b` → `cae730d` → `02a05af` plus an **uncommitted** improved test in `D:/StarqTech/_worktrees/t_438f5b2a-containment-fix`. Preserved, still UNVERIFIED.
+5. **Founder decision F1** — acceptance and closure still require Room online.
+
+## Next integration sequence
+
+1. Independent review of PR #12 → merge into the integration branch.
+2. CV-C7 snapshot exporter (Claude) → unblocks CV-AG8 fully.
+3. CV-AG8 and CV-CU6/CU8 in parallel from `f846484`.
+4. CV-C1b one-click start.
+5. Acceptance tests A–H end to end, then Founder session, then fast-forward `main`.
+
+## Preserved assets (unchanged)
+
+`D:\StarqTech\Archives\starq-command\` — `dirty-worktrees-20261101/` (29 worktrees), `preservation-20261101/` (baseline, 11 verified backups, restore proofs), `branch-archive-20261031.bundle` + 9 `archive/*` tags. All candidate worktrees, branches and PR history intact. Nothing was reset, force-pushed or cleaned.
