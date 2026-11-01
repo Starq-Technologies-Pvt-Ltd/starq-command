@@ -650,9 +650,9 @@ export const PROVISIONING = Object.freeze({
 });
 
 /** Tables whose contents mean "this database already belongs to someone". */
-const ORGANIZATIONAL_TABLES = ['pm_projects', 'pm_tasks', 'org_companies', 'org_people'];
+export const ORGANIZATIONAL_TABLES = ['pm_projects', 'pm_tasks', 'org_companies', 'org_people'];
 
-function hasOrganizationalData(handle) {
+export function hasOrganizationalData(handle) {
   for (const table of ORGANIZATIONAL_TABLES) {
     try {
       if (Number(handle.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n) > 0) return true;
