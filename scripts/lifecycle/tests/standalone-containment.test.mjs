@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  APP_ROOT, containmentRoot, verifyNodeRuntime, localDevelopmentGate, localReleaseGate, localContainmentOptions,
+  APP_ROOT, RECEIPT_WAIT_MS, containmentRoot, verifyNodeRuntime, localDevelopmentGate, localReleaseGate, localContainmentOptions,
 } from '../containment/local-gate.mjs';
 import { loadConfig, validateConfig, ConfigError } from '../config.mjs';
 
@@ -159,6 +159,10 @@ test('REFUSES when the runtime probe cannot prove containment', (t) => {
   });
   assert.equal(gate.resolved, false);
   assert.match(gate.detail, /runtime containment evidence failed: authenticated started receipt has no root_pid/);
+});
+
+test('the probe waits long enough for a cold first launch (a measured 4.5 s, not the old 2.5 s)', () => {
+  assert.ok(RECEIPT_WAIT_MS >= 15000, `RECEIPT_WAIT_MS=${RECEIPT_WAIT_MS} would fail a contained child whose first launch is scanned by the OS`);
 });
 
 test('the release tier stays unresolved without an independent exact-build proof', () => {

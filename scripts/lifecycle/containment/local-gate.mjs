@@ -32,6 +32,17 @@ export const APP_ROOT = path.resolve(HERE, '..', '..', '..');
 
 export const REQUIRED_CASES = Object.freeze(['pre_resume_assignment', 'parent_exit_live_descendants', 'broker_crash_recovery', 'terminal_close', 'nested_job', 'breakaway_refused', 'assignment_denied_no_resume', 'query_denied_unknown', 'graceful_no_force', 'explicit_force_empty_family', 'console_interrupt_guardian_survives', 'terminal_release_handle_only', 'detached_bootstrap_console_close']);
 
+/**
+ * How long the probe waits for the guardian's authenticated started receipt.
+ * Measured, not guessed: the first launch of a freshly provisioned node.exe was
+ * scanned by the OS before it ran, and the receipt arrived 4.5 s after the
+ * guardian started (guardian_created_ms vs root_created_ms in the retained
+ * receipt) - past the old 2.5 s window, so a perfectly contained child was
+ * reported as "no root_pid". Waiting longer relaxes nothing: the receipt must
+ * still arrive, authenticate and say it was assigned before resume.
+ */
+export const RECEIPT_WAIT_MS = 30000;
+
 export const containmentRoot = (appRoot = APP_ROOT) => path.join(appRoot, 'runtime', 'containment');
 
 function readBuild(appRoot, read) {
@@ -75,11 +86,11 @@ export function probeRuntimeContainment({
       execute: (file, args, opts) => Promise.resolve(execute(file, args, opts)),
       sleep: () => Promise.resolve(),
     });
-    const child = containment.launch({ argv: [nodePath, '-e', 'setTimeout(function(){}, 3000)'], cwd: tmp });
+    const child = containment.launch({ argv: [nodePath, '-e', 'setTimeout(function(){}, 15000)'], cwd: tmp });
     configPath = child.containment?.config;
 
     let started = null;
-    for (let i = 0; i < 100; i += 1) {
+    for (const stop = Date.now() + RECEIPT_WAIT_MS; Date.now() < stop;) {
       try { started = containment.receipt(child.containment); if (started?.root_pid > 0) break; } catch { /* not written yet */ }
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
