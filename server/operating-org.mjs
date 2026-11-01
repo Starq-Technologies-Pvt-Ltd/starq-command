@@ -515,8 +515,12 @@ function checkUnitCycle(handle, unitId, targetParentId) {
 
 export function createUnit(handle, { id, company_id, parent_id, kind, name, description, actor = 'system', channel = 'api', nowIso }) {
   if (!UNIT_KINDS.has(kind)) throw Object.assign(new Error('Unit kind invalid.'), { code: 'VALIDATION' });
-  if (!rowOrNull(handle, 'SELECT id FROM org_companies WHERE id = ?', company_id)) {
+  const company = rowOrNull(handle, 'SELECT * FROM org_companies WHERE id = ?', company_id);
+  if (!company) {
     throw Object.assign(new Error(`Unknown company: ${company_id}`), { code: 'COMPANY_NOT_FOUND' });
+  }
+  if (company.archived_at) {
+    throw Object.assign(new Error(`Company is archived: ${company_id}`), { code: 'ARCHIVED_TARGET' });
   }
   if (parent_id) {
     const parent = rowOrNull(handle, 'SELECT * FROM org_units WHERE id = ?', parent_id);
@@ -603,6 +607,18 @@ export function updateUnit(handle, id, { name, description, kind, parent_id, arc
     nextArchivedAt = ts;
   }
   if (archived === false) nextArchivedAt = null;
+  if (archived === false) {
+    const homeCompany = rowOrNull(handle, 'SELECT id, archived_at FROM org_companies WHERE id = ?', existing.company_id);
+    if (homeCompany?.archived_at) {
+      throw Object.assign(new Error(`Company is archived: ${existing.company_id}`), { code: 'ARCHIVED_TARGET' });
+    }
+    if (nextParent) {
+      const parent = rowOrNull(handle, 'SELECT id, archived_at FROM org_units WHERE id = ?', nextParent);
+      if (parent?.archived_at) {
+        throw Object.assign(new Error(`Parent unit is archived: ${nextParent}`), { code: 'ARCHIVED_TARGET' });
+      }
+    }
+  }
 
   handle.prepare(
     'UPDATE org_units SET name = ?, description = ?, kind = ?, parent_id = ?, updated_at = ?, archived_at = ? WHERE id = ?',
@@ -743,6 +759,15 @@ export function updatePosition(handle, id, { title, job_description, unit_id, re
     nextArchivedAt = ts;
   }
   if (archived === false) nextArchivedAt = null;
+  if (archived === false) {
+    const home = rowOrNull(handle, 'SELECT id, archived_at FROM org_units WHERE id = ?', nextUnitId);
+    if (!home) {
+      throw Object.assign(new Error(`Unknown unit: ${nextUnitId}`), { code: 'UNIT_NOT_FOUND' });
+    }
+    if (home.archived_at) {
+      throw Object.assign(new Error(`Unit is archived: ${nextUnitId}`), { code: 'ARCHIVED_TARGET' });
+    }
+  }
 
   handle.prepare(
     'UPDATE org_positions SET unit_id = ?, title = ?, job_description = ?, reports_to_position_id = ?, updated_at = ?, archived_at = ? WHERE id = ?',

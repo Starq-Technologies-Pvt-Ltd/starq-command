@@ -44,6 +44,8 @@
  * and the provenance says exactly which board it came from.
  */
 
+import { createHash } from 'node:crypto';
+
 /** Named columns: type is TEXT throughout — Nexus values are type-unstable
  *  (priority is string|number, acceptance array|string, pr number|string), and
  *  coercing them to a typed column is how fidelity gets lost. */

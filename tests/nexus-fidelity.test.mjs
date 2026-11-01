@@ -15,6 +15,9 @@ test('relinks an already-restored collided task source row on importer restart',
       if (sql.includes('FROM pm_source_records')) return { all: () => [source] };
       if (sql.includes('FROM pm_tasks')) return { get: (id) => id === 'SPOS-008:pos' ? { 1: 1 } : undefined };
       if (sql.includes('UPDATE pm_source_records')) return { run: (...args) => updates.push(args) };
+      // Relink also records a source-record version. No prior version exists here.
+      if (sql.includes('FROM pm_source_record_versions')) return { get: () => undefined };
+      if (sql.includes('INSERT INTO pm_source_record_versions')) return { run: () => {} };
       throw new Error(`Unexpected SQL: ${sql}`);
     },
   };
