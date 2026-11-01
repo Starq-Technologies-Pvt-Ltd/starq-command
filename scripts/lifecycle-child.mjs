@@ -69,22 +69,43 @@ async function gracefulExit(why) {
   }
 }
 
+/*
+  Observe binds rather than hunting for exports.
+
+  Components expose their server differently and some do not expose it at all:
+  the data service exports `server`, Vite keeps an `httpServer`, and the
+  herdr-floor broker creates its server inside compose() and exports only that
+  factory. Guessing export shapes would be fragile and would mean editing
+  external components, including the frozen data service.
+
+  Instead the host records every TCP server that successfully binds inside THIS
+  process, by wrapping listen() before the component is imported. The control
+  pipe binds a named pipe, whose address() is a string rather than {port}, so it
+  is naturally excluded below.
+*/
+const boundServers = new Set();
+const nativeListen = net.Server.prototype.listen;
+net.Server.prototype.listen = function patchedListen(...args) {
+  this.once('listening', () => boundServers.add(this));
+  this.once('close', () => boundServers.delete(this));
+  return nativeListen.apply(this, args);
+};
+
 /**
- * Every address this component is really listening on, from the server objects
- * themselves. Returns [] before the component has bound, which is a truthful
- * "not yet", never a guess.
+ * Every address this component is really listening on. Returns [] before the
+ * component has bound, which is a truthful "not yet", never a guess.
  */
 function boundAddresses() {
-  const servers = viteServer
-    ? [viteServer.httpServer]
-    : [componentModule?.server, componentModule?.lifecycleService?.server];
   const out = [];
-  for (const s of servers) {
+  const seen = new Set();
+  for (const s of boundServers) {
     let a;
-    try { a = s?.address?.(); } catch { a = null; }
-    if (a && typeof a === 'object' && Number.isInteger(a.port)) {
-      out.push({ address: a.address, port: a.port, family: a.family ?? null });
-    }
+    try { a = s.address?.(); } catch { a = null; }
+    if (!a || typeof a !== 'object' || !Number.isInteger(a.port)) continue;
+    const key = `${a.address}:${a.port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ address: a.address, port: a.port, family: a.family ?? null });
   }
   // Stable order so the MAC is reproducible for the same set of addresses.
   return out.sort((x, y) => (x.port - y.port) || String(x.address).localeCompare(String(y.address)));
