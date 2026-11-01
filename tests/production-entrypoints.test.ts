@@ -126,10 +126,17 @@ async function pmPort(): Promise<number> {
 }
 
 afterEach(async () => {
-  for (const child of children.splice(0)) {
-    if (child.exitCode === null && child.signalCode === null) child.kill();
-  }
-  await new Promise((resolve) => setTimeout(resolve, 80));
+  // Wait for each child to actually exit (bounded) before deleting its directory:
+  // a fixed sleep raced the process still holding its files, which showed up as an
+  // occasional Windows EPERM in the default parallel run.
+  await Promise.all(children.splice(0).map((child) => {
+    if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      const giveUp = setTimeout(resolve, 5000);
+      child.once('exit', () => { clearTimeout(giveUp); resolve(); });
+      child.kill();
+    });
+  }));
   for (const root of tempDirs.splice(0)) {
     const resolved = path.resolve(root);
     const parent = path.resolve(TEST_ROOT);

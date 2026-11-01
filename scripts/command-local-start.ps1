@@ -42,9 +42,18 @@ try {
     foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
       if ($root) { $candidates += (Join-Path $root 'nodejs\node.exe') }
     }
+    # .NET hashing, not Get-FileHash: Windows PowerShell started from pwsh inherits
+    # a module path in which Microsoft.PowerShell.Utility does not autoload.
+    function Get-Sha256Hex([string]$file) {
+      $stream = [System.IO.File]::OpenRead($file)
+      try {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try { return ([System.BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() } finally { $sha.Dispose() }
+      } finally { $stream.Dispose() }
+    }
     $source = $null
     foreach ($c in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
-      if ((Test-Path -LiteralPath $c -PathType Leaf) -and ($approved -contains (Get-FileHash -LiteralPath $c -Algorithm SHA256).Hash.ToLowerInvariant())) { $source = $c; break }
+      if ((Test-Path -LiteralPath $c -PathType Leaf) -and ($approved -contains (Get-Sha256Hex $c))) { $source = $c; break }
     }
     if (-not $source) {
       throw ("no approved Node runtime found to provision runtime\node (approved SHA-256: {0}). Install an approved Node.js build or copy one to {1}" -f ($approved -join ', '), $node)

@@ -195,3 +195,16 @@ test('the real runtime probe proves containment with the shipped guardian', { sk
 });
 
 void HERE;
+
+// ── the one-click launcher ──────────────────────────────────────────────────
+
+test('the launcher provisions Node only from an allowlisted hash, without cmdlets that may not autoload', () => {
+  const ps1 = readFileSync(path.join(APP_ROOT, 'scripts', 'command-local-start.ps1'), 'utf8');
+  assert.match(ps1, /node-pins\.json/, 'the allowlist is the committed node-pins.json');
+  assert.match(ps1, /\$approved -contains/, 'a candidate is copied only if its hash is on that list');
+  assert.doesNotMatch(ps1, /herdr/i, 'the launcher knows nothing about Herdr Floor');
+  // Run from pwsh, Windows PowerShell inherits a module path where
+  // Microsoft.PowerShell.Utility does not autoload: Get-FileHash was "not
+  // recognized" and the one-click start was refused (acceptance run n).
+  assert.doesNotMatch(ps1, /Get-FileHash/, 'hash with .NET so the launcher works however it was started');
+});
