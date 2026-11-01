@@ -23,7 +23,7 @@ import {
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; result: PmResult<T> };
 
 type AttentionData = PmAttention;
-type DigestData = { digest: PmDigest };
+type DigestData = { digest: PmDigest | null };
 type MilestoneData = { milestones: PmMilestone[] };
 
 interface BlockedRow {

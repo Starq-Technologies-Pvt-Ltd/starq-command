@@ -1,16 +1,17 @@
 /**
- * Daily activity — attention and the latest digest from the PM service.
- *
- * Follow-ups have no client and no route yet. That section stays UNAVAILABLE
- * and names GET /api/pm/followups. It does not invent follow-up rows.
+ * Daily activity — attention, the latest digest, and open follow-ups from the
+ * PM service. Follow-ups come from GET /api/pm/followups (ops-automation
+ * backend); rows are rendered from the service, never invented.
  */
 import * as React from 'react';
 import { PmEmpty, PmLoading, PmUnavailable } from '@/components/pm-feedback';
 import {
   pmAttention,
+  pmFollowups,
   pmLatestDigest,
   type PmAttention,
   type PmDigest,
+  type PmFollowup,
   type PmResult,
 } from '@/lib/pm-client';
 
@@ -130,9 +131,28 @@ function DigestBody({ digest }: { digest: PmDigest }) {
   );
 }
 
+function FollowupsBody({ followups }: { followups: PmFollowup[] }) {
+  return (
+    <ul>
+      {followups.map((f) => (
+        <li key={f.id}>
+          {f.task_id}
+          {f.task_title ? ` · ${f.task_title}` : ''}
+          {f.kind ? ` · ${f.kind}` : ''}
+          {` · ${f.status}`}
+          {typeof f.stale_days === 'number' ? ` · stale ${f.stale_days}d` : ''}
+          {f.owner ? ` · ${f.owner}` : ''}
+          {f.last_activity_at ? ` · last activity ${f.last_activity_at}` : ''}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function DailyActivity() {
   const [attention, setAttention] = React.useState<SectionState<PmAttention>>({ status: 'loading' });
   const [digest, setDigest] = React.useState<SectionState<PmDigest>>({ status: 'loading' });
+  const [followups, setFollowups] = React.useState<SectionState<PmFollowup[]>>({ status: 'loading' });
 
   React.useEffect(() => {
     let active = true;
@@ -169,6 +189,23 @@ export function DailyActivity() {
       }
       setDigest({ status: 'ready', data: latest });
     });
+    void pmFollowups().then((res) => {
+      if (!active) return;
+      if (!res.ok) {
+        setFollowups({ status: 'unavailable', reason: failureReason(res) });
+        return;
+      }
+      const rows = res.data?.followups;
+      if (!Array.isArray(rows)) {
+        setFollowups({ status: 'unavailable', reason: 'PM follow-ups payload is missing followups.' });
+        return;
+      }
+      if (rows.length === 0) {
+        setFollowups({ status: 'empty' });
+        return;
+      }
+      setFollowups({ status: 'ready', data: rows });
+    });
     return () => {
       active = false;
     };
@@ -189,7 +226,10 @@ export function DailyActivity() {
         {digest.status === 'ready' ? <DigestBody digest={digest.data} /> : null}
       </DailySection>
       <DailySection id="daily-follow-ups" title="Follow-ups">
-        <PmUnavailable reason="No follow-ups client is available. Missing route GET /api/pm/followups." />
+        {followups.status === 'loading' ? <PmLoading label="Loading follow-ups" /> : null}
+        {followups.status === 'empty' ? <PmEmpty label="No open follow-ups." /> : null}
+        {followups.status === 'unavailable' ? <PmUnavailable reason={followups.reason} /> : null}
+        {followups.status === 'ready' ? <FollowupsBody followups={followups.data} /> : null}
       </DailySection>
     </div>
   );

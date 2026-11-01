@@ -628,6 +628,32 @@ export interface PmDigest {
   delivery_detail?: string | null;
 }
 
+/**
+ * A follow-up episode from the ops-automation backend (pm_followups joined
+ * with its task). Served by GET /api/pm/followups.
+ */
+export interface PmFollowup {
+  id: string;
+  task_id: string;
+  kind?: string;
+  status: 'open' | 'acknowledged' | 'snoozed' | 'resolved';
+  stale_days?: number;
+  last_activity_at?: string;
+  snoozed_until?: string | null;
+  acknowledged_by?: string | null;
+  acknowledged_at?: string | null;
+  note?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Joined task context (LEFT JOIN pm_tasks).
+  task_title?: string | null;
+  project_id?: string | null;
+  owner?: string | null;
+  priority?: string | null;
+  stage?: string | null;
+  task_status?: string | null;
+}
+
 export interface PmWorkforceSummary {
   state?: string;
   person: PmOrgPerson;
@@ -680,5 +706,12 @@ export const pmPatchMilestone = (id: string, body: PmActorBody & Record<string, 
   call<{ milestone: PmMilestone }>('PATCH', `/api/pm/milestones/${encodeURIComponent(id)}`, body);
 export const pmPatchProject = (id: string, body: PmActorBody & Record<string, unknown>) =>
   call<{ project: PmProject }>('PATCH', `/api/pm/projects/${encodeURIComponent(id)}`, body);
-export const pmLatestDigest = () => call<{ digest: PmDigest }>('GET', '/api/pm/digests/latest');
+export const pmLatestDigest = () => call<{ digest: PmDigest | null }>('GET', '/api/pm/digests/latest');
 export const pmDigests = () => call<{ digests: PmDigest[] }>('GET', '/api/pm/digests');
+export const pmFollowups = (opts?: { status?: string; includeSnoozed?: boolean }) => {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.includeSnoozed) params.set('include_snoozed', '1');
+  const qs = params.toString();
+  return call<{ followups: PmFollowup[] }>('GET', `/api/pm/followups${qs ? `?${qs}` : ''}`);
+};

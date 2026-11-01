@@ -741,6 +741,15 @@ export async function handleOpsRoutes(req, res, ctx) {
     return (send(res, 200, { digests: listDigests(db(), { limit }) }, origin), true);
   }
 
+  // The Founder Home and Activity "latest digest" panels read the single most
+  // recent digest. listDigests already orders newest-first, so take its head.
+  // Returns { digest: null } (200) when none has been generated yet, which the
+  // client renders as "no digest recorded" rather than an error.
+  if (isGet && p === '/api/pm/digests/latest') {
+    const [latest] = listDigests(db(), { limit: 1 });
+    return (send(res, 200, { digest: latest ?? null }, origin), true);
+  }
+
   if (isPost && p === '/api/pm/digests/generate') {
     const body = (await readBody(req)) ?? {};
     only(body, ['actor', 'channel', 'force', 'date']);
