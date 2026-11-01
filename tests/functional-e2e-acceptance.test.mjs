@@ -394,10 +394,10 @@ test('Starq Command Functional End-to-End Acceptance Suite (12 User Journeys)', 
 
     // ── Workflow 11: Optional organization snapshot import on a clean database ─
     await t.test('Workflow 11: Optional organization snapshot import on a clean database', async () => {
-      // Documented probe behavior: GET /api/pm/import/organization returns 404
-      // because only POST is registered on server/pm-ops-routes.mjs
+      // The availability probe must report the POST import, not 404.
       const probe = await pmRequest('GET', '/api/pm/import/organization');
-      assert.equal(probe.status, 404);
+      assert.equal(probe.status, 200);
+      assert.equal(probe.data.available, true);
 
       // Start server on a fresh clean database to test snapshot import
       const cleanDb = path.join(tempRoot, 'clean-import.db');

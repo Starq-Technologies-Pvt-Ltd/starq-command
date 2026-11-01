@@ -52,33 +52,35 @@ const journeys = [
   { id: 1, name: 'Fresh empty installation and first organization creation', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'FirstRun guides company creation; recorded in SQLite.' },
   { id: 2, name: 'First-person registration and authorized onboarding', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'First human registered; stores claimed actor in session.' },
   { id: 3, name: 'Department and workforce creation', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'OrgOperate renders seats, digital/human workers, appointments.' },
-  { id: 4, name: 'Project and milestone creation', browser: 'PASS', e2e: 'PASS', status: 'PARTIAL', notes: 'Project creation verified in UI and API. Milestone creation API works (POST /api/pm/milestones), but UI form is absent.' },
+  { id: 4, name: 'Project and milestone creation', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Project creation is on the portfolio. The project board has a Create milestone form that posts to the existing milestone API.' },
   { id: 5, name: 'Board and work-package creation', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'PmBoard renders Kanban lanes, task cards, work package filters.' },
   { id: 6, name: 'Task assignment and state transitions', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Owner reassignment and stage transitions strictly verified with expected_updated_at.' },
   { id: 7, name: 'Workforce activity and operational visibility', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'DailyActivity renders live attention next_actions and digest.' },
   { id: 8, name: 'Communication, evidence and review workflows', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Comms surface renders channels, messages; task evidence attached and verified.' },
   { id: 9, name: 'Organizational archive/revival and dependency rules', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'HAS_DEPENDENTS 409 enforced on units with positions and positions with appointments.' },
   { id: 10, name: 'Restart persistence without record resurrection', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Service restart against same SQLite DB preserves records; no resurrection.' },
-  { id: 11, name: 'Optional organization snapshot import on a clean database', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Dry-run snapshot import verified on clean DB. GET probe returns 404 (UI defaults to absent).' },
+  { id: 11, name: 'Optional organization snapshot import on a clean database', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'Dry-run import works on a clean database. GET /api/pm/import/organization returns available:true so FirstRun can offer import.' },
   { id: 12, name: 'Founder dashboard navigation and usable day-to-day workflows', browser: 'PASS', e2e: 'PASS', status: 'PASS', notes: 'FounderHome attention items, digests, portfolio summary, health OK.' },
 ];
 
 const reportContent = `# STARQ COMMAND — FUNCTIONAL ACCEPTANCE REPORT
 **Execution Date:** ${new Date().toISOString()}  
-**Integration Baseline:** \`b224649\` (claude/combined-integration-20261101)  
-**Assigned Worktree:** \`D:/StarqTech/_worktrees/ag-functional-acceptance\`  
-**Assigned Engineer:** Antigravity (\`@antigravity\` / \`antigravity-command\`)  
+**Integration candidate:** \`cursor/final-integration-20261102\`  
+**Suite origin:** Antigravity functional acceptance suite, preserved and re-run on this candidate  
+**Worktree:** \`D:/StarqTech/_worktrees/cursor-final-integration\`  
+**Lifecycle commits included:** \`db9d620\`, \`7ddccf8\`  
 
 ---
 
 ## 1. Executive Summary
 
-Starq Command's functional end-to-end acceptance suite has been implemented, executed, and audited across all twelve real user journeys authorized by the Founder convergence handover.
+The preserved twelve-journey acceptance suite was re-run on the integration candidate after the milestone form and organization-import probe were added.
 
-- **Browser Acceptance Suite (Vitest / JSDOM):** 12 / 12 PASS (${browserDuration}s)
-- **Live Node E2E Suite (Scratch PM Server :5190–:5199 / os.tmpdir()):** 12 / 12 PASS (${e2eDuration}s)
+- **Browser Acceptance Suite (Vitest / JSDOM):** ${browserPassed ? '12 / 12 PASS' : 'FAILED'} (${browserDuration}s)
+- **Live Node E2E Suite (Scratch PM Server :5190–:5199 / os.tmpdir()):** ${e2ePassed ? '12 / 12 PASS' : 'FAILED'} (${e2eDuration}s)
 - **HTML Visual Audit Artifacts:** 12 DOM snapshots captured in \`artifacts/acceptance/html/\`
-- **Isolation Boundary:** Zero interference with Claude's Windows lifecycle work or Cursor's F1–F4 fixes. No writes to canonical \`data/*.db\`.
+- **Provenance correction:** \`1770261\` is included. Copilot's focused retest requested in Room #17423 was still pending when this report was generated, so this run does not record that correction as accepted.
+- **Isolation Boundary:** Scratch PM only. No writes to canonical \`data/*.db\`.
 
 ---
 
@@ -89,31 +91,22 @@ Starq Command's functional end-to-end acceptance suite has been implemented, exe
 | 1 | Fresh empty installation & first org creation | PASS | PASS | **PASS** | FirstRun surface detects empty DB, prompts company creation, stores company in SQLite. |
 | 2 | First-person registration & onboarding | PASS | PASS | **PASS** | Validates handle, registers first person (\`HUMAN\`), sets claimed actor in session. |
 | 3 | Department & workforce creation | PASS | PASS | **PASS** | Department created, Lead position created, digital worker registered (\`AGY\`), appointed. |
-| 4 | Project & milestone creation | PASS | PASS | **PARTIAL** | Project creation form functional in UI & API. Milestone creation API works (\`POST /api/pm/milestones\`), but UI creation form is missing on board. |
+| 4 | Project & milestone creation | PASS | PASS | **PASS** | Project creation form is on the portfolio. The project board has a Create milestone form that posts to the milestone API. |
 | 5 | Board & work-package creation | PASS | PASS | **PASS** | Kanban lanes (TODO, NEXT, IN_PROGRESS, BLOCKED, DONE) render task cards and work packages. |
 | 6 | Task assignment & state transitions | PASS | PASS | **PASS** | Reassignment to digital worker and status transition (\`NEXT\`) enforce optimistic concurrency (\`expected_updated_at\`). |
 | 7 | Workforce activity & operational visibility | PASS | PASS | **PASS** | DailyActivity surface renders live \`next_actions\`, daily digest summary, and follow-ups. |
 | 8 | Communication, evidence & review workflows | PASS | PASS | **PASS** | Comms surface renders channel directory and messages; task evidence attachment verified in task details. |
 | 9 | Org archive/revival & dependency rules | PASS | PASS | **PASS** | \`HAS_DEPENDENTS\` (409) strictly refuses archiving units with active positions and positions with active appointments. |
 | 10 | Restart persistence without record resurrection | PASS | PASS | **PASS** | PM service terminated and restarted against the same database; all entities and task states persist truthfully. |
-| 11 | Optional org snapshot import on clean database | PASS | PASS | **PASS** | Canonical format import succeeds on clean DB; non-empty target refused with 409 (\`TARGET_NOT_EMPTY\`). |
+| 11 | Optional org snapshot import on clean database | PASS | PASS | **PASS** | Canonical import succeeds on a clean database and a non-empty target is still refused. GET /api/pm/import/organization returns available:true. |
 | 12 | Founder dashboard navigation & daily workflows | PASS | PASS | **PASS** | FounderHome displays primary operational picture, claimed actor badge, attention items, health OK. |
 
 ---
 
 ## 3. Discovered Realities & Actionable Findings
 
-1. **[UI / UX Gap] Missing Milestone Creation Form in UI (Journey 4):**
-   - **Severity:** Low / Feature Gap
-   - **Affected Module:** \`src/surfaces/pm-board.tsx\`, \`src/surfaces/pm-portfolio.tsx\`
-   - **Observed Behavior:** While milestones can be assigned to tasks and the backend provides \`POST /api/pm/milestones\`, there is no form or modal in the UI to create new milestones.
-   - **Recommendation:** Add milestone creation dialog to \`PmPortfolioSurface\` or \`PmBoardSurface\`.
-
-2. **[API Contract Nuance] Organization Import Status Probe (Journey 11):**
-   - **Severity:** Low / Informational
-   - **Affected Module:** \`server/pm-ops-routes.mjs\`, \`src/lib/pm-client.ts\`
-   - **Observed Behavior:** \`src/lib/pm-client.ts\` probes \`GET /api/pm/import/organization\` to detect availability. The backend route only accepts \`POST\`. Consequently, \`GET\` returns 404, leading \`FirstRun\` to display "No organization import is available on this installation."
-   - **Recommendation:** Add a lightweight \`GET /api/pm/import/organization\` endpoint that returns \`{ available: true, supported_tables: [...] }\`.
+1. **Milestone creation form:** the project board now has a Create milestone form. It posts the title, an optional due date, the project id, and the claimed actor to the existing milestone API.
+2. **Organization import probe:** GET /api/pm/import/organization returns available:true. FirstRun offers import when that probe is present. POST still refuses a non-empty target.
 
 3. **[Hierarchy Integrity Confirmed] Dependency Rules Enforced (Journey 9):**
    - **Severity:** Verified Invariant

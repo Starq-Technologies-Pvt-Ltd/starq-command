@@ -378,8 +378,14 @@ describe('Functional Browser Acceptance — 12 Real User Journeys', () => {
       people: [{ handle: 'ali' }, { handle: 'antigravity' }, { handle: 'cursor' }],
     };
 
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    let postedMilestone: Record<string, unknown> | null = null;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const method = (init?.method ?? 'GET').toUpperCase();
+      if (method === 'POST' && url.includes('/api/pm/milestones')) {
+        postedMilestone = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        return { ok: true, status: 201, json: async () => ({ id: 'ms-accept', title: postedMilestone?.title, project_id: 'cmd' }) } as Response;
+      }
       if (url.endsWith('/api/pm/meta')) return { ok: true, json: async () => metaData } as Response;
       if (url.endsWith('/api/pm/projects')) return { ok: true, json: async () => ({ projects: [{ id: 'cmd', name: 'Command OS', prefix: 'CMD' }] }) } as Response;
       if (url.includes('/api/pm/tasks')) return { ok: true, json: async () => projectBoard } as Response;
@@ -389,6 +395,7 @@ describe('Functional Browser Acceptance — 12 Real User Journeys', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    storeClaimedActor('ali');
     const host = setupHost('#studio/pm/cmd');
     await act(async () => {
       root?.render(<PmBoardSurface projectId="cmd" />);
@@ -400,6 +407,23 @@ describe('Functional Browser Acceptance — 12 Real User Journeys', () => {
     expect(text).toContain('Core Lifecycle Stabilization');
     expect(text).toContain('Workforce Directory Wireup');
     expect(text).toContain('antigravity');
+    const milestoneForm = host.querySelector('form[aria-label="Create milestone"]');
+    expect(milestoneForm).toBeTruthy();
+    await act(async () => {
+      setInputValue(host.querySelector('[aria-label="Milestone title"]') as HTMLInputElement, 'Acceptance milestone');
+      setInputValue(host.querySelector('[aria-label="Milestone due date"]') as HTMLInputElement, '2026-12-01');
+    });
+    await act(async () => {
+      milestoneForm?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 80));
+    });
+    expect(postedMilestone).toMatchObject({
+      actor: 'ali',
+      project_id: 'cmd',
+      title: 'Acceptance milestone',
+      due_date: '2026-12-01',
+    });
+    expect(host.textContent).toContain('Milestone Acceptance milestone is recorded.');
     saveHtmlArtifact('workflow-05-pm-board.html', 'Workflow 5: PM Board & Work Packages', host);
   });
 
