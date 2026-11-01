@@ -117,4 +117,48 @@ describe('Worktree Manager Isolation & Safe Recovery', () => {
     const rescueLog = await execGit(['log', '-1', cleanup.savedRescueSha!], tempRepo);
     expect(rescueLog).toMatch(/rescue-recovery-T-DIRTY-1/i);
   });
+
+  it('rejects a taskId that would escape the worktree parent', async () => {
+    const parent = path.join(tempRepo, '.worktrees');
+    const escaped = path.join(tempRepo, 'outside-builder');
+    await expect(WorktreeManager.provisionBuilderWorktree({
+      repoPath: tempRepo,
+      taskId: '../outside',
+      seat: 'codex',
+      baseSha: baseCommitSha,
+      worktreesDir: parent,
+    })).rejects.toThrow(/taskId rejected/);
+    await expect(WorktreeManager.provisionVerifierWorktree({
+      repoPath: tempRepo,
+      taskId: '..\\outside',
+      verifierSeat: 'vision',
+      candidateSha: baseCommitSha,
+      worktreesDir: parent,
+    })).rejects.toThrow(/taskId rejected/);
+    expect(fs.existsSync(parent)).toBe(false);
+    expect(fs.existsSync(escaped)).toBe(false);
+    const branches = await execGit(['branch', '--list'], tempRepo);
+    expect(branches).not.toMatch(/outside/);
+  });
+
+  it('rejects a dotted taskId at the lease boundary before writing a lease', () => {
+    const workspace = path.join(tempRepo, 'leased');
+    fs.mkdirSync(workspace);
+    expect(() => LeaseService.acquireLease({
+      taskId: '..',
+      seat: 'codex',
+      role: 'BUILDER',
+      workspacePath: workspace,
+      branch: 'starq/task/bad',
+      baseSha: baseCommitSha,
+    })).toThrow(/taskId rejected/);
+    expect(fs.existsSync(path.join(workspace, '.worktree-lease'))).toBe(false);
+  });
+
+  it('rejects a taskId with ".." before a rescue ref is created', async () => {
+    await expect(WorktreeManager.removeWorktreeSafe(tempRepo, path.join(tempRepo, 'missing'), 'a..b'))
+      .rejects.toThrow(/taskId rejected/);
+    const branches = await execGit(['branch', '--list'], tempRepo);
+    expect(branches).not.toMatch(/rescue/);
+  });
 });
