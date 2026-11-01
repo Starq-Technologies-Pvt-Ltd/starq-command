@@ -54,8 +54,11 @@ function main() {
 
   let db;
   try {
-    db = new DatabaseSync(dbPath);
-    db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+    // journal_mode is persistent. A dry run must not change it, or any other
+    // durable database state, so the target is opened read-only and WAL is
+    // requested only for a real import.
+    db = new DatabaseSync(dbPath, dryRun ? { readOnly: true } : {});
+    db.exec(dryRun ? 'PRAGMA foreign_keys = ON;' : 'PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   } catch (e) {
     console.error(`Failed to open database at ${dbPath}: ${e.message}`);
     process.exit(3);

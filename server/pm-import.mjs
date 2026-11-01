@@ -146,6 +146,14 @@ export function validateSnapshot(snapshot, db, options = {}) {
     return { ok: false, errors, rejections, conflicts: [] };
   }
 
+  const supportedTables = new Set(TABLE_INSERTION_ORDER);
+  for (const tableName of Object.keys(snapshot.tables)) {
+    if (!supportedTables.has(tableName)) {
+      errors.push(`Unsupported snapshot table '${tableName}'. Import refuses to discard organizational or historical rows it cannot insert.`);
+      rejections.push(`UNSUPPORTED_TABLE_${tableName}`);
+    }
+  }
+
   // Verify content_sha256 if present
   if (snapshot.content_sha256) {
     const computedCanonical = computeTablesSha256(snapshot.tables);
@@ -208,6 +216,9 @@ export function validateSnapshot(snapshot, db, options = {}) {
   let totalCreated = 0;
   let totalSkipped = 0;
   let totalConflicted = 0;
+  const blockedCompanyIds = new Set();
+  const blockedUnitIds = new Set();
+  const blockedPositionIds = new Set();
 
   for (const table of TABLE_INSERTION_ORDER) {
     const rows = snapshot.tables[table];
@@ -320,6 +331,51 @@ export function validateSnapshot(snapshot, db, options = {}) {
         }
       }
 
+      if (table === 'org_units' && row.company_id != null && blockedCompanyIds.has(String(row.company_id))) {
+        if (row.id != null) blockedUnitIds.add(String(row.id));
+        conflictedCount += 1;
+        totalConflicted += 1;
+        conflicts.push({
+          table,
+          key: 'company_id',
+          value: String(row.company_id),
+          row_index: i,
+          reason: `Parent company '${row.company_id}' belongs to a different existing organization. The unit was not imported.`,
+        });
+        errors.push(`Refusing to import a unit under company '${row.company_id}' because that id belongs to a different organization.`);
+        rejections.push(`BLOCKED_PARENT_${table}_${row.company_id}`);
+        continue;
+      }
+      if (table === 'org_positions' && row.unit_id != null && blockedUnitIds.has(String(row.unit_id))) {
+        if (row.id != null) blockedPositionIds.add(String(row.id));
+        conflictedCount += 1;
+        totalConflicted += 1;
+        conflicts.push({
+          table,
+          key: 'unit_id',
+          value: String(row.unit_id),
+          row_index: i,
+          reason: `Parent unit '${row.unit_id}' was not imported because its company is a different organization.`,
+        });
+        errors.push(`Refusing to import a position under unit '${row.unit_id}' because that unit was blocked by an organization conflict.`);
+        rejections.push(`BLOCKED_PARENT_${table}_${row.unit_id}`);
+        continue;
+      }
+      if (table === 'org_appointments' && row.position_id != null && blockedPositionIds.has(String(row.position_id))) {
+        conflictedCount += 1;
+        totalConflicted += 1;
+        conflicts.push({
+          table,
+          key: 'position_id',
+          value: String(row.position_id),
+          row_index: i,
+          reason: `Parent position '${row.position_id}' was not imported because its organization conflicts with the target.`,
+        });
+        errors.push(`Refusing to import an appointment under position '${row.position_id}' because that position was blocked by an organization conflict.`);
+        rejections.push(`BLOCKED_PARENT_${table}_${row.position_id}`);
+        continue;
+      }
+
       // Natural key duplicate / conflict detection
       let isDuplicate = false;
       let duplicateKey = null;
@@ -354,6 +410,29 @@ export function validateSnapshot(snapshot, db, options = {}) {
       }
 
       if (isDuplicate) {
+        if (onConflict === 'skip' && table === 'org_companies') {
+          let existingCompany = null;
+          try {
+            existingCompany = db.prepare('SELECT id, name FROM org_companies WHERE id = ?').get(row.id);
+          } catch {
+            existingCompany = null;
+          }
+          if (existingCompany && String(existingCompany.name ?? '') !== String(row.name ?? '')) {
+            blockedCompanyIds.add(String(row.id));
+            conflictedCount += 1;
+            totalConflicted += 1;
+            conflicts.push({
+              table,
+              key: 'name',
+              value: row.id,
+              row_index: i,
+              reason: `Existing company '${row.id}' is named '${existingCompany.name}', but the snapshot names it '${row.name}'. Children are not attached to a different organization.`,
+            });
+            errors.push(`Company '${row.id}' conflicts: target is '${existingCompany.name}', snapshot is '${row.name}'. Refusing to attach imported children to a different organization.`);
+            rejections.push(`CONFLICT_IDENTITY_${table}_${row.id}`);
+            continue;
+          }
+        }
         if (onConflict === 'skip') {
           skippedCount += 1;
           totalSkipped += 1;
