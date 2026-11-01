@@ -279,10 +279,13 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
 
     handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
       .run(key, row.source_key);
-    try {
-      handle.prepare("UPDATE pm_source_record_versions SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
-        .run(key, row.source_key);
-    } catch {}
+    // Versions are append-only. Record the IMPORTED link as a new row and
+    // leave the DUPLICATE_TASK_ID row in place.
+    const payloadHash = createHash('sha256').update(row.raw_payload).digest('hex');
+    handle.prepare(`
+      INSERT INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
+      VALUES (?, ?, 'starqNexus', ?, ?, ?, 'IMPORTED', ?, ?, ?)
+    `).run(row.source_key, payloadHash, row.source_file, row.source_row_index, key, p.status ? String(p.status) : null, row.raw_payload, ts);
 
     restored.push({ source_key: row.source_key, original_id: originalId, stored_as: key, project_id: projectId });
   }
