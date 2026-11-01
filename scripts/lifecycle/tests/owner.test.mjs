@@ -63,6 +63,8 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
   let listenersFail = false;
   const iso = () => new Date(clock += 1).toISOString().replace('Z', '0000Z');
   const SELF = 999;
+  // What the OS TCP table SHOWS can differ from where processes really listen.
+  const sim = { table: (rows) => rows };
   procs.set(SELF, { found: true, name: 'node.exe', exe: NODE, created: iso() });
 
   const kill = (pid) => {
@@ -85,7 +87,7 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
       return m;
     },
     inspectInfrastructure: async () => [],
-    listListeners: async () => { if (listenersFail) throw new InspectionError('netstat failed'); return listeners.map((l) => ({ ...l })); },
+    listListeners: async () => { if (listenersFail) throw new InspectionError('netstat failed'); return sim.table(listeners.map((l) => ({ ...l }))); },
     spawnChild: (exe, args, opts) => {
       const pid = ++nextPid;
       const name = opts.env.STARQ_LC_NAME;
@@ -187,7 +189,7 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
   };
   const owner = createOwner({ configFile, runtimeDir, env, configOptions: { checkFiles: false }, deps });
   return {
-    dir, configFile, runtimeDir, owner, procs, pipes, listeners, behaviour, health, calls, brokerSim, files, SELF, deps,
+    dir, configFile, runtimeDir, owner, procs, pipes, listeners, behaviour, health, calls, brokerSim, files, SELF, deps, sim,
     statePath: path.join(runtimeDir, 'state.json'),
     set inspectFails(v) { inspectFails = v; }, set listenersFail(v) { listenersFail = v; },
     iso, kill,
@@ -707,6 +709,26 @@ test('STATUS: RUNNING only with full ownership, contract health, owned listeners
     w.listeners.pop();
     w.brokerSim.admission = 'DRAINING';
     assert.equal((await w.owner.status()).overall, 'DEGRADED');
+  } finally { w.cleanup(); }
+});
+
+test('STATUS: the OS table is a veto, not the proof - a silent or pid-0 table does not unseat a pipe-proven instance', async () => {
+  const w = world();
+  try {
+    await w.owner.start();
+    const view = async (table) => { w.sim.table = table; return w.owner.status(); };
+
+    // Windows machines whose table lists live listeners under pid 0, or not at all.
+    for (const [label, table] of [['silent', () => []], ['pid 0', (rows) => rows.map((r) => ({ ...r, pid: 0 }))]]) {
+      const s = await view(table);
+      assert.equal(s.overall, 'RUNNING', `${label} table: ${JSON.stringify(s.problems)}`);
+      assert.ok(s.components.every((x) => x.listener.owned && x.bound?.ok), `${label} table: every child proven by its control pipe`);
+    }
+
+    // But the table still VETOES: a different real process on a child's port.
+    const s = await view((rows) => [...rows, { port: 5178, pid: 55555 }]);
+    assert.equal(s.overall, 'DEGRADED');
+    assert.ok(s.problems.some((p) => /non-owned/.test(p)));
   } finally { w.cleanup(); }
 });
 

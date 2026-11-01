@@ -922,14 +922,23 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       const entry = { name, port: c.port, recorded: Boolean(rec), pid: rec?.pid ?? null, declared_status: rec?.status ?? null };
       entry.ownership = !rec ? 'NOT_RECORDED' : rec.status === 'EXITED' ? (rec.tree_closeout_verified === true ? 'EXITED' : 'EXITED_UNVERIFIED') : verdicts.get(name)?.verdict ?? 'UNKNOWN';
       entry.ownership_detail = rec && rec.status !== 'EXITED' ? verdicts.get(name)?.detail ?? null : null;
+      let bound = null;
       if (entry.ownership === 'OWNED') {
         entry.health = await d.checkHealth(cfg.host, c);
+        // Authenticated proof of where this instance listens. The OS TCP table on
+        // some Windows machines reports live listeners under pid 0 (or not at all),
+        // so it cannot be what decides ownership; it only vetoes (see below).
+        bound = await d.proveBoundAddress(rec);
+        entry.bound = { ok: bound.ok, supported: bound.supported, addresses: bound.addresses, detail: bound.detail };
       }
       if (listeners) {
         const rows = listeners.filter((l) => l.port === c.port);
+        const confirmed = Boolean(bound?.ok && boundOnPort(bound.addresses, c.port));
+        const foreign = rows.some((l) => l.pid !== rec?.pid && l.pid !== 0);
+        const tableAgrees = rows.length > 0 && rows.every((l) => l.pid === rec?.pid);
         entry.listener = {
-          present: rows.length > 0,
-          owned: rows.length > 0 && entry.ownership === 'OWNED' && rows.every((l) => l.pid === rec.pid),
+          present: rows.length > 0 || confirmed,
+          owned: entry.ownership === 'OWNED' && !foreign && (confirmed || (bound?.supported === false && tableAgrees)),
           pids: rows.map((l) => l.pid),
           classifications: rows.map((l) => {
             const info = listenerInfos.get(l.pid);
