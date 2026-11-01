@@ -1230,7 +1230,11 @@ function orgWrite(fn) {
 
 function createProject(body, d = null) {
   only(body, ['actor', 'id', 'name', 'prefix', 'description']);
-  handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const workforce = orgPeopleHandles(d || requireDb());
+  if (workforce.length === 0) {
+    throw bad('actor is not a known active identity.', [`actor: ${actor} is not an active identity handle`]);
+  }
   const id = str(body, 'id', { min: 2, max: 40, required: true }).toLowerCase();
   if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw bad('Project id invalid.', ['id must be lowercase letters, digits and hyphen']);
   const name = str(body, 'name', { min: 2, max: 80, required: true });
@@ -1238,14 +1242,24 @@ function createProject(body, d = null) {
   if (!/^[A-Z]{2,4}$/.test(prefix)) throw bad('prefix invalid.', ['prefix must be 2-4 letters']);
   const description = str(body, 'description', { max: 400 }) ?? '';
   const insert = (handle) => {
-    if (getProjectRow(id)) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
-    if (handle.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix)) {
+    const existing = handle.prepare('SELECT * FROM pm_projects WHERE id = ?').get(id);
+    const archived = existing && (existing.archived_at || existing.status === 'archived');
+    if (existing && !archived) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
+    const prefixOwner = handle.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix);
+    if (prefixOwner && prefixOwner.id !== id) {
       throw new HttpError(409, 'PREFIX_EXISTS', `Prefix already in use: ${prefix}.`);
     }
-    handle.prepare(
-      'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
-    ).run(id, name, prefix, description, nowIso());
-    return { ...getProjectRow(id), hold: effectiveHold(getProjectRow(id)) };
+    if (archived) {
+      handle.prepare(
+        'UPDATE pm_projects SET name = ?, prefix = ?, description = ?, archived_at = NULL, status = ?, hold_state = NULL WHERE id = ?',
+      ).run(name, prefix, description, 'active', id);
+    } else {
+      handle.prepare(
+        'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
+      ).run(id, name, prefix, description, nowIso());
+    }
+    const row = handle.prepare('SELECT * FROM pm_projects WHERE id = ?').get(id);
+    return { ...row, hold: effectiveHold(row) };
   };
   if (d) return insert(d);
   return tx((handle) => insert(handle));

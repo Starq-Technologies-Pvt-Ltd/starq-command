@@ -69,20 +69,25 @@ interface OrgModel {
   changeUnit: (unit: PmOrgUnit, patch: Partial<UnitDraft>) => void;
   saveUnit: (unit: PmOrgUnit) => void;
   archiveUnit: (id: string) => void;
+  restoreUnit: (id: string) => void;
   positionDraft: (position: PmOrgPosition) => PositionDraft;
   changePosition: (position: PmOrgPosition, patch: Partial<PositionDraft>) => void;
   savePosition: (position: PmOrgPosition) => void;
   archivePosition: (id: string) => void;
+  restorePosition: (id: string) => void;
   endNotes: (appointmentId: string) => string;
   changeEndNotes: (appointmentId: string, notes: string) => void;
   endAppointment: (appointmentId: string) => void;
   companyDraft: (company: PmOrgCompany) => CompanyDraft;
   changeCompany: (company: PmOrgCompany, patch: Partial<CompanyDraft>) => void;
   saveCompany: (company: PmOrgCompany) => void;
+  archiveCompany: (id: string) => void;
+  restoreCompany: (id: string) => void;
   personDraft: (person: PmOrgPerson) => PersonDraft;
   changePerson: (person: PmOrgPerson, patch: Partial<PersonDraft>) => void;
   savePerson: (person: PmOrgPerson) => void;
   archivePerson: (id: string) => void;
+  restorePerson: (id: string) => void;
 }
 
 function isOrgPayload(data: unknown): data is PmOrg {
@@ -403,15 +408,15 @@ function PositionCard({ position, model }: { position: PmOrgPosition; model: Org
           >
             Save position
           </button>
-          <button
-            type="button"
-            className="go-link"
-            aria-label={`Archive position ${position.id}`}
-            disabled={model.busy}
-            onClick={() => model.archivePosition(position.id)}
-          >
-            Archive
-          </button>
+          {position.archived_at ? (
+            <button type="button" className="go-link" aria-label={`Restore position ${position.id}`} disabled={model.busy} onClick={() => model.restorePosition(position.id)}>
+              Restore
+            </button>
+          ) : (
+            <button type="button" className="go-link" aria-label={`Archive position ${position.id}`} disabled={model.busy} onClick={() => model.archivePosition(position.id)}>
+              Archive
+            </button>
+          )}
         </div>
       </form>
     </div>
@@ -502,15 +507,27 @@ function UnitBranch({ node, model }: { node: UnitNode; model: OrgModel }) {
           >
             Save unit
           </button>
-          <button
-            type="button"
-            className="go-link"
-            aria-label={`Archive unit ${unit.id}`}
-            disabled={model.busy}
-            onClick={() => model.archiveUnit(unit.id)}
-          >
-            Archive
-          </button>
+          {unit.archived_at ? (
+            <button
+              type="button"
+              className="go-link"
+              aria-label={`Restore unit ${unit.id}`}
+              disabled={model.busy}
+              onClick={() => model.restoreUnit(unit.id)}
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="go-link"
+              aria-label={`Archive unit ${unit.id}`}
+              disabled={model.busy}
+              onClick={() => model.archiveUnit(unit.id)}
+            >
+              Archive
+            </button>
+          )}
         </div>
       </form>
       {node.children.length ? (
@@ -569,7 +586,7 @@ function CompanySection({
             />
           </label>
         </div>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className="go-link"
@@ -579,6 +596,15 @@ function CompanySection({
           >
             Save company
           </button>
+          {company.archived_at ? (
+            <button type="button" className="go-link" aria-label={`Restore company ${company.id}`} disabled={model.busy} onClick={() => model.restoreCompany(company.id)}>
+              Restore
+            </button>
+          ) : (
+            <button type="button" className="go-link" aria-label={`Archive company ${company.id}`} disabled={model.busy} onClick={() => model.archiveCompany(company.id)}>
+              Archive
+            </button>
+          )}
         </div>
       </form>
       {nodes.length ? (
@@ -729,15 +755,15 @@ function PersonCard({ person, model }: { person: PmOrgPerson; model: OrgModel })
           >
             Save person
           </button>
-          <button
-            type="button"
-            className="go-link"
-            aria-label={`Archive person ${person.id}`}
-            disabled={model.busy}
-            onClick={() => model.archivePerson(person.id)}
-          >
-            Archive
-          </button>
+          {person.archived_at ? (
+            <button type="button" className="go-link" aria-label={`Restore person ${person.id}`} disabled={model.busy} onClick={() => model.restorePerson(person.id)}>
+              Restore
+            </button>
+          ) : (
+            <button type="button" className="go-link" aria-label={`Archive person ${person.id}`} disabled={model.busy} onClick={() => model.archivePerson(person.id)}>
+              Archive
+            </button>
+          )}
         </div>
       </form>
     </li>
@@ -812,6 +838,14 @@ export function OrgOperateSurface() {
   const [positionForm, setPositionForm] = React.useState({ unit_id: '', title: '', job_description: '', reports_to_position_id: '' });
   const [personForm, setPersonForm] = React.useState({ handle: '', display_name: '', kind: 'HUMAN' as PmPersonKind });
   const [appointmentForm, setAppointmentForm] = React.useState({ position_id: '', person_id: '' });
+  const [includeArchived, setIncludeArchived] = React.useState(false);
+  const [pending, setPending] = React.useState<null | {
+    effect: string;
+    kept: string;
+    confirmLabel: string;
+    okMessage: string;
+    send: () => Promise<PmResult<unknown>>;
+  }>(null);
   const [unitDrafts, setUnitDrafts] = React.useState<Record<string, UnitDraft>>({});
   const [positionDrafts, setPositionDrafts] = React.useState<Record<string, PositionDraft>>({});
   const [personDrafts, setPersonDrafts] = React.useState<Record<string, PersonDraft>>({});
@@ -846,7 +880,10 @@ export function OrgOperateSurface() {
   };
 
   const load = React.useCallback(async () => {
-    const [orgRes, historyRes] = await Promise.all([pmOrg(), pmOrgHistory()]);
+    const [orgRes, historyRes] = await Promise.all([
+      pmOrg(includeArchived ? { includeArchived: true } : undefined),
+      pmOrgHistory(),
+    ]);
     if (!mountedRef.current) return false;
     applyHistory(historyRes);
     if (!orgRes.ok) {
@@ -867,7 +904,7 @@ export function OrgOperateSurface() {
       company_id: prev.company_id || companies[0]?.id || '',
     }));
     return true;
-  }, []);
+  }, [includeArchived]);
 
   React.useEffect(() => {
     mountedRef.current = true;
@@ -909,6 +946,12 @@ export function OrgOperateSurface() {
   const clearPerson = (id: string) => setPersonDrafts((prev) => omitKey(prev, id));
   const clearCompany = (id: string) => setCompanyDrafts((prev) => omitKey(prev, id));
 
+  const stage = (spec: NonNullable<typeof pending>) => {
+    setSaved(null);
+    setRejected(null);
+    setPending(spec);
+  };
+
   const model: OrgModel = {
     busy,
     people: org?.people ?? [],
@@ -937,8 +980,29 @@ export function OrgOperateSurface() {
       })).then((ok) => { if (ok) clearUnit(unit.id); });
     },
     archiveUnit: (id) => {
-      void runWrite('Unit archived.', () => pmPatchUnit(id, { actor, archived: true })).then((ok) => {
-        if (ok) clearUnit(id);
+      const unit = (org?.units ?? []).find((row) => row.id === id);
+      const children = (org?.units ?? []).filter((row) => row.parent_id === id && !row.archived_at);
+      const positions = (org?.positions ?? []).filter((row) => row.unit_id === id && !row.archived_at);
+      if (children.length || positions.length) {
+        refuse('HAS_DEPENDENTS', `Unit ${unit?.name ?? id} still holds ${children.length} child unit(s) and ${positions.length} position(s). Nothing was removed.`);
+        return;
+      }
+      stage({
+        effect: `Archive unit ${unit?.name ?? id} (${id}). It leaves the active organization.`,
+        kept: 'Audit history is kept. This unit has no active child units or positions, so none are removed. Restore is available from archived records.',
+        confirmLabel: 'Confirm archive',
+        okMessage: 'Unit archived.',
+        send: () => pmPatchUnit(id, { actor, archived: true }),
+      });
+    },
+    restoreUnit: (id) => {
+      const unit = (org?.units ?? []).find((row) => row.id === id);
+      stage({
+        effect: `Restore unit ${unit?.name ?? id} (${id}) to the active organization.`,
+        kept: 'Archived children stay archived until they are restored on their own. Audit history is kept.',
+        confirmLabel: 'Confirm restore',
+        okMessage: 'Unit restored.',
+        send: () => pmPatchUnit(id, { actor, archived: false }),
       });
     },
     positionDraft: (position) => positionDrafts[position.id] ?? blankPositionDraft(position),
@@ -966,16 +1030,41 @@ export function OrgOperateSurface() {
       })).then((ok) => { if (ok) clearPosition(position.id); });
     },
     archivePosition: (id) => {
-      void runWrite('Position archived.', () => pmPatchPosition(id, { actor, archived: true })).then((ok) => {
-        if (ok) clearPosition(id);
+      const position = (org?.positions ?? []).find((row) => row.id === id);
+      const reports = (org?.positions ?? []).filter((row) => row.reports_to_position_id === id && !row.archived_at);
+      const appointments = (org?.appointments ?? []).filter((row) => row.position_id === id);
+      if (reports.length || appointments.length) {
+        refuse('HAS_DEPENDENTS', `Position ${position?.title ?? id} still holds ${reports.length} reporting position(s) and ${appointments.length} active appointment(s). Nothing was removed.`);
+        return;
+      }
+      stage({
+        effect: `Archive position ${position?.title ?? id} (${id}). It leaves the active organization.`,
+        kept: 'Audit history is kept. This position has no reporting positions or active appointments, so none are removed.',
+        confirmLabel: 'Confirm archive',
+        okMessage: 'Position archived.',
+        send: () => pmPatchPosition(id, { actor, archived: true }),
+      });
+    },
+    restorePosition: (id) => {
+      const position = (org?.positions ?? []).find((row) => row.id === id);
+      stage({
+        effect: `Restore position ${position?.title ?? id} (${id}).`,
+        kept: 'The position returns to its unit. Audit history is kept.',
+        confirmLabel: 'Confirm restore',
+        okMessage: 'Position restored.',
+        send: () => pmPatchPosition(id, { actor, archived: false }),
       });
     },
     endNotes: (appointmentId) => endDrafts[appointmentId] ?? '',
     changeEndNotes: (appointmentId, notes) => setEndDrafts((prev) => ({ ...prev, [appointmentId]: notes })),
     endAppointment: (appointmentId) => {
       const notes = (endDrafts[appointmentId] ?? '').trim();
-      void runWrite('Appointment ended.', () => pmEndAppointment(appointmentId, notes ? { actor, notes } : { actor })).then((ok) => {
-        if (ok) setEndDrafts((prev) => omitKey(prev, appointmentId));
+      stage({
+        effect: `End appointment ${appointmentId}. It leaves the active appointment list.`,
+        kept: 'The appointment row is kept as ended. The position and the person are kept.',
+        confirmLabel: 'Confirm end appointment',
+        okMessage: 'Appointment ended.',
+        send: () => pmEndAppointment(appointmentId, notes ? { actor, notes } : { actor }),
       });
     },
     companyDraft: (company) => companyDrafts[company.id] ?? blankCompanyDraft(company),
@@ -996,6 +1085,31 @@ export function OrgOperateSurface() {
         legal_name: draft.legal_name.trim() ? draft.legal_name.trim() : null,
         notes: draft.notes.trim() ? draft.notes.trim() : null,
       })).then((ok) => { if (ok) clearCompany(company.id); });
+    },
+    archiveCompany: (id) => {
+      const company = pmOrgCompanies(org).find((row) => row.id === id);
+      const units = (org?.units ?? []).filter((row) => row.company_id === id && !row.archived_at);
+      if (units.length) {
+        refuse('HAS_DEPENDENTS', `Company ${company?.name ?? id} still holds ${units.length} active unit(s). Nothing was removed.`);
+        return;
+      }
+      stage({
+        effect: `Archive company ${company?.name ?? id} (${id}). It leaves the active organization.`,
+        kept: 'Audit history is kept. This company has no active units, so none are removed. Restore is available from archived records.',
+        confirmLabel: 'Confirm archive',
+        okMessage: 'Company archived.',
+        send: () => pmPatchCompany(id, { actor, archived: true }),
+      });
+    },
+    restoreCompany: (id) => {
+      const company = pmOrgCompanies(org).find((row) => row.id === id);
+      stage({
+        effect: `Restore company ${company?.name ?? id} (${id}).`,
+        kept: 'Archived units stay archived until restored on their own. Audit history is kept.',
+        confirmLabel: 'Confirm restore',
+        okMessage: 'Company restored.',
+        send: () => pmPatchCompany(id, { actor, archived: false }),
+      });
     },
     personDraft: (person) => personDrafts[person.id] ?? blankPersonDraft(person),
     changePerson: (person, patch) => setPersonDrafts((prev) => ({
@@ -1020,8 +1134,28 @@ export function OrgOperateSurface() {
       })).then((ok) => { if (ok) clearPerson(person.id); });
     },
     archivePerson: (id) => {
-      void runWrite('Person archived.', () => pmPatchPerson(id, { actor, archived: true })).then((ok) => {
-        if (ok) clearPerson(id);
+      const person = (org?.people ?? []).find((row) => row.id === id);
+      const appointments = (org?.appointments ?? []).filter((row) => row.person_id === id);
+      if (appointments.length) {
+        refuse('HAS_DEPENDENTS', `Person ${person?.display_name ?? id} still holds ${appointments.length} active appointment(s). Nothing was removed.`);
+        return;
+      }
+      stage({
+        effect: `Archive person ${person?.display_name ?? id} (${person?.handle ?? id}). They leave the active workforce.`,
+        kept: 'Audit history is kept. This person has no active appointments, so none are removed. Their handle can be registered again after archive.',
+        confirmLabel: 'Confirm archive',
+        okMessage: 'Person archived.',
+        send: () => pmPatchPerson(id, { actor, archived: true }),
+      });
+    },
+    restorePerson: (id) => {
+      const person = (org?.people ?? []).find((row) => row.id === id);
+      stage({
+        effect: `Restore person ${person?.display_name ?? id} (${person?.handle ?? id}).`,
+        kept: 'The person returns to the active workforce. Audit history is kept.',
+        confirmLabel: 'Confirm restore',
+        okMessage: 'Person restored.',
+        send: () => pmPatchPerson(id, { actor, archived: false }),
       });
     },
   };
@@ -1069,7 +1203,36 @@ export function OrgOperateSurface() {
           </select>
         </label>
         <button type="button" className="go-link" onClick={() => void load()} disabled={busy}>Refresh</button>
+        <label className="flex items-center gap-2 text-2xs">
+          <input
+            type="checkbox"
+            aria-label="Show archived records"
+            checked={includeArchived}
+            onChange={(event) => setIncludeArchived(event.target.checked)}
+          />
+          Show archived
+        </label>
       </div>
+      {pending ? (
+        <div data-lifecycle-confirm="" role="region" aria-label="Confirm record change" className="grid gap-2 rounded border border-border p-2">
+          <p data-lifecycle-effect="">{pending.effect}</p>
+          <p data-lifecycle-kept="">{pending.kept}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="go-link"
+              onClick={() => {
+                const spec = pending;
+                setPending(null);
+                void runWrite(spec.okMessage, spec.send);
+              }}
+            >
+              {pending.confirmLabel}
+            </button>
+            <button type="button" className="go-link" onClick={() => setPending(null)}>Cancel</button>
+          </div>
+        </div>
+      ) : null}
       <div data-org-feedback="">
         {saved ? <PmSaved label={saved} /> : null}
         {rejected ? <PmRejected code={rejected.code} message={rejected.message} fix={rejected.fix} /> : null}

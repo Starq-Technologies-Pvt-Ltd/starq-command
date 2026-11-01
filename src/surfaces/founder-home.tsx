@@ -11,6 +11,9 @@ import {
   pmBoardHref,
   pmLatestDigest,
   pmMilestones,
+  pmOrg,
+  pmOrgCompanies,
+  pmProjects,
   pmTaskHref,
   type PmAttention,
   type PmAttentionAction,
@@ -19,6 +22,7 @@ import {
   type PmMilestone,
   type PmResult,
 } from '@/lib/pm-client';
+import { FirstRun } from '@/surfaces/first-run';
 
 type Load<T> = { phase: 'loading' } | { phase: 'ready'; result: PmResult<T> };
 
@@ -45,9 +49,22 @@ const LOAD_KEYS = ['in_progress', 'open', 'blocked', 'completed', 'count'] as co
 
 export function FounderHome() {
   const actor = readClaimedActor();
+  const [emptyInstall, setEmptyInstall] = React.useState(false);
+  const [installTick, setInstallTick] = React.useState(0);
   const [attention, setAttention] = React.useState<Load<AttentionData>>({ phase: 'loading' });
   const [digest, setDigest] = React.useState<Load<DigestData>>({ phase: 'loading' });
   const [milestones, setMilestones] = React.useState<Load<MilestoneData>>({ phase: 'loading' });
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void Promise.all([pmOrg(), pmProjects()]).then(([orgRes, projectRes]) => {
+      if (cancelled) return;
+      const companies = orgRes.ok ? pmOrgCompanies(orgRes.data) : null;
+      const projects = projectRes.ok ? projectRes.data?.projects : null;
+      setEmptyInstall(Boolean(companies && projects && companies.length === 0 && projects.length === 0));
+    });
+    return () => { cancelled = true; };
+  }, [installTick]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -64,6 +81,14 @@ export function FounderHome() {
       cancelled = true;
     };
   }, []);
+
+  if (emptyInstall) {
+    return (
+      <div className="command-stack" data-founder-home="" data-first-run-host="">
+        <FirstRun onComplete={() => setInstallTick((tick) => tick + 1)} />
+      </div>
+    );
+  }
 
   return (
     <div className="command-stack" data-founder-home="">

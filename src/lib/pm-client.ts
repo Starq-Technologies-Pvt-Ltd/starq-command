@@ -293,6 +293,7 @@ export interface PmOrgCompany {
   name: string;
   legal_name?: string | null;
   notes?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgUnit {
@@ -302,6 +303,7 @@ export interface PmOrgUnit {
   kind: PmUnitKind | string;
   name: string;
   description?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgPosition {
@@ -310,6 +312,7 @@ export interface PmOrgPosition {
   title: string;
   job_description?: string | null;
   reports_to_position_id?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgPerson {
@@ -429,7 +432,8 @@ export function pmOrgCompanies(org: PmOrg | null | undefined): PmOrgCompany[] {
 
 export const pmHealth = () => call<PmHealth>('GET', '/api/pm/health');
 export const pmMeta = () => call<PmMeta>('GET', '/api/pm/meta');
-export const pmProjects = () => call<{ projects: PmProject[] }>('GET', '/api/pm/projects');
+export const pmProjects = (opts?: { includeArchived?: boolean }) =>
+  call<{ projects: PmProject[] }>('GET', `/api/pm/projects${opts?.includeArchived ? '?include=archived' : ''}`);
 export const pmTasks = (projectId: string) =>
   call<{ project_id: string; tasks: PmTask[] }>('GET', `/api/pm/tasks?project_id=${encodeURIComponent(projectId)}`);
 export const pmTask = (id: string) => call<PmTaskDetail>('GET', `/api/pm/tasks/${encodeURIComponent(id)}`);
@@ -708,6 +712,13 @@ export const pmPatchProject = (id: string, body: PmActorBody & Record<string, un
   call<{ project: PmProject }>('PATCH', `/api/pm/projects/${encodeURIComponent(id)}`, body);
 export const pmLatestDigest = () => call<{ digest: PmDigest | null }>('GET', '/api/pm/digests/latest');
 export const pmDigests = () => call<{ digests: PmDigest[] }>('GET', '/api/pm/digests');
+/** AG's organization import, when that route is present. A 404 means it is not available. */
+export function pmOrganizationImportStatus(): Promise<'available' | 'absent'> {
+  return fetch(`${pmBase()}/api/pm/import/organization`, { method: 'GET' })
+    .then((res) => (res.status === 404 ? 'absent' : 'available'))
+    .catch(() => 'absent');
+}
+
 export const pmFollowups = (opts?: { status?: string; includeSnoozed?: boolean }) => {
   const params = new URLSearchParams();
   if (opts?.status) params.set('status', opts.status);
