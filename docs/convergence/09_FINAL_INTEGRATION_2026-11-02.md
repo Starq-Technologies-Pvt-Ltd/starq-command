@@ -32,3 +32,22 @@ An earlier harness run (`33e13fa`) started a disposable stack whose workspace_ro
 - The daily driver runs at the development containment tier until an independent exact-build release proof exists.
 - A real-browser walkthrough of the disposable stack was not repeated in this pass; HTTP checks only.
 - Orphan PM pid 29812 (:5191, command-qa scratch DB) belongs to another session; untouched.
+
+## Addendum - Copilot verdict #17430 (CHANGES_REQUIRED, two blockers)
+
+Tested code: `ebd7c29` (later commits are documentation only).
+
+**Blocker 1 - Herdr Floor was a mandatory dependency of the one-click path.** Fixed in `9d6d80d`, `8f7ed08`, `609d09f`.
+- `runtime/containment/` ships the pinned JobGuardian binary, source and build record (byte-identical to the already-accepted development-tier build) and `node-pins.json`, an allowlist of approved Node builds.
+- `scripts/lifecycle/containment/` is Command's own Job Object adapter and gates. Kept, not relaxed: guardian binary/source pins, approved-Node hash, a REAL runtime probe (authenticated pre-execution receipt, kernel-job activity, forced recovery to a verified-empty job), HMAC receipts, exclusive descriptor directories, strict kernel reports. The release tier still needs an independent exact-build proof and stays unresolved.
+- The local profile names `runtime/node/node.exe` relative to the install (never climbing out). The launcher provisions it on first run only from an installed Node whose SHA-256 is allowlisted; the gate re-checks it on every start. Not carried over: terminal (ConPTY) launch and retired-guardian recovery, which only Herdr uses. The full online profile is unchanged.
+- Found while proving it: the probe's 2.5 s receipt window was shorter than the first launch of a freshly provisioned node.exe (measured 4.5 s, OS scan); now 30 s, receipt requirements unchanged. And Windows PowerShell started from pwsh could not run `Get-FileHash`; the launcher now hashes with .NET.
+- Proof: the harness workspace contains NO Herdr Floor, NO lifecycle package, NO pre-provisioned runtime, and no Herdr environment hint; the one-click start provisions the runtime, passes the real containment gate and reaches RUNNING. Unit tests run the gates in a fresh process with those components absent and refuse an unapproved Node, tampered guardian, failed probe and relative/climbing paths. Mutation-checked.
+
+**Blocker 2 - stray-process false positive.** The scan now exempts the acceptance runner by identity (its pid and the chain of processes that started it) plus the scan's own probe, never by image name; a surviving Command `node.exe` or a sibling `pwsh.exe` naming the workspace is still reported (unit-tested). Reproduced Copilot's invocation shape (harness launched by an invoking `pwsh -Command`): 67/67.
+
+**Test cleanup race.** `production-entrypoints` waited a fixed 80 ms after `kill()` before deleting the directory; it now awaits each child's exit (5 s bound). Default parallel Vitest: 1211/1211.
+
+**Results at `ebd7c29`, STARQ_WORKSPACE unset:** typecheck 0; build 0; vitest (default parallel) 1211/1211; node 142/0 fail (1 skip: needs the operating DB); lifecycle 186 pass/0 fail (4 child-host tests gated, run separately with explicit authorization: 4/4); functional 13/13; disposable lifecycle harness 67/67 (no residual owned processes; counts unchanged; startup appended no provenance rows; live database byte-identical, `d9cafbefe6d95658...`).
+
+Still not claimed: independent acceptance of these changes, release-tier certification, or a physical-browser walkthrough (Founder).
