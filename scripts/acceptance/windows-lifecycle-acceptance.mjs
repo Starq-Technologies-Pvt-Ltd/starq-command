@@ -220,18 +220,29 @@ async function assertPortsFree(label) {
   return held.length === 0;
 }
 
+/** A broken precondition: nothing after it would mean anything, so stop and say so. */
+class Halt extends Error {}
+const must = (ok, name, detail) => { check(ok, name, detail); if (!ok) throw new Halt(name); };
+
+/** Any process at all whose command line names this disposable workspace. Read-only; never used to signal. */
+function strayProcesses() {
+  const needle = WS.toLowerCase().replace(/'/g, "''");
+  const script = `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.ToLower().Contains('${needle}') } | ForEach-Object { "$($_.ProcessId):$($_.Name)" }`;
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true });
+  return String(r.stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+}
+
 async function verifyRunning(label, baseline) {
   const st = lifecycle('local-status', ['--json']);
   let parsed = null; try { parsed = JSON.parse(st.out); } catch { /* reported below */ }
-  check(parsed?.overall === 'RUNNING', `${label}: lifecycle reports RUNNING`, `overall=${parsed?.overall ?? 'unparseable'} exit=${st.code}`);
+  must(parsed?.overall === 'RUNNING', `${label}: lifecycle reports RUNNING`, `overall=${parsed?.overall ?? 'unparseable'} exit=${st.code}`);
 
   const kids = children();
-  const required = ['data', 'pm', 'ui'];
-  for (const name of required) {
+  for (const name of ['data', 'pm', 'ui']) {
     const c = kids.find((k) => k.name === name);
     const port = COMMAND_PORTS[name];
     const bound = Array.isArray(c?.bound) && c.bound.some((b) => b.port === port);
-    check(Boolean(c) && c.status === 'READY' && bound, `${label}: ${name} READY, bound ${port} proven by the child itself`, c ? `pid=${c.pid} bound=${JSON.stringify(c.bound)}` : 'not recorded');
+    must(Boolean(c) && c.status === 'READY' && bound, `${label}: ${name} READY, bound ${port} proven by the child itself`, c ? `pid=${c.pid} bound=${JSON.stringify(c.bound)}` : 'not recorded');
   }
 
   const ui = await http(`http://127.0.0.1:${COMMAND_PORTS.ui}/`);
@@ -244,24 +255,26 @@ async function verifyRunning(label, baseline) {
   const data = await http(`http://127.0.0.1:${COMMAND_PORTS.data}/api/health`);
   check(data.status === 200, `${label}: data service answers`, `status=${data.status} overall=${data.json?.health?.overall}`);
 
+  // Only meaningful because the stack is provably up: these compare what STARTUP did to the data.
+  const now = dbCounts();
   if (!baseline) {
-    const now = dbCounts();
     check(now?.provisioning === 'empty' && now.projects === 0 && now.tasks === 0 && now.companies === 0, `${label}: a fresh installation holds NO organizational data`, `provisioning=${now?.provisioning} projects=${now?.projects} tasks=${now?.tasks} companies=${now?.companies}`);
-  }
-  if (baseline) {
-    const now = dbCounts();
+  } else {
     check(sameCounts(baseline, now, ['projects', 'tasks', 'status_log', 'source_records']), `${label}: organizational records unchanged`, `projects ${baseline.projects}->${now.projects}, tasks ${baseline.tasks}->${now.tasks}, history ${baseline.status_log}->${now.status_log}`);
     check(now.source_versions === baseline.source_versions, `${label}: startup appended NO provenance-ledger rows (CV-C6 effective on this startup path)`, `source versions ${baseline.source_versions}->${now.source_versions}`);
   }
 }
 
 async function verifyStopped(label, priorKids) {
-  const gone = priorKids.filter((c) => isOurNode(c.pid));
-  check(gone.length === 0, `${label}: every owned child has exited`, gone.length ? `still alive: ${gone.map((c) => `${c.name}:${c.pid}`).join(', ')}` : priorKids.map((c) => `${c.name}:${c.pid}`).join(' '));
-  await assertPortsFree(`${label}: Command ports are free again`);
+  must(priorKids.length > 0, `${label}: there were owned children to stop`, 'a stop that had nothing to stop proves nothing');
+  const alive = priorKids.filter((c) => isOurNode(c.pid));
+  must(alive.length === 0, `${label}: every owned child has exited`, alive.length ? `still alive: ${alive.map((c) => `${c.name}:${c.pid}`).join(', ')}` : priorKids.map((c) => `${c.name}:${c.pid}`).join(' '));
+  must(await assertPortsFree(`${label}: Command ports are free again`), `${label}: ports released`);
+  const stray = strayProcesses();
+  check(stray.length === 0, `${label}: no process anywhere still names this workspace`, stray.length ? `stray: ${stray.join(', ')}` : 'none');
 }
 
-/** Terminate ONLY children recorded in our own state file, after re-confirming each is still node. */
+/** Terminate ONLY children recorded in our own state file, after re-confirming each is still ours. */
 function killRecordedChildren(kids) {
   const killed = [];
   for (const c of kids) {
@@ -278,64 +291,89 @@ async function waitDead(kids, ms = 15000) {
   return false;
 }
 
+/** Never leave a stack running because a check failed: try the supported stop, then recorded PIDs only. */
+async function cleanupStack() {
+  const kids = children().filter((c) => isOurNode(c.pid));
+  if (!kids.length) return;
+  console.log(`cleanup: ${kids.length} owned child(ren) still running; using the supported stop first`);
+  lifecycle('local-stop');
+  const left = children().filter((c) => isOurNode(c.pid));
+  if (left.length) {
+    console.log(`cleanup: supported stop left ${left.map((c) => `${c.name}:${c.pid}`).join(', ')}; signalling those recorded PIDs only`);
+    killRecordedChildren(left);
+    await waitDead(left);
+  }
+}
+
 // ── commands ───────────────────────────────────────────────────────────────
 async function runFull() {
   requireWs();
-  const sha = build();
-  if (!(await assertPortsFree('preflight: Command ports free'))) return;
+  let sha = 'unknown';
+  try {
+    sha = build();
+    must(await assertPortsFree('preflight: Command ports free'), 'preflight: ports available');
 
-  const baseline = dbCounts();
-  console.log(`baseline: ${JSON.stringify(baseline)}`);
+    const baseline = dbCounts();
+    console.log(`baseline: ${JSON.stringify(baseline)}`);
 
-  // 1. START through the real one-click launcher.
-  const t0 = Date.now();
-  const bat = spawnSync('cmd.exe', ['/d', '/c', path.join(APP(), 'Start-Command.bat')], {
-    cwd: APP(), env: cleanEnv(), encoding: 'utf8', windowsHide: true, timeout: 300_000,
-  });
-  check(bat.status === 0, 'one click: Start-Command.bat exits 0', `exit=${bat.status} in ${Date.now() - t0}ms`);
-  if (bat.status !== 0) console.log(`${bat.stdout}\n${bat.stderr}`.slice(0, 1500));
-  await verifyRunning('after one-click start', baseline);
-  const firstKids = children();
+    // 1. START through the real one-click launcher.
+    const t0 = Date.now();
+    const bat = spawnSync('cmd.exe', ['/d', '/c', path.join(APP(), 'Start-Command.bat')], {
+      cwd: APP(), env: cleanEnv(), encoding: 'utf8', windowsHide: true, timeout: 300_000,
+    });
+    if (bat.status !== 0) console.log(`${bat.stdout}\n${bat.stderr}`.slice(0, 1800));
+    must(bat.status === 0, 'one click: Start-Command.bat exits 0', `exit=${bat.status} in ${Date.now() - t0}ms`);
+    await verifyRunning('after one-click start', baseline);
+    const firstKids = children();
 
-  // 2. STOP.
-  const stop = lifecycle('local-stop');
-  check(stop.code === 0 && /STOPPED/.test(stop.out), 'stop: local-stop reports STOPPED', `exit=${stop.code} in ${stop.ms}ms`);
-  if (!(stop.code === 0 && /STOPPED/.test(stop.out))) console.log(stop.out.slice(0, 1200));
-  await verifyStopped('after stop', firstKids);
+    // 2. STOP.
+    const stop = lifecycle('local-stop');
+    if (!(stop.code === 0 && /STOPPED/.test(stop.out))) console.log(stop.out.slice(0, 1500));
+    must(stop.code === 0 && /STOPPED/.test(stop.out), 'stop: local-stop reports STOPPED', `exit=${stop.code} in ${stop.ms}ms`);
+    await verifyStopped('after stop', firstKids);
 
-  // 3. RESTART (stop then start) preserves data and does not re-run import.
-  const restart = lifecycle('local-start');
-  check(restart.code === 0, 'restart: local-start reaches READY again', `exit=${restart.code} in ${restart.ms}ms`);
-  await verifyRunning('after restart', baseline);
+    // 3. RESTART: data preserved, import not re-run.
+    const restart = lifecycle('local-start');
+    if (restart.code !== 0) console.log(restart.out.slice(0, 1500));
+    must(restart.code === 0, 'restart: local-start reaches READY again', `exit=${restart.code} in ${restart.ms}ms`);
+    await verifyRunning('after restart', baseline);
 
-  // 4. RECOVERY: a child dies out from under the owner.
-  const before = children();
-  const killed = killRecordedChildren(before.filter((c) => c.name === 'pm'));
-  check(killed.length === 1, 'recovery: killed the recorded pm child by exact PID', killed.join(', '));
-  check(await waitDead(before.filter((c) => c.name === 'pm')), 'recovery: the killed child is gone');
-  const degraded = lifecycle('local-status', ['--json']);
-  let dj = null; try { dj = JSON.parse(degraded.out); } catch { /* ignore */ }
-  check(dj?.overall && dj.overall !== 'RUNNING', 'recovery: status no longer claims RUNNING', `overall=${dj?.overall}`);
-  const stop2 = lifecycle('local-stop');
-  check(stop2.code === 0 && /STOPPED/.test(stop2.out), 'recovery: local-stop settles the half-dead stack', `exit=${stop2.code}`);
-  if (!(stop2.code === 0 && /STOPPED/.test(stop2.out))) console.log(stop2.out.slice(0, 1200));
-  await verifyStopped('after recovery stop', before);
-  const again = lifecycle('local-start');
-  check(again.code === 0, 'recovery: a fresh local-start succeeds afterwards', `exit=${again.code} in ${again.ms}ms`);
-  await verifyRunning('after recovery restart', baseline);
+    // 4. RECOVERY: a child dies out from under the owner.
+    const before = children();
+    const pmKid = before.filter((c) => c.name === 'pm');
+    const killed = killRecordedChildren(pmKid);
+    must(killed.length === 1, 'recovery: killed the recorded pm child by exact PID', killed.join(', '));
+    must(await waitDead(pmKid), 'recovery: the killed child is gone');
+    const degraded = lifecycle('local-status', ['--json']);
+    let dj = null; try { dj = JSON.parse(degraded.out); } catch { /* ignore */ }
+    check(dj?.overall && dj.overall !== 'RUNNING', 'recovery: status no longer claims RUNNING', `overall=${dj?.overall}`);
+    const stop2 = lifecycle('local-stop');
+    if (!(stop2.code === 0 && /STOPPED/.test(stop2.out))) console.log(stop2.out.slice(0, 1500));
+    must(stop2.code === 0 && /STOPPED/.test(stop2.out), 'recovery: local-stop settles the half-dead stack', `exit=${stop2.code}`);
+    await verifyStopped('after recovery stop', before);
+    const again = lifecycle('local-start');
+    if (again.code !== 0) console.log(again.out.slice(0, 1500));
+    must(again.code === 0, 'recovery: a fresh local-start succeeds afterwards', `exit=${again.code} in ${again.ms}ms`);
+    await verifyRunning('after recovery restart', baseline);
 
-  // 5. FINAL STOP and preservation.
-  const lastKids = children();
-  const stop3 = lifecycle('local-stop');
-  check(stop3.code === 0 && /STOPPED/.test(stop3.out), 'final stop: STOPPED', `exit=${stop3.code} in ${stop3.ms}ms`);
-  await verifyStopped('after final stop', lastKids);
+    // 5. FINAL STOP and whole-run preservation.
+    const lastKids = children();
+    const stop3 = lifecycle('local-stop');
+    must(stop3.code === 0 && /STOPPED/.test(stop3.out), 'final stop: STOPPED', `exit=${stop3.code} in ${stop3.ms}ms`);
+    await verifyStopped('after final stop', lastKids);
 
-  const end = dbCounts();
-  console.log(`final:    ${JSON.stringify(end)}`);
-  if (baseline && baseline.tasks) {
-    check(sameCounts(baseline, end, ['projects', 'tasks', 'status_log', 'source_records', 'source_versions']), 'preservation: counts identical after every cycle', 'projects/tasks/history/source records/versions');
+    const end = dbCounts();
+    console.log(`final:    ${JSON.stringify(end)}`);
+    if (baseline && baseline.tasks) {
+      check(sameCounts(baseline, end, ['projects', 'tasks', 'status_log', 'source_records', 'source_versions']), 'preservation: counts identical after every cycle', 'projects/tasks/history/source records/versions');
+    }
+  } catch (e) {
+    if (e instanceof Halt) console.log(`\nHALTED at: ${e.message}. Later checks were NOT run, so no result below is claimed for them.`);
+    else fail('harness error', e.stack ?? e.message);
+  } finally {
+    await cleanupStack();
+    report(sha);
   }
-  report(sha);
 }
 
 function report(sha) {
