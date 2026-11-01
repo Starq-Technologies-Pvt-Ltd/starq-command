@@ -3,14 +3,24 @@
  * Windows daily-driver lifecycle acceptance, against a DISPOSABLE workspace.
  *
  * WHY A WORKSPACE, NOT AN ENV VAR
- * The lifecycle loads every component from the workspace root named in its
- * config, and PM's health contract demands scratch:false, which pins PM to the
- * workspace's own data/pm-operating.db. So launching the lifecycle from any
- * worktree still ran the CANONICAL checkout's code against the LIVE database -
- * which is how an earlier start appended 1,345 redundant provenance rows. The
- * only honest isolation is a workspace of its own: a real copy of this checkout
- * inside a directory that carries the markers `server/paths.mjs` looks for, so
- * every service resolves ITS OWN data/ directory and never the Founder's.
+ * The lifecycle loads every component from the workspace named in its config,
+ * and PM's health contract demands scratch:false, which pins PM to a database
+ * chosen by WHERE ITS CODE LIVES (server/paths.mjs resolves upward from the
+ * module's own location). So launching the lifecycle from any worktree still ran
+ * the CANONICAL checkout's code against the LIVE database, which is how an earlier
+ * start appended 1,345 redundant provenance rows. An environment variable cannot
+ * isolate that.
+ *
+ * So this builds a copy of the committed files inside the real workspace root
+ * (under _scratch), in a directory carrying the markers paths.mjs looks for, and
+ * points ONLY the component entry paths at that copy. The lifecycle's
+ * workspace_root stays the REAL one, so the real containment pins, companions and
+ * gates run unmodified (they are keyed by absolute path and cannot be relocated;
+ * regenerating them would make the gate meaningless), while everything mutable -
+ * the code under test, the database, runtime state, backups and locks - is
+ * disposable. Isolation is PROVEN before anything starts, not assumed: the harness
+ * resolves the database path from inside the copy and refuses to continue unless
+ * it is the copy's own, and the live database is hashed before and after.
  *
  * WHAT IT PROVES, through the real one-click path (Start-Command.bat)
  *   start   one click reaches READY; each required child proves ownership over
@@ -67,9 +77,13 @@ const MARKER_TEXT = 'Disposable acceptance workspace';
 
 function requireWs() {
   if (!flag('--ws')) throw new Error('--ws <dir> is required');
-  const resolved = WS.toLowerCase();
-  if (resolved === real().toLowerCase() || resolved.startsWith(`${real().toLowerCase()}${path.sep}00_starq_hq`)) {
-    throw new Error(`refusing to use the real workspace or anything inside it: ${WS}`);
+  const realRoot = real();
+  const rel = path.relative(realRoot, WS);
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+    throw new Error(`the disposable workspace must live INSIDE the real workspace root (${realRoot}), under _scratch, so component paths can be relative to it: ${WS}`);
+  }
+  if (rel.toLowerCase().startsWith('00_starq_hq')) {
+    throw new Error(`refusing to use anything inside the real 00_STARQ_HQ: ${WS}`);
   }
   // Only ever build into, or delete, a directory that is absent, empty, or that
   // this script created. Anything else is somebody's data.
@@ -116,10 +130,17 @@ function build() {
   link(path.join(realApp, 'starq-lifecycle'), path.join(WS, '00_STARQ_HQ', 'operations', 'starq-lifecycle'));
   fs.mkdirSync(path.join(WS, '_scratch', 'STARQ-COMMAND-DEVELOPMENT-READINESS-IMPLEMENTATION-2026-10-27'), { recursive: true });
 
-  // The profile config pins the workspace root; point it at ours. Nothing else changes.
+  // workspace_root stays the REAL one. Only the component paths move: each is
+  // workspace-relative, so rebasing the starq-command prefix onto the copy makes
+  // the lifecycle launch OUR code while the real pins, companions and gates run
+  // unmodified.
   const cfgPath = path.join(APP(), PROFILE_CONFIG);
   const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  cfg.workspace_root = WS;
+  const canonicalPrefix = '00_STARQ_HQ\\operations\\starq-command';
+  const copyPrefix = path.relative(real(), APP());
+  const rebase = (v) => (typeof v === 'string' && v.toLowerCase().startsWith(canonicalPrefix.toLowerCase()) ? copyPrefix + v.slice(canonicalPrefix.length) : v);
+  cfg.workspace_root = real();
+  for (const c of cfg.components) for (const k of ['entry', 'cwd', 'vite_config']) if (c[k]) c[k] = rebase(c[k]);
   fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
 
   fs.mkdirSync(path.dirname(DB()), { recursive: true });
@@ -129,6 +150,57 @@ function build() {
   }
   pass('build', `workspace ${WS} from ${sha.slice(0, 7)}, ${tracked.length} tracked files${SEED ? ', seeded from a read-only copy' : ', empty database'}`);
   return sha;
+}
+
+/** A broken precondition: nothing after it would mean anything, so stop and say so. */
+class Halt extends Error {}
+const must = (ok, name, detail) => { check(ok, name, detail); if (!ok) throw new Halt(name); };
+
+
+// ── isolation proof and live-data guard ───────────────────────────────────
+function liveDbPath() {
+  return path.join(real(), '00_STARQ_HQ', 'operations', 'starq-command', 'data', 'pm-operating.db');
+}
+
+/** Hash the Founder's live database and note its sidecar sizes. Read-only. */
+function liveSnapshot() {
+  const file = liveDbPath();
+  if (!fs.existsSync(file)) return { present: false };
+  const sidecar = (ext) => { try { return fs.statSync(file + ext).size; } catch { return null; } };
+  return {
+    present: true,
+    sha256: createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+    bytes: fs.statSync(file).size,
+    wal: sidecar('-wal'),
+    shm: sidecar('-shm'),
+  };
+}
+
+/**
+ * Resolve the database path from INSIDE the copy, exactly as PM will, and refuse
+ * to go on unless it is the copy's own. Run before any service starts, because
+ * the cost of being wrong is a service opening the Founder's database.
+ */
+function proveIsolation() {
+  const probe = [
+    "import { resolveWorkspace, CANONICAL, abs } from './server/paths.mjs';",
+    'const r = resolveWorkspace();',
+    'console.log(JSON.stringify({ root: r.root, source: r.source, db: r.root ? abs(r.root, CANONICAL.pmBoardDb) : null }));',
+  ].join(' ');
+  const r = spawnSync(nodeExe(), ['--input-type=module', '-e', probe], { cwd: APP(), env: cleanEnv(), encoding: 'utf8', windowsHide: true });
+  let got = null; try { got = JSON.parse(String(r.stdout).trim()); } catch { /* handled below */ }
+  const sameRoot = got?.root && path.resolve(got.root).toLowerCase() === WS.toLowerCase();
+  const sameDb = got?.db && path.resolve(got.db).toLowerCase() === DB().toLowerCase();
+  must(Boolean(sameRoot && sameDb), 'isolation: the copy resolves ITS OWN database, not the Founder\'s', `root=${got?.root} db=${got?.db} source=${got?.source}`);
+
+  // And no component may be launched from anywhere but the copy.
+  const cfg = JSON.parse(fs.readFileSync(path.join(APP(), PROFILE_CONFIG), 'utf8'));
+  const stray = [];
+  for (const c of cfg.components) {
+    const entry = path.resolve(cfg.workspace_root, c.entry).toLowerCase();
+    if (!entry.startsWith(APP().toLowerCase() + path.sep)) stray.push(`${c.name}: ${entry}`);
+  }
+  must(stray.length === 0, 'isolation: every component launches from the disposable copy', stray.join(' | ') || `${cfg.components.length} components`);
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -220,10 +292,6 @@ async function assertPortsFree(label) {
   return held.length === 0;
 }
 
-/** A broken precondition: nothing after it would mean anything, so stop and say so. */
-class Halt extends Error {}
-const must = (ok, name, detail) => { check(ok, name, detail); if (!ok) throw new Halt(name); };
-
 /** Any process at all whose command line names this disposable workspace. Read-only; never used to signal. */
 function strayProcesses() {
   const needle = WS.toLowerCase().replace(/'/g, "''");
@@ -309,8 +377,12 @@ async function cleanupStack() {
 async function runFull() {
   requireWs();
   let sha = 'unknown';
+  let liveBefore = null;
   try {
     sha = build();
+    liveBefore = liveSnapshot();
+    console.log(`live database (guarded, never opened for writing): ${liveBefore.present ? `${liveBefore.bytes} bytes sha256 ${liveBefore.sha256.slice(0, 16)}...` : 'absent'}`);
+    proveIsolation();
     must(await assertPortsFree('preflight: Command ports free'), 'preflight: ports available');
 
     const baseline = dbCounts();
@@ -372,6 +444,11 @@ async function runFull() {
     else fail('harness error', e.stack ?? e.message);
   } finally {
     await cleanupStack();
+    if (liveBefore) {
+      const after = liveSnapshot();
+      const same = after.present === liveBefore.present && after.sha256 === liveBefore.sha256 && after.wal === liveBefore.wal && after.shm === liveBefore.shm;
+      check(same, "the Founder's LIVE database is byte-identical before and after", same ? `sha256 ${liveBefore.sha256?.slice(0, 16)}... unchanged` : `BEFORE ${JSON.stringify(liveBefore)} AFTER ${JSON.stringify(after)} (note: a real Command running meanwhile would also change this)`);
+    }
     report(sha);
   }
 }
