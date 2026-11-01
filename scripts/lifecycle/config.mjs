@@ -214,7 +214,17 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
     else for (const d of c.depends_on) if (!names.includes(d)) p.push(`${c.name}: depends on unknown '${d}'`);
     const h = c.health;
     if (!h || typeof h.path !== 'string' || !h.path.startsWith('/') || !Number.isInteger(h.status)) p.push(`${c.name}: health needs path and status`);
-    else if (!h.json_has && !h.json_equals && !h.body_includes) p.push(`${c.name}: health must assert response content, not just a status`);
+    else if (!h.json_has && !h.json_equals && !h.json_one_of && !h.body_includes) p.push(`${c.name}: health must assert response content, not just a status`);
+    if (h && h.status_in !== undefined && !(Array.isArray(h.status_in) && h.status_in.length > 0 && h.status_in.every(Number.isInteger) && h.status_in.includes(h.status))) {
+      p.push(`${c.name}: health.status_in must be a non-empty list of integers that includes status`);
+    }
+    if (h && h.json_one_of !== undefined && !(h.json_one_of && typeof h.json_one_of === 'object' && !Array.isArray(h.json_one_of)
+      && Object.values(h.json_one_of).every((a) => Array.isArray(a) && a.length > 0 && a.every((x) => typeof x === 'string')))) {
+      p.push(`${c.name}: health.json_one_of must map a field to a non-empty list of strings`);
+    }
+    if (h && h.status_in !== undefined && !h.json_one_of && !h.json_equals) {
+      p.push(`${c.name}: health.status_in must be paired with json_one_of or json_equals so a non-200 still has to assert a recognized body`);
+    }
     if (c.kind === 'vite' && typeof c.vite_config !== 'string') p.push(`${c.name}: vite_config required`);
     if (c.name === 'herdrBroker' && (typeof c.lifecycle_token !== 'string' || typeof c.manifest !== 'string')) p.push('herdrBroker: lifecycle_token and manifest required');
   }

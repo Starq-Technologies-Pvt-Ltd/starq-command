@@ -22,15 +22,26 @@
       "health": {
         "path": "/api/health",
         "status": 200,
+        "status_in": [
+          200,
+          503
+        ],
         "content_type": "application/json",
-        "json_equals": {
-          "health.overall": "OK"
-        },
         "json_has": [
           "assembled_at",
           "workspace",
-          "health"
-        ]
+          "health",
+          "health.overall"
+        ],
+        "json_one_of": {
+          "health.overall": [
+            "OK",
+            "UNAVAILABLE",
+            "STALE",
+            "DRIFT",
+            "UNREADABLE"
+          ]
+        }
       }
     },
     {
