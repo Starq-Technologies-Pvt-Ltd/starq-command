@@ -6,7 +6,7 @@
 import { execFile } from 'node:child_process';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
-import { LeaseService } from './lease-service.ts';
+import { assertSafeTaskId, LeaseService } from './lease-service.ts';
 import { type WorktreeLease } from '../../src/schemas/lease.ts';
 
 export interface WorktreeProvisionResult {
@@ -46,6 +46,7 @@ export class WorktreeManager {
     worktreesDir?: string;
     branchName?: string;
   }): Promise<WorktreeProvisionResult> {
+    assertSafeTaskId(params.taskId);
     const parentDir = params.worktreesDir || path.join(params.repoPath, '.worktrees');
     const workspacePath = path.join(parentDir, `${params.taskId}-builder`);
     const branch = params.branchName || `starq/task/${params.taskId}`;
@@ -85,6 +86,7 @@ export class WorktreeManager {
     candidateSha: string;
     worktreesDir?: string;
   }): Promise<WorktreeProvisionResult> {
+    assertSafeTaskId(params.taskId);
     const parentDir = params.worktreesDir || path.join(params.repoPath, '.worktrees');
     const workspacePath = path.join(parentDir, `${params.taskId}-verifier`);
     const branch = `detached-at-${params.candidateSha.slice(0, 8)}`;
@@ -125,6 +127,7 @@ export class WorktreeManager {
     workspacePath: string,
     taskId?: string
   ): Promise<WorktreeCleanupResult> {
+    if (taskId !== undefined) assertSafeTaskId(taskId);
     if (!fs.existsSync(workspacePath)) {
       try {
         await this.execGit(['worktree', 'prune'], repoPath);

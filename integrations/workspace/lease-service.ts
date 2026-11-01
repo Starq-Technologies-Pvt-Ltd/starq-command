@@ -7,6 +7,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type WorktreeLease, type LeaseRole, isLeaseStale } from '../../src/schemas/lease.ts';
 
+/** A task id is interpolated into a directory name and a git ref. */
+const SAFE_TASK_ID = /^[A-Za-z0-9._-]+$/;
+
+export function assertSafeTaskId(taskId: unknown): asserts taskId is string {
+  if (typeof taskId !== 'string' || !SAFE_TASK_ID.test(taskId) || taskId.includes('..')) {
+    throw new Error('taskId rejected: it must be one path segment matching [A-Za-z0-9._-]+ and must not contain ".."');
+  }
+}
+
 export class LeaseService {
   private static readonly LEASE_FILENAME = '.worktree-lease';
 
@@ -23,6 +32,7 @@ export class LeaseService {
     candidateSha?: string;
     ttlSeconds?: number;
   }): WorktreeLease {
+    assertSafeTaskId(params.taskId);
     const leaseFile = path.join(params.workspacePath, this.LEASE_FILENAME);
     const ttl = params.ttlSeconds ?? 3600;
     const nowIso = new Date().toISOString();
