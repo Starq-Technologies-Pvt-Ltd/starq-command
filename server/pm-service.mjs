@@ -1124,7 +1124,7 @@ function orgWrite(fn) {
   }
 }
 
-function createProject(body) {
+function createProject(body, d = null) {
   only(body, ['actor', 'id', 'name', 'prefix', 'description']);
   handleField(body, 'actor', { required: true, allowUnassigned: false });
   const id = str(body, 'id', { min: 2, max: 40, required: true }).toLowerCase();
@@ -1133,16 +1133,18 @@ function createProject(body) {
   const prefix = str(body, 'prefix', { min: 2, max: 4, required: true }).toUpperCase();
   if (!/^[A-Z]{2,4}$/.test(prefix)) throw bad('prefix invalid.', ['prefix must be 2-4 letters']);
   const description = str(body, 'description', { max: 400 }) ?? '';
-  return tx((d) => {
+  const insert = (handle) => {
     if (getProjectRow(id)) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
-    if (d.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix)) {
+    if (handle.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix)) {
       throw new HttpError(409, 'PREFIX_EXISTS', `Prefix already in use: ${prefix}.`);
     }
-    d.prepare(
+    handle.prepare(
       'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
     ).run(id, name, prefix, description, nowIso());
     return { ...getProjectRow(id), hold: effectiveHold(getProjectRow(id)) };
-  });
+  };
+  if (d) return insert(d);
+  return tx((handle) => insert(handle));
 }
 
 function attention() {
