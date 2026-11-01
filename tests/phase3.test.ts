@@ -837,10 +837,17 @@ describe('Phase 3 — legacy floor invariants remain intact after surface expans
     expect(phaseShellSrc).toMatch(/PHASE \{phase\} · NOT YET AUTHORISED/);
   });
 
-  it('keeps all ten authorized Command navigation surfaces reachable', () => {
+  it('keeps every authorized Command navigation surface reachable and live', () => {
     const navIds = [...shellSrc.matchAll(/\bid: '([a-z0-9]+)'/g)].map((m) => m[1]!);
+    // The ten governance surfaces below are joined by the six Founder operating
+    // surfaces of the local operating mode (Founder directive, 31 Oct 2026).
+    // The invariant this guards is unchanged: every navigation entry must be
+    // live, so a surface can never be advertised before it is routed.
     expect(navIds.sort()).toEqual(
-      ['attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system', 'library', 'cortex', 'comms'].sort(),
+      [
+        'home', 'organization', 'workforce', 'projects', 'activity', 'records',
+        'attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system', 'library', 'cortex', 'comms',
+      ].sort(),
     );
     for (const id of navIds) {
       expect(shellSrc, `navigation surface ${id} must be live`).toMatch(

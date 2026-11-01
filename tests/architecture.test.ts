@@ -370,8 +370,17 @@ describe('Phase 2 boundaries', () => {
     const navIds = [...shellSrc.matchAll(/\bid: '([a-z0-9]+)'/g)].map((m) => m[1]!);
     // Keep the census aligned with the integrated Company OS surfaces. An
     // additional nav id requires its own route and operational capability.
+    //
+    // The first six are the Founder operating surfaces of the local operating
+    // mode (Founder directive, 31 Oct 2026): daily work comes first and the
+    // governance surfaces that follow stay reachable behind them. They are
+    // listed here because they are integrated and routed, which is exactly the
+    // bar this census exists to hold.
     expect(navIds.sort()).toEqual(
-      ['attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system', 'library', 'cortex', 'comms'].sort(),
+      [
+        'home', 'organization', 'workforce', 'projects', 'activity', 'records',
+        'attention', 'evidence', 'building', 'company', 'overview', 'studio', 'system', 'library', 'cortex', 'comms',
+      ].sort(),
     );
   });
 

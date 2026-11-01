@@ -480,15 +480,17 @@ export async function handleOpsRoutes(req, res, ctx) {
       prefix: body.prefix,
       description: body.description,
     };
-    const created = createProject(baseBody);
-    const updated = runDomain((d) => updateProjectRecord(d, created.id, {
-      owner,
-      status,
-      actor,
-      channel,
-      nowIso,
-      effectiveHold,
-    }));
+    const updated = runDomain((d) => {
+      const created = createProject(baseBody, d);
+      return updateProjectRecord(d, created.id, {
+        owner,
+        status,
+        actor,
+        channel,
+        nowIso,
+        effectiveHold,
+      });
+    });
     return (send(res, 201, updated, origin), true);
   }
 
