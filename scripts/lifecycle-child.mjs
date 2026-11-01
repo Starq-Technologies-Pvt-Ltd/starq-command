@@ -69,6 +69,27 @@ async function gracefulExit(why) {
   }
 }
 
+/**
+ * Every address this component is really listening on, from the server objects
+ * themselves. Returns [] before the component has bound, which is a truthful
+ * "not yet", never a guess.
+ */
+function boundAddresses() {
+  const servers = viteServer
+    ? [viteServer.httpServer]
+    : [componentModule?.server, componentModule?.lifecycleService?.server];
+  const out = [];
+  for (const s of servers) {
+    let a;
+    try { a = s?.address?.(); } catch { a = null; }
+    if (a && typeof a === 'object' && Number.isInteger(a.port)) {
+      out.push({ address: a.address, port: a.port, family: a.family ?? null });
+    }
+  }
+  // Stable order so the MAC is reproducible for the same set of addresses.
+  return out.sort((x, y) => (x.port - y.port) || String(x.address).localeCompare(String(y.address)));
+}
+
 const control = net.createServer((socket) => {
   let buf = '';
   socket.on('data', (d) => {
@@ -82,6 +103,29 @@ const control = net.createServer((socket) => {
     if (msg.op === 'identity') {
       socket.end(`${JSON.stringify({ name: NAME, instance_id: INSTANCE, pid: process.pid, nonce,
         mac: mac(TOKEN, 'identity', nonce, process.pid, INSTANCE) })}\n`);
+      return;
+    }
+    /*
+      Where is this component ACTUALLY listening?
+
+      Readiness used to require a matching LISTENING row from the OS TCP table,
+      owned by the launched pid. On this machine that table does not reliably
+      report loopback listeners even while a service is demonstrably serving
+      HTTP, so a healthy child could never be marked ready and `start` failed at
+      the first component whose row was missing.
+
+      The component itself knows the answer: `server.address()` is the kernel's
+      reply to its own bind. We already have an authenticated channel to it, so
+      we ask it here instead of asking the OS about it. The addresses are folded
+      into the MAC, so a process that does not hold the launch token can neither
+      answer nor alter the answer.
+    */
+    if (msg.op === 'bound') {
+      const addresses = boundAddresses();
+      socket.end(`${JSON.stringify({
+        name: NAME, instance_id: INSTANCE, pid: process.pid, nonce, addresses,
+        mac: mac(TOKEN, `bound|${JSON.stringify(addresses)}`, nonce, process.pid, INSTANCE),
+      })}\n`);
       return;
     }
     if (msg.op === 'shutdown') {

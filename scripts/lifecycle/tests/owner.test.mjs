@@ -113,6 +113,18 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
       const p = pipes.get(child.pid);
       return p && p.instance === child.instance_id && p.name === child.name ? { ok: true, detail: 'proven' } : { ok: false, detail: 'pipe mismatch' };
     },
+    // Readiness now asks the proven instance where it is bound, so the
+    // simulated world answers from the listeners it simulated at spawn.
+    proveBoundAddress: async (child) => {
+      const p = pipes.get(child.pid);
+      if (!p || p.instance !== child.instance_id || p.name !== child.name) {
+        return { ok: false, supported: true, addresses: [], detail: 'pipe mismatch' };
+      }
+      const addresses = listeners
+        .filter((l) => l.pid === child.pid)
+        .map((l) => ({ address: '127.0.0.1', port: l.port, family: 'IPv4' }));
+      return { ok: true, supported: true, addresses, detail: 'simulated bound' };
+    },
     requestShutdown: async (child) => {
       calls.shutdown.push(child.name);
       if ((behaviour[child.name] ?? 'exit') === 'exit') kill(child.pid);
@@ -842,17 +854,29 @@ test('START: empty listener rows through the health deadline fail closed and rol
           if (opts.env.STARQ_LC_NAME === 'data') dataPid = child.pid;
           return child;
         },
+        /*
+          "data never bound" is now expressed where readiness actually reads it:
+          the proven instance's own report. Filtering the OS table alone no
+          longer means anything, because its silence is no longer evidence —
+          that is the defect this contract change fixes. The component still
+          has to fail closed, which is what this test proves.
+        */
         listListeners: async () => {
           const rows = await w.deps.listListeners();
           if (dataPid == null) return rows;
           return rows.filter((r) => r.port !== PORTS.data);
+        },
+        proveBoundAddress: async (child) => {
+          const proof = await w.deps.proveBoundAddress(child);
+          if (child.pid !== dataPid) return proof;
+          return { ...proof, addresses: proof.addresses.filter((a) => a.port !== PORTS.data) };
         },
       },
     });
     const r = await owner.start();
     assert.equal(r.result, RESULT.START_FAILED);
     assert.equal(r.failure.component, 'data');
-    assert.match(r.failure.error, /port 5177 listener is not owned by pid \d+ \(none\)/);
+    assert.match(r.failure.error, /does not report itself bound to port 5177/);
     assert.deepEqual(w.calls.forceKill, []);
     const st = readState(w.statePath).state;
     assert.equal(st.state, 'START_FAILED');
@@ -881,7 +905,7 @@ test('START: a foreign PID on the configured port is a hard failure', async () =
     const r = await owner.start();
     assert.equal(r.result, RESULT.START_FAILED);
     assert.equal(r.failure.component, 'data');
-    assert.match(r.failure.error, /port 5177 listener is not owned by pid \d+ \(\?:5177<-pid 4242\)/);
+    assert.match(r.failure.error, /port 5177 listener is owned by another process \(\?:5177<-pid 4242\)/);
     assert.deepEqual(w.calls.forceKill, []);
     const st = readState(w.statePath).state;
     assert.equal(st.state, 'START_FAILED');

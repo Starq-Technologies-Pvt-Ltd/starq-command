@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE, COMMAND_LOCAL_PROFILE, COMMAND_LOCAL_REQUIRED } from './config.mjs';
 import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from './state.mjs';
 import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
-import { proveInstance, requestShutdown } from './control.mjs';
+import { proveInstance, proveBoundAddress, boundOnPort, requestShutdown } from './control.mjs';
 import { checkHealth } from './health.mjs';
 import { buildHealthPreflight, buildRepositoryPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
@@ -103,6 +103,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       return child;
     }),
     proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),
+    proveBoundAddress: deps.proveBoundAddress ?? ((child) => proveBoundAddress(child)),
     requestShutdown: deps.requestShutdown ?? ((child) => requestShutdown(child)),
     gracefulStopContained: deps.gracefulStopContained ?? ((child, graceMs) => child.containment
       ? jobs().stop(child.containment, { force: false, graceMs })
@@ -478,20 +479,43 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     }
     if (!proof.ok) throw new Error(`${c.name}: instance not proven: ${proof.detail}`);
 
+    /*
+      READINESS: ask the component, not the OS.
+
+      This used to require a LISTENING row from the OS TCP table owned by the
+      launched pid. On this machine that table does not reliably report loopback
+      listeners even while the service is answering HTTP, so a healthy child
+      could never be marked ready and `start` failed at the first component
+      whose row was missing.
+
+      Ownership is now established the way it was always meant to be: the child
+      is proven over the MAC-authenticated control pipe (above), and that same
+      proven instance reports the addresses its own server objects are bound to.
+      Only a process holding the launch token can answer, so a port claimed this
+      way is claimed by OUR child by construction.
+
+      The OS table is still consulted, but only as a NEGATIVE signal: if it does
+      report a row on this port owned by someone else, that is a real conflict
+      and still refuses. Its silence is no longer treated as evidence.
+    */
     deadline = until(cfg.timeouts_ms.health);
     let health;
-    let rows = [];
+    let bound = { ok: false, supported: true, addresses: [], detail: 'not yet asked' };
     const summarizeListeners = (list) => list.map((r) => `${r.address ?? '?'}:${r.port}<-pid ${r.pid}`).join(', ') || 'none';
-    const ownedByLaunch = (list) => list.length > 0 && list.every((l) => l.pid === rec.pid);
-    const foreignOwner = (list) => list.some((l) => l.pid !== rec.pid);
+    const foreignOwner = (list) => list.some((l) => l.pid !== rec.pid && l.pid !== 0);
+    const confirmsPort = () => bound.ok && boundOnPort(bound.addresses, c.port);
     for (;;) {
       health = await d.checkHealth(cfg.host, c);
       if (health.ok) {
-        rows = (await d.listListeners()).filter((l) => l.port === c.port);
+        const rows = (await d.listListeners().catch(() => [])).filter((l) => l.port === c.port);
         if (foreignOwner(rows)) {
-          throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
+          throw new Error(`${c.name}: port ${c.port} listener is owned by another process (${summarizeListeners(rows)})`);
         }
-        if (ownedByLaunch(rows)) break;
+        bound = await d.proveBoundAddress(rec);
+        if (confirmsPort()) break;
+        // A child host that predates the bound op cannot answer; fall back to
+        // the health contract alone rather than refusing a working component.
+        if (!bound.supported) break;
       }
       if (Date.now() >= deadline) break;
       const still = osVerdict(rec, (await d.inspect([rec.pid])).get(rec.pid), cfg.node);
@@ -499,11 +523,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       await d.sleep(d.pollMs);
     }
     if (!health.ok) throw new Error(`${c.name}: health contract not met: ${health.detail}`);
-    if (!ownedByLaunch(rows)) {
-      throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
+    if (bound.supported && !confirmsPort()) {
+      throw new Error(`${c.name}: the proven instance does not report itself bound to port ${c.port} (${bound.detail})`);
     }
     rec.status = 'READY';
-    doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), { name: c.name, port: c.port, ready: true, detail: health.detail }];
+    rec.bound_addresses = bound.ok ? bound.addresses : null;
+    doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), {
+      name: c.name,
+      port: c.port,
+      ready: true,
+      detail: health.detail,
+      ownership: bound.ok ? 'control-pipe' : 'health-contract-only',
+    }];
     appendEvent(doc, 'child.ready', { name: c.name }); save(doc);
   }
 
