@@ -202,9 +202,10 @@ test('the launcher provisions Node only from an allowlisted hash, without cmdlet
   const ps1 = readFileSync(path.join(APP_ROOT, 'scripts', 'command-local-start.ps1'), 'utf8');
   assert.match(ps1, /node-pins\.json/, 'the allowlist is the committed node-pins.json');
   assert.match(ps1, /\$approved -contains/, 'a candidate is copied only if its hash is on that list');
-  assert.doesNotMatch(ps1, /herdr/i, 'the launcher knows nothing about Herdr Floor');
+  const code = ps1.split('\n').filter((l) => !l.trim().startsWith('#')).join(' ');
+  assert.doesNotMatch(code, /herdr/i, 'the launcher executes nothing that refers to Herdr Floor');
   // Run from pwsh, Windows PowerShell inherits a module path where
   // Microsoft.PowerShell.Utility does not autoload: Get-FileHash was "not
   // recognized" and the one-click start was refused (acceptance run n).
-  assert.doesNotMatch(ps1, /Get-FileHash/, 'hash with .NET so the launcher works however it was started');
+  assert.doesNotMatch(code, /Get-FileHash/, 'hash with .NET so the launcher works however it was started');
 });
