@@ -14,3 +14,8 @@
 # one set of bytes on every platform and in every checkout.
 board/*.json -text
 board/snapshots/** -text
+
+# JobGuardian.cs is hash-pinned by runtime/containment/guardian-build.json.
+# A default Windows checkout (core.autocrlf=true) otherwise rewrites LF to CRLF
+# and the containment gate rejects the changed source. -text keeps the committed bytes.
+runtime/containment/JobGuardian.cs -text
