@@ -33,6 +33,7 @@ import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHe
 import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
 import { provablyGoneAcrossBoot } from './boot-closeout.mjs';
+import { APP_ROOT, localContainmentOptions, localNativeContainment, resolveRootPid } from './containment/local-gate.mjs';
 
 const [herdrStatusComponent, herdrLauncherComponent, herdrContainmentComponent] = await Promise.all([
   importExternalComponent('herdr-floor', 'src/herdr-status.mjs'),
@@ -131,9 +132,15 @@ export function createContainmentAccessors({ containmentOptions: options, native
 }
 
 export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {}, tier = null }) {
+  // The standalone profile contains its children with Command's OWN package
+  // (runtime/containment) and Node runtime; only the full online profile still
+  // uses the Herdr Floor companion. Herdr Floor is not needed to start Command.
+  const isLocalProfile = () => { try { return cfgOf().profile?.name === COMMAND_LOCAL_PROFILE; } catch { return false; } };
   const containment = createContainmentAccessors({
-    containmentOptions: deps.containmentOptions ?? containmentOptions,
-    nativeContainment: deps.nativeContainment ?? nativeContainment,
+    containmentOptions: deps.containmentOptions ?? ((ws, sd, o) => (isLocalProfile()
+      ? localContainmentOptions(APP_ROOT, sd, { ...o, nodePath: cfgOf().node })
+      : containmentOptions(ws, sd, o))),
+    nativeContainment: deps.nativeContainment ?? ((o) => (isLocalProfile() ? localNativeContainment(o) : nativeContainment(o))),
     resolve: () => ({ workspace: cfgOf().workspace_root, stateDir: runtimeDir, tier: effectiveTier() }),
   });
   const jobs = containment.forLaunch;       // launch only: proves a new child can be contained
@@ -147,7 +154,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     listListeners: deps.listListeners ?? (() => listListeners(listenerOptions)),
     spawnChild: deps.spawnChild ?? (async (exe, args, opts, reserve) => {
       const child = jobs().launch({ argv: [exe, ...args], ...opts }, reserve);
-      if (!await resolvePid(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
+      if (!await (isLocalProfile() ? resolveRootPid : resolvePid)(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
       return child;
     }),
     proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),

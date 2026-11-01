@@ -58,6 +58,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveWorkspace } from '../../server/paths.mjs';
+import { selectStrays } from './stray-processes.mjs';
+import { verifyNodeRuntime } from '../lifecycle/containment/local-gate.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GIT = fs.existsSync('C:\\Program Files\\Git\\cmd\\git.exe') ? 'C:\\Program Files\\Git\\cmd\\git.exe' : 'git';
@@ -127,39 +129,15 @@ function build() {
     fs.copyFileSync(src, dest);
   }
 
-  // Read-only companions and dependencies, reached through junctions so nothing
-  // is duplicated and the real ones are only ever read.
+  // Only the installed npm dependencies are reached through a junction (nothing is
+  // duplicated and the real ones are only ever read). There is deliberately NO
+  // Herdr Floor, NO starq-lifecycle package and NO runtime/node here: Command must
+  // start from its own tracked files (runtime/containment) and provision its own
+  // Node runtime on first run, exactly as it does on a machine without Herdr Floor.
   const realOps = path.join(real(), '00_STARQ_HQ', 'operations');
-  const wsOps = path.join(WS, '00_STARQ_HQ', 'operations');
-  const link = (target, at) => {
-    fs.mkdirSync(path.dirname(at), { recursive: true });
-    if (!fs.existsSync(at)) fs.symlinkSync(target, at, 'junction');
-  };
-  link(path.join(realOps, 'starq-command', 'node_modules'), path.join(APP(), 'node_modules'));
-  link(path.join(realOps, 'herdr-floor'), path.join(wsOps, 'herdr-floor'));
-  fs.mkdirSync(path.join(WS, '_scratch', 'STARQ-COMMAND-DEVELOPMENT-READINESS-IMPLEMENTATION-2026-10-27'), { recursive: true });
-
-  // Containment pins. The guardian build record and binaries are copied
-  // byte-for-byte. The compatibility manifest declares the 8 runtime dependencies
-  // by ABSOLUTE path with their independently recorded hashes, so it is REBASED:
-  // every hash is kept exactly as recorded, only the paths move to this workspace.
-  // The gate then compares the real declared hashes with the real bytes (reached
-  // through the junction). Nothing is re-hashed or regenerated.
-  const realNative = path.join(realOps, 'starq-lifecycle', 'native');
-  const wsNative = path.join(wsOps, 'starq-lifecycle', 'native');
-  fs.mkdirSync(wsNative, { recursive: true });
-  for (const f of ['guardian-build.json', 'JobGuardian.exe', 'JobGuardian.cs']) fs.copyFileSync(path.join(realNative, f), path.join(wsNative, f));
-  const manifest = JSON.parse(fs.readFileSync(path.join(realNative, 'windows-job-compatibility.json'), 'utf8'));
-  const realFloor = path.join(realOps, 'herdr-floor').toLowerCase();
-  const wsFloor = path.join(wsOps, 'herdr-floor');
-  let rebased = 0;
-  for (const d of manifest.dependencies ?? []) {
-    if (d.path && path.resolve(d.path).toLowerCase().startsWith(realFloor)) {
-      d.path = wsFloor + path.resolve(d.path).slice(realFloor.length);
-      rebased += 1;
-    }
-  }
-  fs.writeFileSync(path.join(wsNative, 'windows-job-compatibility.json'), JSON.stringify(manifest, null, 2));
+  const nm = path.join(APP(), 'node_modules');
+  fs.mkdirSync(path.dirname(nm), { recursive: true });
+  if (!fs.existsSync(nm)) fs.symlinkSync(path.join(realOps, 'starq-command', 'node_modules'), nm, 'junction');
 
   // workspace_root IS the disposable workspace: it is what every child is told.
   const cfgPath = path.join(APP(), PROFILE_CONFIG);
@@ -172,7 +150,7 @@ function build() {
     const src = new DatabaseSync(SEED, { readOnly: true });
     try { src.exec(`VACUUM INTO '${DB().split(path.sep).join('/')}'`); } finally { src.close(); }
   }
-  pass('build', `workspace ${WS} from ${sha.slice(0, 7)}, ${tracked.length} tracked files, ${rebased} containment pins rebased with their recorded hashes${SEED ? ', seeded from a read-only copy' : ', empty database'}`);
+  pass('build', `workspace ${WS} from ${sha.slice(0, 7)}, ${tracked.length} tracked files, no Herdr Floor, no lifecycle package, no pre-provisioned runtime${SEED ? ', seeded from a read-only copy' : ', empty database'}`);
   return sha;
 }
 
@@ -240,11 +218,14 @@ async function proveIsolation() {
   }
   must(notCopy.length === 0, 'isolation: every component launches from the disposable copy', notCopy.join(' | ') || `${cfg.components.length} components`);
 
-  // The containment gate must resolve for THIS workspace, using the real pins.
-  const gateUrl = pathToFileURL(path.join(real(), '00_STARQ_HQ', 'operations', 'herdr-floor', 'src', 'containment-config.mjs')).href;
-  const { developmentContainmentGate } = await import(gateUrl);
-  const gate = developmentContainmentGate(WS);
-  must(gate.resolved === true, 'containment: the development-tier gate resolves for the disposable workspace', String(gate.detail).slice(0, 220));
+  // Herdr Floor and the separate lifecycle package must be ABSENT from this
+  // environment - not merely unused - and nothing may point at them.
+  const wsOps = path.join(WS, '00_STARQ_HQ', 'operations');
+  const present = ['herdr-floor', 'starq-lifecycle'].filter((n) => fs.existsSync(path.join(wsOps, n)));
+  must(present.length === 0, 'standalone: Herdr Floor and the lifecycle package are absent from the workspace', present.join(', ') || 'neither exists');
+  const hinted = Object.keys(process.env).filter((k) => /^STARQ_(HERDR|LIFECYCLE)/i.test(k) || /^HERDR_/i.test(k));
+  must(Object.keys(cleanEnv()).filter((k) => /herdr|starq_lifecycle/i.test(k)).length === 0, 'standalone: no Herdr/lifecycle environment hint reaches the launcher', hinted.length ? `ignored in this run: ${hinted.join(', ')}` : 'none set');
+  must(!fs.existsSync(path.join(APP(), 'runtime', 'node')), 'standalone: the Node runtime is not pre-provisioned (the one-click launcher must do it)', 'runtime/node absent before first start');
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -260,7 +241,12 @@ const cleanEnv = () => {
 };
 
 function nodeExe() {
-  return JSON.parse(fs.readFileSync(path.join(APP(), PROFILE_CONFIG), 'utf8')).node;
+  // The profile names Command's own runtime relative to the config. Before the
+  // first start it has not been provisioned yet, so pre-start probes use the Node
+  // running this harness (they only resolve paths; they start nothing).
+  const named = JSON.parse(fs.readFileSync(path.join(APP(), PROFILE_CONFIG), 'utf8')).node;
+  const abs = path.isAbsolute(named) ? named : path.resolve(APP(), named);
+  return fs.existsSync(abs) ? abs : process.execPath;
 }
 
 function lifecycle(sub, extra = []) {
@@ -338,12 +324,17 @@ async function assertPortsFree(label) {
   return held.length === 0;
 }
 
-/** Any process at all whose command line names this disposable workspace. Read-only; never used to signal. */
+/**
+ * Any process at all whose command line names this disposable workspace, except
+ * this harness itself (its pid and the chain of processes that started it) and the
+ * scan's own probe. Excluded by identity, never by image name: a surviving Command
+ * child is a node.exe and must still be found. Read-only; never used to signal.
+ */
 function strayProcesses() {
-  const needle = WS.toLowerCase().replace(/'/g, "''");
-  const script = `Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains('${needle}') } | ForEach-Object { "$($_.ProcessId):$($_.Name)" }`;
-  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true });
-  return String(r.stdout ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const script = "$rows = @(Get-CimInstance Win32_Process | ForEach-Object { [pscustomobject]@{ pid = [int]$_.ProcessId; ppid = [int]$_.ParentProcessId; name = $_.Name; cmd = $_.CommandLine } }); [Console]::Out.Write((ConvertTo-Json -Compress -Depth 3 -InputObject ([pscustomobject]@{ probe = $PID; rows = $rows })))";
+  const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8', windowsHide: true, maxBuffer: 64 << 20 });
+  let snap; try { snap = JSON.parse(String(r.stdout)); } catch { throw new Error('process table unreadable; refusing to claim there are no stray processes'); }
+  return selectStrays(snap.rows, { workspace: WS, harnessPid: process.pid, probePid: snap.probe }).map((p) => `${p.pid}:${p.name}`);
 }
 
 async function verifyRunning(label, baseline) {
@@ -455,6 +446,12 @@ async function runFull() {
     } finally { fs.closeSync(batFd); }
     if (bat.status !== 0) console.log(fs.readFileSync(batOut, 'utf8').slice(0, 1800));
     must(bat.status === 0, 'one click: Start-Command.bat exits 0', `exit=${bat.status} in ${Date.now() - t0}ms`);
+    // The launcher had to provision Command's own Node runtime, and it must be an
+    // approved build (the containment gate re-checks the same pin on every start).
+    const ownNode = path.join(APP(), 'runtime', 'node', 'node.exe');
+    let approvedNode = null; let approvedWhy = '';
+    try { approvedNode = verifyNodeRuntime(ownNode, APP()); } catch (e) { approvedWhy = e.message; }
+    check(Boolean(approvedNode), "standalone: the one-click launcher provisioned Command's own approved Node runtime", approvedNode ? `runtime/node/node.exe ${approvedNode.version}` : approvedWhy);
     await verifyRunning('after one-click start', baseline);
     const firstKids = children();
 
@@ -548,8 +545,7 @@ async function main() {
     // must never be the thing that decides whether a link is followed.
     const links = [
       path.join(APP(), 'node_modules'),
-      path.join(WS, '00_STARQ_HQ', 'operations', 'herdr-floor'),
-    ]; // starq-lifecycle/native is a real directory of copies, deleted with the rest
+    ]; // everything else in the workspace is a real copy, deleted with the rest
     const targets = links.map((l) => { try { return fs.realpathSync(l); } catch { return null; } });
     for (const l of links) {
       if (fs.existsSync(l) && fs.lstatSync(l).isSymbolicLink()) fs.unlinkSync(l);

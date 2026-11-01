@@ -127,6 +127,14 @@ export function loadConfig(file, { checkFiles = true } = {}) {
   if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) throw new ConfigError([`${file} has a UTF-8 BOM; it must be BOM-free`]);
   let doc;
   try { doc = JSON.parse(raw.toString('utf8')); } catch (err) { throw new ConfigError([`${file} is not valid JSON: ${err.message}`]); }
+  // The standalone profile runs under a Node runtime Command provisions for itself
+  // (runtime/node), named relative to this file so the install can live anywhere.
+  // Resolved here, so every consumer still sees the absolute path it has always
+  // been given, and the exe identity checks compare against exactly that file.
+  if (doc?.profile?.name === COMMAND_LOCAL_PROFILE && typeof doc.node === 'string' && doc.node && !path.isAbsolute(doc.node)
+    && !doc.node.split(/[\\/]/).includes('..')) { // a climbing path is left as written, for validation to refuse
+    doc.node = path.resolve(path.dirname(file), doc.node);
+  }
   const problems = validateConfig(doc, { checkFiles });
   if (problems.length) throw new ConfigError(problems);
   const sha256 = createHash('sha256').update(raw).digest('hex');
@@ -140,7 +148,11 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
   const observationOnly = doc.profile?.name === OBSERVATION_PROFILE;
   const localProfile = doc.profile?.name === COMMAND_LOCAL_PROFILE;
   if (typeof doc.workspace_root !== 'string' || !path.isAbsolute(doc.workspace_root)) p.push('workspace_root must be an absolute path');
-  if (typeof doc.node !== 'string' || !path.isAbsolute(doc.node)) p.push('node must be an absolute path');
+  // Only the standalone profile may name its runtime relative to the config file
+  // (loadConfig resolves it); it must stay inside the install, never climb out.
+  const relativeNodeOk = localProfile && typeof doc.node === 'string' && doc.node !== ''
+    && !path.isAbsolute(doc.node) && !doc.node.split(/[\\/]/).includes('..');
+  if (typeof doc.node !== 'string' || (!path.isAbsolute(doc.node) && !relativeNodeOk)) p.push('node must be an absolute path');
   if (doc.host !== '127.0.0.1') p.push('host must be 127.0.0.1');
   for (const k of ['identity', 'health', 'graceful_exit', 'broker_request', 'agent_stop']) {
     if (!Number.isInteger(doc.timeouts_ms?.[k]) || doc.timeouts_ms[k] <= 0) p.push(`timeouts_ms.${k} must be a positive integer`);

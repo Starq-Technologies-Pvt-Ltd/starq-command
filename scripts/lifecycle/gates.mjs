@@ -6,6 +6,7 @@ import {
   DEVELOPMENT_TIER, OBSERVATION_COMPONENTS, OBSERVATION_PROFILE, OBSERVATION_RUNTIME_DIRECTORY,
   OBSERVATION_SHARED_LOCK, validateConfig,
 } from './config.mjs';
+import { APP_ROOT, localDevelopmentGate, localReleaseGate } from './containment/local-gate.mjs';
 
 const [starqLifecycle, herdrFloor] = await Promise.all([
   importExternalComponent('starq-lifecycle', 'runtime-policy.mjs'),
@@ -287,14 +288,14 @@ export function evaluateCommandLocalWorkspace(workspace, cfg, { exists = existsS
 export function readCommandLocalGates(workspace, cfg, {
   exists = existsSync,
   checkContainment = null,
-  checkDevelopmentContainment = developmentContainmentGate,
-  checkReleaseContainment = compatibilityGate,
+  checkDevelopmentContainment = (_ws, c) => localDevelopmentGate(APP_ROOT, { nodePath: c?.node }),
+  checkReleaseContainment = () => localReleaseGate(APP_ROOT),
 } = {}) {
   const containment = checkContainment
     ?? (cfg?.profile?.tier === DEVELOPMENT_TIER ? checkDevelopmentContainment : checkReleaseContainment);
   return [
     { kind: 'G-WORKSPACE-LOCAL', ...evaluateCommandLocalWorkspace(workspace, cfg, { exists }) },
-    { kind: 'G-CONTAINMENT', ...containment(workspace) },
+    { kind: 'G-CONTAINMENT', ...containment(workspace, cfg) },
   ];
 }
 

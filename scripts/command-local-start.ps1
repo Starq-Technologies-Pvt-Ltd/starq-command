@@ -26,10 +26,34 @@ try {
   if ($config.profile.name -ne 'command-local/v1' -or $config.host -ne '127.0.0.1') {
     throw 'command-local lifecycle configuration identity or host pin is invalid'
   }
+  # Command runs under its own Node runtime (runtime\node), named relative to the
+  # config so the install can live anywhere. Nothing from Herdr Floor is needed.
   $node = [string]$config.node
-  if (-not [System.IO.Path]::IsPathRooted($node) -or -not (Test-Path -LiteralPath $node -PathType Leaf)) {
-    throw 'configured Node runtime is missing or is not an absolute file path'
+  if (-not [System.IO.Path]::IsPathRooted($node)) { $node = [System.IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $configPath) $node)) }
+
+  # First run: provision runtime\node from an installed Node, but ONLY a build
+  # whose SHA-256 is on the committed allowlist; the containment gate re-checks the
+  # copy on every start. An unapproved Node is refused, never copied.
+  if (-not (Test-Path -LiteralPath $node -PathType Leaf)) {
+    $pinsPath = Join-Path $PSScriptRoot '..\runtime\containment\node-pins.json'
+    $approved = @((Get-Content -LiteralPath $pinsPath -Raw | ConvertFrom-Json).runtimes | ForEach-Object { ([string]$_.sha256).ToLowerInvariant() })
+    $candidates = @()
+    foreach ($cmd in @(Get-Command node.exe -All -ErrorAction SilentlyContinue)) { $candidates += $cmd.Source }
+    foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, (Join-Path $env:LOCALAPPDATA 'Programs'))) {
+      if ($root) { $candidates += (Join-Path $root 'nodejs\node.exe') }
+    }
+    $source = $null
+    foreach ($c in ($candidates | Where-Object { $_ } | Select-Object -Unique)) {
+      if ((Test-Path -LiteralPath $c -PathType Leaf) -and ($approved -contains (Get-FileHash -LiteralPath $c -Algorithm SHA256).Hash.ToLowerInvariant())) { $source = $c; break }
+    }
+    if (-not $source) {
+      throw ("no approved Node runtime found to provision runtime\node (approved SHA-256: {0}). Install an approved Node.js build or copy one to {1}" -f ($approved -join ', '), $node)
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $node) | Out-Null
+    Copy-Item -LiteralPath $source -Destination $node
+    Write-Host "Provisioned Command's Node runtime from $source"
   }
+  if (-not (Test-Path -LiteralPath $node -PathType Leaf)) { throw 'configured Node runtime is missing' }
   $cli = Join-Path $PSScriptRoot 'command-lifecycle.mjs'
   if (-not (Test-Path -LiteralPath $cli -PathType Leaf)) { throw 'lifecycle owner entrypoint is missing' }
 
