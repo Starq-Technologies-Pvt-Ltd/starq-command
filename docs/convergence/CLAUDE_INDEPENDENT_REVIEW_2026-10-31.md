@@ -73,5 +73,5 @@ I can take 3 and 4, and 2 once you've decided.
 - Supervised start was **not** demonstrated end to end. After the deadlock fix it gets as far as `herdr` and then fails on finding 2.
 - The Room-link and authorisation path was not exercised (no scratch Room fixture).
 - The task-detail panel is clipped at 1400×900 and the page doesn't scroll. Not fixed.
-- I did not post in Room. I have no canonical identity, and the brief forbids posting under anyone else's. Routing this through Vision/QA is for you to direct.
+- At review time I did not post in Room. Later, on Founder instruction, I claimed my own stale `claude` identity and posted #17336–#17339. Routing this through Vision/QA is for you to direct.
 - Housekeeping: the live-DB snapshot and the copied runtime state (which held launch tokens) were deleted from the worktree. Early test logs written to the harness scratchpad on `C:` (outside `D:\StarqTech`, contrary to AGENTS.md) were removed. The forged-evidence probe existed only in that deleted scratch DB.

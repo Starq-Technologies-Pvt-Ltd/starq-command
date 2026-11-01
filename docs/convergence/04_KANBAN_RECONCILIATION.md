@@ -95,3 +95,46 @@ CV-V0 ─┬─► CV-C1 (T1) ─► CV-C1b ─► CV-C1c ─┐
        └─► CU5, AG5 (independent)            │
                                    CV-V2 ◄───┘ (all trains)
 ```
+
+## E. Open GitHub pull requests (added 31 Oct 2026, after the first version of this plan missed them)
+
+Checked by a read-only test merge (`git merge-tree`) against both `main` and the snapshot branch. **All five carry work that is in neither**, so none is a duplicate to delete. They predate the convergence decision and must be brought into it.
+
+| PR | Branch → base | Content | Disposition | Owner of the follow-up |
+|---|---|---|---|---|
+| #4 | `codex/pm-client-resilience-20261029` → `main` | `pm-client.ts` 5 s timeout, TIMEOUT state, capped GET retries (+206-line test) | **Keep.** Fold into CV-CU5. Rebase onto the convergence base; touches `pm-client.ts` below Claude's lines 1–40 | Cursor (CV-CU5), reviewer command-frontend |
+| #5 | `pm-portfolio-convergence-20261028` → `main` | 19 files: repository status backend, ERP roadmap freshness, board/portfolio fixes, nexus-fidelity, **a JobGuardian empty-recovery change in `scripts/lifecycle/owner.mjs`** | **Keep, review before any merge.** Its recovery change overlaps CV-C1 (cross-boot closeout) and must be reconciled with it. Re-base onto the convergence base and re-target there, not `main` | Vision (split), command-runtime reviews the `owner.mjs` part with Claude |
+| #6 | `deadpool/wsl-command-probe-20261030` → #5 | WSL-side health probe (2 files) | **Defer (archive).** The Founder's scope requires no WSL. Preserve as an archive tag plus bundle, then close | Vision / Founder |
+| #7 | `ag/pm-task-artifacts-20261030` → #5 | Persists task repository artifacts (branch/commit/PR links) — useful for records. **Also tightens the start gate** to a ROOT_GENESIS Room record naming the task | **Split.** The gate hunk is superseded by Founder decision D2 (ungated start) and conflicts with `6acde9e`, so drop it. Keep the artifact persistence as part of CV-AG3 | Antigravity (CV-AG3), reviewer command-backend |
+| #8 | `vision/pm-command-actions-20261030` → #5 | Daily action summary on the portfolio (2 files) | **Keep.** Input to the Founder Home (CV-CU1) | Vision → Cursor (CV-CU1) |
+| #9 | `claude/command-convergence` → snapshot | Claude's T1 candidate + this plan | **Merged** into `review/command-working-snapshot-20261031` by the Founder's account on 31 Oct 2026 17:58 UTC (`2746c90` → `fb3cd4f`). Independent QA review of T1 is still required before anything reaches `main` | command-qa |
+
+Note on the base: the snapshot branch now points at `fb3cd4f`, which includes Claude's T1 commits. New convergence branches should start from `fb3cd4f`. `2746c90` remains the pre-candidate reference point.
+
+## F. GitHub cleanup applied (31 Oct 2026, at the Founder's direction)
+
+The Founder wants open PRs and branches to show only active work. Nothing was lost; every unfinished line of work was preserved before removal.
+
+**Archived, then removed** (9 branches with commits found nowhere else). Each is kept as a tag on GitHub and in a verified bundle at `D:\StarqTech\Archives\starq-command\branch-archive-20261031.bundle` (sha256 `6774b3b6e66b344e2bec2c0bcccf60d251a0ac3f6f36911f4843e147e51f56c4`):
+
+| Tag | Commit | Was | Disposition (§E) |
+|---|---|---|---|
+| `archive/codex/pm-client-resilience-20261029` | d2c3ecf | PR #4 | Keep → CV-CU5 |
+| `archive/pm-portfolio-convergence-20261028` | c3427aa | PR #5 | Keep, review; reconcile `owner.mjs` with CV-C1 |
+| `archive/deadpool/wsl-command-probe-20261030` | a427743 | PR #6 | Deferred (no-WSL scope) |
+| `archive/ag/pm-task-artifacts-20261030` | ccd2a6c | PR #7 | Split: artifacts → CV-AG3; drop the stricter start gate |
+| `archive/vision/pm-command-actions-20261030` | f34a4aa | PR #8 | Keep → CV-CU1 |
+| `archive/codex/erp-maturity-display-20261029` | 44e1e59 | branch, no PR | Review (ERP display; ERP is on hold under DEC-100) |
+| `archive/codex/pm-provenance-accuracy-20261029` | 869f4aa | branch, no PR | Review with CV-AG3 |
+| `archive/p0-reconcile-recovery-20261026` | d717d5c | branch, 13 commits | Review; pre-convergence recovery work |
+| `archive/active-tree-baseline-20261026` | f2e05cf | branch, 1 commit | Review; pre-convergence baseline |
+
+PRs #4–#8 were closed with a comment naming their tag and disposition.
+
+**Removed with nothing to preserve** (already fully contained in `main`): `backup/pre-merge/pr-3-command-convergence-20261028-4622445`, `command-convergence-20261028`, `command-takeover-20261027`, `moc-pm-projection-recovery-20261026`.
+
+**Remaining on GitHub:** `main` (the master copy the Founder's app is built from), `review/command-working-snapshot-20261031` (convergence base), `claude/command-convergence` (Claude's active work).
+
+**To resume any archived line:** `git push origin refs/tags/archive/<name>:refs/heads/<name>`, then reopen its PR. Local worktrees for these branches on the laptop were not touched.
+
+**Attribution note:** the repository's shared `.git/config` sets `user.name=Deadpool`, so commits made from this repository or its worktrees without an explicit author are labelled "Deadpool" regardless of who made them. Claude's commits `2664894`…`2ee3233` were made by Claude Code (on the Founder's behalf), not by Deadpool. Later Claude commits set the author explicitly. Fixing the shared config is Vision's call, because it affects every agent.

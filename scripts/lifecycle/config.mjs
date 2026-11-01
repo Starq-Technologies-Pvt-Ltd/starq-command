@@ -16,6 +16,16 @@ export const DEVELOPMENT_TIER = 'development';
 export const RELEASE_TIER = 'release';
 export const OBSERVATION_PROFILE = 'command-observation-only/v1';
 export const OBSERVATION_COMPONENTS = Object.freeze(['data', 'building', 'ui']);
+/**
+ * command-local/v1 — the Founder's standalone daily-driver profile (CV-C1c).
+ * PM, Data and UI are required and fail closed; Building, Herdr Broker and Herdr
+ * are optional and started best-effort, never blocking local readiness. The
+ * profile deliberately needs no WSL, Room broker or standalone-Herdr ownership
+ * (see readCommandLocalGates in gates.mjs); native child containment is kept.
+ */
+export const COMMAND_LOCAL_PROFILE = 'command-local/v1';
+export const COMMAND_LOCAL_REQUIRED = Object.freeze(['data', 'pm', 'ui']);
+export const COMMAND_LOCAL_OPTIONAL = Object.freeze(['building', 'herdrBroker', 'herdr']);
 const OBSERVATION_COMPONENT_PINS = Object.freeze({
   data: {
     port: 5177, kind: 'module', entry: '00_STARQ_HQ\\operations\\starq-command\\server\\data-service.mjs', cwd: '00_STARQ_HQ\\operations\\starq-command',
@@ -128,6 +138,7 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
   if (!doc || typeof doc !== 'object') return ['config is not an object'];
   if (doc.schema !== CONFIG_SCHEMA) p.push(`schema must be ${CONFIG_SCHEMA}`);
   const observationOnly = doc.profile?.name === OBSERVATION_PROFILE;
+  const localProfile = doc.profile?.name === COMMAND_LOCAL_PROFILE;
   if (typeof doc.workspace_root !== 'string' || !path.isAbsolute(doc.workspace_root)) p.push('workspace_root must be an absolute path');
   if (typeof doc.node !== 'string' || !path.isAbsolute(doc.node)) p.push('node must be an absolute path');
   if (doc.host !== '127.0.0.1') p.push('host must be 127.0.0.1');
@@ -136,9 +147,12 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
   }
   const comps = Array.isArray(doc.components) ? doc.components : [];
   const names = comps.map((c) => c?.name);
-  const required = observationOnly ? OBSERVATION_COMPONENTS : REQUIRED_COMPONENTS;
+  const required = observationOnly ? OBSERVATION_COMPONENTS : (localProfile ? COMMAND_LOCAL_REQUIRED : REQUIRED_COMPONENTS);
+  // In the local profile the optional services may appear in the graph but are
+  // not required; anything outside required+optional is still an unknown.
+  const known = localProfile ? [...COMMAND_LOCAL_REQUIRED, ...COMMAND_LOCAL_OPTIONAL] : required;
   for (const req of required) if (!names.includes(req)) p.push(`component '${req}' is missing (incomplete component set)`);
-  for (const n of names) if (!required.includes(n)) p.push(`unknown component '${n}'`);
+  for (const n of names) if (!known.includes(n)) p.push(`unknown component '${n}'`);
   if (observationOnly) {
     const profile = doc.profile;
     if (JSON.stringify(names) !== JSON.stringify(OBSERVATION_COMPONENTS)) p.push(`observation profile components must be exactly ${OBSERVATION_COMPONENTS.join(', ')} in that order`);
@@ -166,6 +180,26 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
       if (JSON.stringify(c.depends_on) !== JSON.stringify(expectedDeps)) p.push(`observation profile ${c.name}.depends_on must be ${JSON.stringify(expectedDeps)}`);
     }
     if (comps.find((c) => c?.name === 'ui')?.health?.body_includes?.includes('STARQ // COMMAND · OBSERVATION ONLY') !== true) p.push('observation profile UI health must assert the observation-only marker');
+  }
+  if (localProfile) {
+    const profile = doc.profile;
+    if (JSON.stringify(profile?.required_components) !== JSON.stringify([...COMMAND_LOCAL_REQUIRED])) {
+      p.push(`command-local profile required_components must be exactly ${COMMAND_LOCAL_REQUIRED.join(', ')}`);
+    }
+    if (profile?.optional_components !== undefined) {
+      const opt = profile.optional_components;
+      if (!Array.isArray(opt) || opt.some((n) => !COMMAND_LOCAL_OPTIONAL.includes(n))) {
+        p.push(`command-local profile optional_components must be a subset of ${COMMAND_LOCAL_OPTIONAL.join(', ')}`);
+      }
+    }
+    // A required service must never depend on an optional one, or local readiness
+    // could never be reached when the optional service is unavailable.
+    for (const c of comps) {
+      if (!COMMAND_LOCAL_REQUIRED.includes(c?.name)) continue;
+      for (const dep of c.depends_on ?? []) {
+        if (COMMAND_LOCAL_OPTIONAL.includes(dep)) p.push(`command-local: required '${c.name}' must not depend on optional '${dep}'`);
+      }
+    }
   }
   if (new Set(names).size !== names.length) p.push('component names must be unique');
   const ports = comps.map((c) => c?.port);
@@ -292,10 +326,18 @@ export function componentEnv(cfg, name) {
       HERDR_FLOOR_URL: u('herdrBroker'), COMMAND_UI_ORIGIN: u('ui'),
     };
     case 'pm': return { PM_PORT: String(portOf(cfg, 'pm')), PM_ROOM_POST: 'off' };
-    case 'ui': return {
-      COMMAND_DATA_SERVICE: u('data'), BUILDING_SERVICE: u('building'),
-      ...(observationOnly ? { COMMAND_OBSERVATION_ONLY: '1' } : { HERDR_SERVICE: u('herdr') }),
-    };
+    case 'ui': {
+      // Optional services may be absent from the local-profile graph; only wire
+      // the URLs for services that are actually configured so portOf never
+      // throws. Canonical and observation graphs always include building (and,
+      // for canonical, herdr), so their env output is unchanged.
+      const has = (n) => cfg.components.some((c) => c.name === n);
+      return {
+        COMMAND_DATA_SERVICE: u('data'),
+        ...(has('building') ? { BUILDING_SERVICE: u('building') } : {}),
+        ...(observationOnly ? { COMMAND_OBSERVATION_ONLY: '1' } : (has('herdr') ? { HERDR_SERVICE: u('herdr') } : {})),
+      };
+    }
     default: throw new Error(`no environment mapping for ${name}`);
   }
 }
