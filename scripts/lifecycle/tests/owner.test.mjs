@@ -931,3 +931,51 @@ test('STATUS: profile readiness needs RUNNING, a commissioned owner protocol AND
     assert.equal((await owner.status()).normal_profile.ready, false);
   } finally { w.cleanup(); }
 });
+
+// ── Stop must not depend on a fresh containment experiment ──────────────────
+test('STOP completes even when the runtime containment probe can no longer pass', async () => {
+  // Incident: start reached READY, then stop died with "authenticated started
+  // receipt has no root_pid" and the services stayed up. The probe launches a
+  // throwaway child, and stop had no business needing one. A companion whose
+  // probe always fails stands in for that condition; stopping the already
+  // running, already recorded services must not touch it.
+  const w = world();
+  try {
+    const asked = [];
+    const probeFails = (workspace, stateDir, { tier, verifyRuntime }) => {
+      asked.push(verifyRuntime);
+      if (verifyRuntime !== false) throw new Error('G-CONTAINMENT-DEV: runtime containment evidence failed: authenticated started receipt has no root_pid');
+      return { guardian: 'JobGuardian.exe', guardianSha256: 'a'.repeat(64), stateDir, tier };
+    };
+    const kernelClosed = () => ({
+      launch() { throw new Error('stop must never launch'); },
+      status: async () => ({ owned: true, closed: true, active: 0, guardian_gone: true, root_gone: true }),
+      stop: async () => ({ outcome: 'GONE', owned: true, closed: true, active: 0 }),
+      receipt: () => ({ root_pid: 1 }),
+    });
+
+    const owner = createOwner({
+      configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false },
+      deps: {
+        ...w.deps,
+        // Give EVERY child a recorded containment descriptor, as the real
+        // launcher does, so the DEFAULT closeout path is what runs. The world
+        // normally stubs treeClosed as "leaf processes only"; with that stub
+        // removed, a child with no descriptor can never be proven closed.
+        spawnChild: async (...a) => ({ ...(await w.deps.spawnChild(...a)), containment: { kind: 'TEST_JOB' } }),
+        treeClosed: undefined,
+        treeSignalSafe: undefined,
+        containmentOptions: probeFails,
+        nativeContainment: kernelClosed,
+      },
+    });
+
+    assert.equal((await owner.start()).result, RESULT.READY);
+    assert.ok(readState(w.statePath).state.children.every((c) => c.containment), 'fixture needs every child to carry a containment descriptor');
+
+    const r = await owner.stop();
+    assert.equal(r.result, RESULT.STOPPED, `stop failed: ${JSON.stringify(r)}`);
+    assert.ok(asked.length > 0, 'the containment companion was never consulted, so this test proved nothing');
+    assert.ok(asked.every((v) => v === false), `stop requested the runtime probe: ${JSON.stringify(asked)}`);
+  } finally { w.cleanup(); }
+});
