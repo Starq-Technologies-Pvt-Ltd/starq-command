@@ -63,6 +63,51 @@ export async function proveInstance(child, { timeoutMs = 2000, exchangeImpl = ex
   return { ok: true, detail: 'instance proven over control pipe' };
 }
 
+/**
+ * Ask a proven instance which addresses it is actually listening on.
+ *
+ * This is the positive readiness signal. The OS TCP table is not reliable for
+ * loopback listeners on this machine, so "is it serving?" is answered by the
+ * component itself over the authenticated pipe, and the addresses are covered
+ * by the MAC so they cannot be forged or altered by anything without the token.
+ *
+ * `supported: false` means the child host predates this op; the caller decides
+ * whether to fall back rather than having a silent default imposed here.
+ *
+ * @returns {Promise<{ok: boolean, supported: boolean, addresses: Array, detail: string}>} never throws
+ */
+export async function proveBoundAddress(child, { timeoutMs = 2000, exchangeImpl = exchange } = {}) {
+  const nonce = randomBytes(16).toString('hex');
+  let reply;
+  try {
+    reply = await exchangeImpl(pipePath(child.instance_id), { op: 'bound', nonce }, timeoutMs);
+  } catch (err) {
+    return { ok: false, supported: true, addresses: [], detail: `control pipe unreachable: ${err.message}` };
+  }
+  if (reply?.error === 'unknown op') {
+    return { ok: false, supported: false, addresses: [], detail: 'child host does not implement the bound op' };
+  }
+  if (!reply || reply.nonce !== nonce) {
+    return { ok: false, supported: true, addresses: [], detail: 'control pipe reply nonce mismatch' };
+  }
+  if (reply.pid !== child.pid || reply.instance_id !== child.instance_id || reply.name !== child.name) {
+    return { ok: false, supported: true, addresses: [], detail: 'control pipe instance/pid/name mismatch' };
+  }
+  const addresses = Array.isArray(reply.addresses) ? reply.addresses : null;
+  if (!addresses) {
+    return { ok: false, supported: true, addresses: [], detail: 'control pipe returned no address list' };
+  }
+  if (!macEqual(reply.mac, mac(child.token, `bound|${JSON.stringify(addresses)}`, nonce, child.pid, child.instance_id))) {
+    return { ok: false, supported: true, addresses: [], detail: 'bound-address reply failed its MAC' };
+  }
+  return { ok: true, supported: true, addresses, detail: `bound ${addresses.map((a) => `${a.address}:${a.port}`).join(', ') || '(nothing yet)'}` };
+}
+
+/** Does a proven instance hold the port the configuration assigned it? */
+export function boundOnPort(addresses, port) {
+  return addresses.some((a) => a.port === port);
+}
+
 /** Ask a proven instance to exit gracefully. Never signals the OS. */
 export async function requestShutdown(child, { timeoutMs = 3000, exchangeImpl = exchange } = {}) {
   const nonce = randomBytes(16).toString('hex');

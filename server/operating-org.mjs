@@ -223,6 +223,7 @@ export function initOrgSchema(handle) {
   ensureColumn(handle, 'org_people', 'source', "TEXT NOT NULL DEFAULT 'manual'");
   ensureColumn(handle, 'org_people', 'room_handle', 'TEXT');
   ensureColumn(handle, 'org_appointments', 'notes', 'TEXT');
+  ensureColumn(handle, 'org_companies', 'archived_at', 'TEXT');
 }
 
 function slug(prefix, name, extra = '') {
@@ -237,6 +238,16 @@ function slug(prefix, name, extra = '') {
 
 function rowOrNull(handle, sql, ...args) {
   return handle.prepare(sql).get(...args) ?? null;
+}
+
+function countRows(handle, sql, ...args) {
+  return Number(handle.prepare(sql).get(...args)?.n ?? 0);
+}
+
+function refuseDependents(count, message) {
+  if (count > 0) {
+    throw Object.assign(new Error(message), { code: 'HAS_DEPENDENTS' });
+  }
 }
 
 function normalizeChannel(channel) {
@@ -350,7 +361,10 @@ export function seedOperatingOrg(handle, nowIso) {
 }
 
 export function readOrg(handle, { generatedAt, roomPost, includeArchived = false } = {}) {
-  const companies = handle.prepare('SELECT * FROM org_companies ORDER BY created_at').all();
+  const companySql = includeArchived
+    ? 'SELECT * FROM org_companies ORDER BY created_at'
+    : 'SELECT * FROM org_companies WHERE archived_at IS NULL ORDER BY created_at';
+  const companies = handle.prepare(companySql).all();
   const unitSql = includeArchived
     ? 'SELECT * FROM org_units ORDER BY created_at'
     : 'SELECT * FROM org_units WHERE archived_at IS NULL ORDER BY created_at';
@@ -409,13 +423,20 @@ export function readOrgHistory(handle, { entity = null, id = null, limit = 100 }
 
 export function createCompany(handle, { id, name, legal_name, notes, actor = 'system', channel = 'api', nowIso }) {
   const cid = id || slug('co', name);
-  if (rowOrNull(handle, 'SELECT id FROM org_companies WHERE id = ?', cid)) {
+  const existing = rowOrNull(handle, 'SELECT * FROM org_companies WHERE id = ?', cid);
+  const ts = nowIso();
+  if (existing && !existing.archived_at) {
     throw Object.assign(new Error(`Company id already exists: ${cid}`), { code: 'COMPANY_EXISTS' });
   }
-  const ts = nowIso();
-  handle.prepare(
-    'INSERT INTO org_companies (id, name, legal_name, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(cid, name, legal_name ?? null, notes ?? null, ts, ts);
+  if (existing) {
+    handle.prepare(
+      'UPDATE org_companies SET name = ?, legal_name = ?, notes = ?, updated_at = ?, archived_at = NULL WHERE id = ?',
+    ).run(name, legal_name ?? null, notes ?? null, ts, cid);
+  } else {
+    handle.prepare(
+      'INSERT INTO org_companies (id, name, legal_name, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run(cid, name, legal_name ?? null, notes ?? null, ts, ts);
+  }
   const created = handle.prepare('SELECT * FROM org_companies WHERE id = ?').get(cid);
   recordOrgAudit(handle, {
     entity: 'company',
@@ -423,14 +444,14 @@ export function createCompany(handle, { id, name, legal_name, notes, actor = 'sy
     action: 'CREATE',
     actor,
     channel,
-    before: null,
+    before: existing,
     after: created,
     nowIso: () => ts,
   });
   return created;
 }
 
-export function updateCompany(handle, id, { name, legal_name, notes, actor = 'system', channel = 'api', nowIso }) {
+export function updateCompany(handle, id, { name, legal_name, notes, archived, actor = 'system', channel = 'api', nowIso }) {
   const existing = rowOrNull(handle, 'SELECT * FROM org_companies WHERE id = ?', id);
   if (!existing) {
     throw Object.assign(new Error(`Unknown company: ${id}`), { code: 'COMPANY_NOT_FOUND' });
@@ -439,14 +460,33 @@ export function updateCompany(handle, id, { name, legal_name, notes, actor = 'sy
   const nextLegal = legal_name !== undefined ? legal_name : existing.legal_name;
   const nextNotes = notes !== undefined ? notes : existing.notes;
   const ts = nowIso();
+  let nextArchivedAt = existing.archived_at ?? null;
+  if (archived === true && !nextArchivedAt) {
+    const units = countRows(
+      handle,
+      'SELECT COUNT(*) AS n FROM org_units WHERE company_id = ? AND archived_at IS NULL',
+      id,
+    );
+    refuseDependents(
+      units,
+      `Company ${id} still holds ${units} active unit(s). Archive or move those first. Nothing was removed.`,
+    );
+    nextArchivedAt = ts;
+  }
+  if (archived === false) nextArchivedAt = null;
   handle.prepare(
-    'UPDATE org_companies SET name = ?, legal_name = ?, notes = ?, updated_at = ? WHERE id = ?',
-  ).run(nextName, nextLegal ?? null, nextNotes ?? null, ts, id);
+    'UPDATE org_companies SET name = ?, legal_name = ?, notes = ?, updated_at = ?, archived_at = ? WHERE id = ?',
+  ).run(nextName, nextLegal ?? null, nextNotes ?? null, ts, nextArchivedAt, id);
   const updated = handle.prepare('SELECT * FROM org_companies WHERE id = ?').get(id);
+  const action = archived === true && !existing.archived_at
+    ? 'ARCHIVE'
+    : archived === false && existing.archived_at
+      ? 'UNARCHIVE'
+      : 'UPDATE';
   recordOrgAudit(handle, {
     entity: 'company',
     entity_id: id,
-    action: 'UPDATE',
+    action,
     actor,
     channel,
     before: existing,
@@ -488,13 +528,20 @@ export function createUnit(handle, { id, company_id, parent_id, kind, name, desc
     }
   }
   const uid = id || slug('unit', name);
-  if (rowOrNull(handle, 'SELECT id FROM org_units WHERE id = ?', uid)) {
+  const existing = rowOrNull(handle, 'SELECT * FROM org_units WHERE id = ?', uid);
+  if (existing && !existing.archived_at) {
     throw Object.assign(new Error(`Unit id already exists: ${uid}`), { code: 'UNIT_EXISTS' });
   }
   const ts = nowIso();
-  handle.prepare(
-    'INSERT INTO org_units (id, company_id, parent_id, kind, name, description, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
-  ).run(uid, company_id, parent_id ?? null, kind, name, description ?? null, ts, ts);
+  if (existing) {
+    handle.prepare(
+      'UPDATE org_units SET company_id = ?, parent_id = ?, kind = ?, name = ?, description = ?, updated_at = ?, archived_at = NULL WHERE id = ?',
+    ).run(company_id, parent_id ?? null, kind, name, description ?? null, ts, uid);
+  } else {
+    handle.prepare(
+      'INSERT INTO org_units (id, company_id, parent_id, kind, name, description, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)',
+    ).run(uid, company_id, parent_id ?? null, kind, name, description ?? null, ts, ts);
+  }
   const created = handle.prepare('SELECT * FROM org_units WHERE id = ?').get(uid);
   recordOrgAudit(handle, {
     entity: 'unit',
@@ -502,7 +549,7 @@ export function createUnit(handle, { id, company_id, parent_id, kind, name, desc
     action: 'CREATE',
     actor,
     channel,
-    before: null,
+    before: existing,
     after: created,
     nowIso: () => ts,
   });
@@ -538,7 +585,23 @@ export function updateUnit(handle, id, { name, description, kind, parent_id, arc
   const nextDesc = description !== undefined ? description : existing.description;
   const nextKind = kind !== undefined ? kind : existing.kind;
   let nextArchivedAt = existing.archived_at ?? null;
-  if (archived === true && !nextArchivedAt) nextArchivedAt = ts;
+  if (archived === true && !nextArchivedAt) {
+    const children = countRows(
+      handle,
+      'SELECT COUNT(*) AS n FROM org_units WHERE parent_id = ? AND archived_at IS NULL',
+      id,
+    );
+    const positions = countRows(
+      handle,
+      'SELECT COUNT(*) AS n FROM org_positions WHERE unit_id = ? AND archived_at IS NULL',
+      id,
+    );
+    refuseDependents(
+      children + positions,
+      `Unit ${id} still holds ${children} active child unit(s) and ${positions} active position(s). Nothing was removed.`,
+    );
+    nextArchivedAt = ts;
+  }
   if (archived === false) nextArchivedAt = null;
 
   handle.prepare(
@@ -598,13 +661,20 @@ export function createPosition(handle, { id, unit_id, title, job_description, re
     }
   }
   const pid = id || slug('pos', title);
-  if (rowOrNull(handle, 'SELECT id FROM org_positions WHERE id = ?', pid)) {
+  const existing = rowOrNull(handle, 'SELECT * FROM org_positions WHERE id = ?', pid);
+  if (existing && !existing.archived_at) {
     throw Object.assign(new Error(`Position id already exists: ${pid}`), { code: 'POSITION_EXISTS' });
   }
   const ts = nowIso();
-  handle.prepare(
-    'INSERT INTO org_positions (id, unit_id, title, job_description, reports_to_position_id, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)',
-  ).run(pid, unit_id, title, job_description ?? null, reports_to_position_id ?? null, ts, ts);
+  if (existing) {
+    handle.prepare(
+      'UPDATE org_positions SET unit_id = ?, title = ?, job_description = ?, reports_to_position_id = ?, updated_at = ?, archived_at = NULL WHERE id = ?',
+    ).run(unit_id, title, job_description ?? null, reports_to_position_id ?? null, ts, pid);
+  } else {
+    handle.prepare(
+      'INSERT INTO org_positions (id, unit_id, title, job_description, reports_to_position_id, created_at, updated_at, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)',
+    ).run(pid, unit_id, title, job_description ?? null, reports_to_position_id ?? null, ts, ts);
+  }
   const created = handle.prepare('SELECT * FROM org_positions WHERE id = ?').get(pid);
   recordOrgAudit(handle, {
     entity: 'position',
@@ -612,7 +682,7 @@ export function createPosition(handle, { id, unit_id, title, job_description, re
     action: 'CREATE',
     actor,
     channel,
-    before: null,
+    before: existing,
     after: created,
     nowIso: () => ts,
   });
@@ -655,7 +725,23 @@ export function updatePosition(handle, id, { title, job_description, unit_id, re
   const nextTitle = title !== undefined ? title : existing.title;
   const nextJd = job_description !== undefined ? job_description : existing.job_description;
   let nextArchivedAt = existing.archived_at ?? null;
-  if (archived === true && !nextArchivedAt) nextArchivedAt = ts;
+  if (archived === true && !nextArchivedAt) {
+    const reports = countRows(
+      handle,
+      'SELECT COUNT(*) AS n FROM org_positions WHERE reports_to_position_id = ? AND archived_at IS NULL',
+      id,
+    );
+    const appointments = countRows(
+      handle,
+      "SELECT COUNT(*) AS n FROM org_appointments WHERE position_id = ? AND status = 'ACTIVE'",
+      id,
+    );
+    refuseDependents(
+      reports + appointments,
+      `Position ${id} still holds ${reports} reporting position(s) and ${appointments} active appointment(s). Nothing was removed.`,
+    );
+    nextArchivedAt = ts;
+  }
   if (archived === false) nextArchivedAt = null;
 
   handle.prepare(
@@ -713,42 +799,65 @@ export function createPerson(handle, {
   if (!PERSON_STATUSES.has(normStatus)) {
     throw Object.assign(new Error('Person status must be active or inactive.'), { code: 'VALIDATION' });
   }
-  if (rowOrNull(handle, 'SELECT id FROM org_people WHERE handle = ?', personHandle)) {
+  const byHandle = rowOrNull(handle, 'SELECT * FROM org_people WHERE handle = ?', personHandle);
+  if (byHandle && !byHandle.archived_at) {
     throw Object.assign(new Error(`Handle already recorded: ${personHandle}`), { code: 'PERSON_EXISTS' });
   }
-  const pid = id || slug('person', personHandle);
-  if (rowOrNull(handle, 'SELECT id FROM org_people WHERE id = ?', pid)) {
+  const pid = byHandle?.id || id || slug('person', personHandle);
+  const byId = byHandle || rowOrNull(handle, 'SELECT * FROM org_people WHERE id = ?', pid);
+  if (byId && !byId.archived_at) {
     throw Object.assign(new Error(`Person id already exists: ${pid}`), { code: 'PERSON_EXISTS' });
   }
   const caps = normalizeCapabilities(capabilities);
   const ts = nowIso();
-  handle.prepare(
-    `INSERT INTO org_people (
-       id, handle, display_name, kind, role_note, harness, capabilities_json,
-       status, source, room_handle, created_at, updated_at, archived_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-  ).run(
-    pid,
-    personHandle,
-    display_name,
-    kind,
-    role_note ?? null,
-    harness ?? null,
-    JSON.stringify(caps),
-    normStatus,
-    source || 'manual',
-    room_handle ?? null,
-    ts,
-    ts,
-  );
-  const created = hydratePerson(handle.prepare('SELECT * FROM org_people WHERE id = ?').get(pid));
+  if (byId) {
+    handle.prepare(
+      `UPDATE org_people
+          SET handle = ?, display_name = ?, kind = ?, role_note = ?, harness = ?, capabilities_json = ?,
+              status = ?, source = ?, room_handle = ?, updated_at = ?, archived_at = NULL
+        WHERE id = ?`,
+    ).run(
+      personHandle,
+      display_name,
+      kind,
+      role_note ?? null,
+      harness ?? null,
+      JSON.stringify(caps),
+      normStatus,
+      source || 'manual',
+      room_handle ?? null,
+      ts,
+      byId.id,
+    );
+  } else {
+    handle.prepare(
+      `INSERT INTO org_people (
+         id, handle, display_name, kind, role_note, harness, capabilities_json,
+         status, source, room_handle, created_at, updated_at, archived_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+    ).run(
+      pid,
+      personHandle,
+      display_name,
+      kind,
+      role_note ?? null,
+      harness ?? null,
+      JSON.stringify(caps),
+      normStatus,
+      source || 'manual',
+      room_handle ?? null,
+      ts,
+      ts,
+    );
+  }
+  const created = hydratePerson(handle.prepare('SELECT * FROM org_people WHERE id = ?').get(byId?.id || pid));
   recordOrgAudit(handle, {
     entity: 'person',
-    entity_id: pid,
+    entity_id: created.id,
     action: 'CREATE',
     actor,
     channel,
-    before: null,
+    before: byId,
     after: created,
     nowIso: () => ts,
   });
@@ -797,7 +906,18 @@ export function updatePerson(handle, idOrHandle, {
   const nextHarness = harness !== undefined ? harness : existing.harness;
   const nextRoomHandle = room_handle !== undefined ? room_handle : existing.room_handle;
   let nextArchivedAt = existing.archived_at ?? null;
-  if (archived === true && !nextArchivedAt) nextArchivedAt = ts;
+  if (archived === true && !nextArchivedAt) {
+    const appointments = countRows(
+      handle,
+      "SELECT COUNT(*) AS n FROM org_appointments WHERE person_id = ? AND status = 'ACTIVE'",
+      existing.id,
+    );
+    refuseDependents(
+      appointments,
+      `Person ${existing.handle} still holds ${appointments} active appointment(s). End those first. Nothing was removed.`,
+    );
+    nextArchivedAt = ts;
+  }
   if (archived === false) nextArchivedAt = null;
 
   handle.prepare(

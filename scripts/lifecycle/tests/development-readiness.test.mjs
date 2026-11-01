@@ -468,6 +468,7 @@ test('owner recoverForce recovers interrupted startup state and transitions clea
         treeClosed: async () => true,
         treeSignalSafe: async () => true,
         proveInstance: async () => ({ ok: true, detail: 'mock instance proven' }),
+        proveBoundAddress: async () => ({ ok: false, supported: false, addresses: [], detail: 'simulated host predates the bound op' }),
         brokerRequest: async () => ({ ok: true }),
         // Every other process fact here is simulated; the listener table must be
         // too. Reading the machine's real netstat made `ports_free` depend on

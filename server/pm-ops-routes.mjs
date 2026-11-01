@@ -21,6 +21,7 @@ import {
   workforcePersonSummary,
   recordOrgAudit,
 } from './operating-org.mjs';
+import { importOrganization } from './pm-import.mjs';
 import {
   updateProjectRecord,
   listMilestones,
@@ -65,6 +66,7 @@ function mapDomainError(e, HttpError) {
     || code === 'ARCHIVED_TARGET'
     || code === 'UNMET_DEPENDENCY'
     || code === 'DEPENDENCY_OPEN'
+    || code === 'HAS_DEPENDENTS'
   ) {
     status = 409;
   }
@@ -235,13 +237,14 @@ export async function handleOpsRoutes(req, res, ctx) {
   if (m && isPatch) {
     const id = decodeURIComponent(m[1]);
     const body = await readBody(req);
-    only(body, ['actor', 'channel', 'name', 'legal_name', 'notes']);
+    only(body, ['actor', 'channel', 'name', 'legal_name', 'notes', 'archived']);
     const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
     const channel = str(body, 'channel', { max: 20 }) ?? 'api';
     const updated = runDomain((d) => orgUpdateCompany(d, id, {
       name: str(body, 'name', { min: 2, max: 80 }),
       legal_name: nullableStr(body, 'legal_name', { max: 120 }, bad),
       notes: nullableStr(body, 'notes', { max: 400 }, bad),
+      archived: boolField(body, 'archived', bad),
       actor,
       channel,
       nowIso,
@@ -480,15 +483,17 @@ export async function handleOpsRoutes(req, res, ctx) {
       prefix: body.prefix,
       description: body.description,
     };
-    const created = createProject(baseBody);
-    const updated = runDomain((d) => updateProjectRecord(d, created.id, {
-      owner,
-      status,
-      actor,
-      channel,
-      nowIso,
-      effectiveHold,
-    }));
+    const updated = runDomain((d) => {
+      const created = createProject(baseBody, d);
+      return updateProjectRecord(d, created.id, {
+        owner,
+        status,
+        actor,
+        channel,
+        nowIso,
+        effectiveHold,
+      });
+    });
     return (send(res, 201, updated, origin), true);
   }
 
@@ -824,6 +829,35 @@ export async function handleOpsRoutes(req, res, ctx) {
       channel,
     }));
     return (send(res, 200, { followup: updated }, origin), true);
+  }
+
+  // ── CV-AG8: Organization Snapshot Import ──
+  if (isPost && p === '/api/pm/import/organization') {
+    const body = await readBody(req);
+    only(body, ['snapshot', 'snapshot_path', 'dry_run', 'on_conflict', '_injectFailure']);
+    const targetDb = db();
+    try {
+      const result = importOrganization(targetDb, {
+        snapshot: body.snapshot,
+        snapshot_path: body.snapshot_path,
+        dry_run: body.dry_run,
+        on_conflict: body.on_conflict,
+        _injectFailure: body._injectFailure,
+      });
+      if (!result.ok) {
+        let status = 400;
+        if (result.error === 'IMPORT_CONFLICT' || result.error === 'TARGET_NOT_EMPTY') {
+          status = 409;
+        }
+        return (send(res, status, result, origin), true);
+      }
+      return (send(res, 200, result, origin), true);
+    } catch (e) {
+      if (e.message === 'INJECTED_MID_IMPORT_FAILURE') {
+        return (send(res, 500, { ok: false, error: 'INJECTED_FAILURE', message: e.message }, origin), true);
+      }
+      throw e;
+    }
   }
 
   return false;

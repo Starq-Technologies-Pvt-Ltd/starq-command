@@ -423,6 +423,7 @@ test('observer and full profile share one exclusive lifecycle lock; incomplete r
           return { pid, unref() {} };
         },
         proveInstance: async () => ({ ok: true, detail: 'simulated owner-issued proof' }),
+        proveBoundAddress: async () => ({ ok: false, supported: false, addresses: [], detail: 'simulated host predates the bound op' }),
         requestShutdown: async (child) => {
           shutdownOrder.push(child.name);
           processes.delete(child.pid);
@@ -472,6 +473,7 @@ test('simulated ready startup requests only the three observation services and n
           return { pid, unref() {} };
         },
         proveInstance: async () => ({ ok: true, detail: 'simulated authenticated identity' }),
+        proveBoundAddress: async () => ({ ok: false, supported: false, addresses: [], detail: 'simulated host predates the bound op' }),
         checkHealth: async () => ({ ok: true, detail: 'simulated health contract' }),
         brokerRequest: async (...args) => { brokerCalls.push(args); throw new Error('broker must not be contacted'); },
       },

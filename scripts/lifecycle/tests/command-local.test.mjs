@@ -88,6 +88,16 @@ function world({ mutateConfig = null } = {}) {
       const p = pipes.get(child.pid);
       return p && p.instance === child.instance_id && p.name === child.name ? { ok: true, detail: 'proven' } : { ok: false, detail: 'pipe mismatch' };
     },
+    proveBoundAddress: async (child) => {
+      const p = pipes.get(child.pid);
+      if (!p || p.instance !== child.instance_id || p.name !== child.name) {
+        return { ok: false, supported: true, addresses: [], detail: 'pipe mismatch' };
+      }
+      const addresses = listeners
+        .filter((l) => l.pid === child.pid)
+        .map((l) => ({ address: '127.0.0.1', port: l.port, family: 'IPv4' }));
+      return { ok: true, supported: true, addresses, detail: 'simulated bound' };
+    },
     requestShutdown: async (child) => { kill(child.pid); return { ok: true, detail: 'ack' }; },
     checkHealth: async (host, c) => health[c.name] ?? { ok: true, detail: 'ok' },
     readFile: () => { throw new Error('ENOENT'); },

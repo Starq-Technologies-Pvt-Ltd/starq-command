@@ -3,11 +3,16 @@
  */
 import * as React from 'react';
 import { Chip, GoLink, Panel, SourceGap } from '@/components/console';
+import { readClaimedActor } from '@/lib/acting-as';
+import { validateProjectFields } from '@/lib/project-fields';
+import { PmRejected, PmSaved } from '@/components/pm-feedback';
 import {
   PM_STATUS_LABELS,
   pmBoardHref,
+  pmCreateProject,
   pmIsScratch,
   pmNexusSources,
+  pmPatchProject,
   pmPort,
   pmPortfolio,
   pmProjects,
@@ -240,6 +245,11 @@ export function PmPortfolioSurface() {
   const [problem, setProblem] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState('');
+  const [projectForm, setProjectForm] = React.useState({ id: '', name: '', prefix: '', description: '' });
+  const [projectError, setProjectError] = React.useState<string | null>(null);
+  const [projectSaved, setProjectSaved] = React.useState<string | null>(null);
+  const [archiveTarget, setArchiveTarget] = React.useState<PmPortfolio['projects'][number] | null>(null);
+  const actor = readClaimedActor();
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -270,6 +280,84 @@ export function PmPortfolioSurface() {
         )}
       >
         <PmNav current="portfolio" />
+        <form
+          aria-label="Create project"
+          className="mx-3 grid gap-2 border-b border-border py-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const errors = validateProjectFields(projectForm);
+            if (!actor.trim()) errors.push('Register a person and choose that handle before creating a project.');
+            if (errors.length) {
+              setProjectSaved(null);
+              setProjectError(errors.join(' '));
+              return;
+            }
+            setProjectError(null);
+            void pmCreateProject({
+              actor,
+              id: projectForm.id.trim().toLowerCase(),
+              name: projectForm.name.trim(),
+              prefix: projectForm.prefix.trim().toUpperCase(),
+              ...(projectForm.description.trim() ? { description: projectForm.description.trim() } : {}),
+            }).then(async (res) => {
+              if (!res.ok) {
+                setProjectSaved(null);
+                setProjectError(res.message || 'The service rejected the project.');
+                return;
+              }
+              const readback = await pmProjects();
+              const recorded = readback.ok
+                ? readback.data.projects.find((project) => project.id === projectForm.id.trim().toLowerCase())
+                : null;
+              if (!recorded) {
+                setProjectError('The project was not readable after it was created.');
+                return;
+              }
+              setProjectSaved(`Project ${recorded.name} is recorded.`);
+              setProjectForm({ id: '', name: '', prefix: '', description: '' });
+              void load();
+            });
+          }}
+        >
+          <p className="text-2xs text-muted-foreground">Create a project as {actor || 'an unregistered actor'}. The id, name, and prefix use the same rules as the service.</p>
+          {projectSaved ? <PmSaved label={projectSaved} /> : null}
+          {projectError ? <PmRejected code="VALIDATION" message={projectError} /> : null}
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+            <label className="grid gap-1 text-2xs">Id<input aria-label="New project id" value={projectForm.id} onChange={(event) => setProjectForm({ ...projectForm, id: event.target.value })} /></label>
+            <label className="grid gap-1 text-2xs">Name<input aria-label="New project name" value={projectForm.name} onChange={(event) => setProjectForm({ ...projectForm, name: event.target.value })} /></label>
+            <label className="grid gap-1 text-2xs">Prefix<input aria-label="New project prefix" value={projectForm.prefix} onChange={(event) => setProjectForm({ ...projectForm, prefix: event.target.value })} /></label>
+            <label className="grid gap-1 text-2xs">Description<input aria-label="New project description" value={projectForm.description} onChange={(event) => setProjectForm({ ...projectForm, description: event.target.value })} /></label>
+          </div>
+          <button type="submit" className="go-link">Create project</button>
+        </form>
+        {archiveTarget ? (
+          <div data-project-archive-confirm="" role="region" aria-label="Confirm project archive" className="mx-3 grid gap-2 py-2">
+            <p data-lifecycle-effect="">{`Archive project ${archiveTarget.name} (${archiveTarget.id}). It leaves the active portfolio.`}</p>
+            <p data-lifecycle-kept="">{`Its ${archiveTarget.total} task card(s) are kept and are not deleted. Audit history is kept. Restore returns the project.`}</p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="go-link"
+                onClick={() => {
+                  const target = archiveTarget;
+                  setArchiveTarget(null);
+                  void pmPatchProject(target.id, { actor, archived: true }).then((res) => {
+                    if (!res.ok) {
+                      setProjectSaved(null);
+                      setProjectError(res.message || 'The project was not archived.');
+                      return;
+                    }
+                    setProjectSaved(`Project ${target.name} is archived. Its tasks were kept.`);
+                    void load();
+                  });
+                }}
+              >
+                Confirm archive
+              </button>
+              <button type="button" className="go-link" onClick={() => setArchiveTarget(null)}>Cancel</button>
+            </div>
+          </div>
+        ) : null}
         <label className="mx-3 grid gap-1 py-2 text-2xs text-muted-foreground">
           Find a board
           <input
@@ -316,6 +404,9 @@ export function PmPortfolioSurface() {
                     </div>
                     <Chip value={`${p.open} open`} tone="room" />
                   </header>
+                  <button type="button" className="go-link justify-self-start" aria-label={`Archive project ${p.id}`} onClick={() => setArchiveTarget(p)}>
+                    Archive
+                  </button>
 
                   {/* Multi-tier progress display per DEC-072 / R-1 */}
                   <div className="grid gap-1.5 rounded border border-border/60 bg-surface-0/60 p-2 text-2xs">

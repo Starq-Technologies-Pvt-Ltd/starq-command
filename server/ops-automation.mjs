@@ -149,7 +149,11 @@ export function updateProjectRecord(handle, id, {
   recordOrgAudit(handle, {
     entity: 'project',
     entity_id: id,
-    action: archived === true && !existing.archived_at ? 'ARCHIVE' : 'UPDATE',
+    action: archived === true && !existing.archived_at
+      ? 'ARCHIVE'
+      : archived === false && existing.archived_at
+        ? 'UNARCHIVE'
+        : 'UPDATE',
     actor,
     channel,
     before: existing,
