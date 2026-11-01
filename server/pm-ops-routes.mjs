@@ -65,6 +65,7 @@ function mapDomainError(e, HttpError) {
     || code === 'ARCHIVED_TARGET'
     || code === 'UNMET_DEPENDENCY'
     || code === 'DEPENDENCY_OPEN'
+    || code === 'HAS_DEPENDENTS'
   ) {
     status = 409;
   }
@@ -235,13 +236,14 @@ export async function handleOpsRoutes(req, res, ctx) {
   if (m && isPatch) {
     const id = decodeURIComponent(m[1]);
     const body = await readBody(req);
-    only(body, ['actor', 'channel', 'name', 'legal_name', 'notes']);
+    only(body, ['actor', 'channel', 'name', 'legal_name', 'notes', 'archived']);
     const actor = handleField(body, 'actor', { required: true, allowUnassigned: false, freeform: true });
     const channel = str(body, 'channel', { max: 20 }) ?? 'api';
     const updated = runDomain((d) => orgUpdateCompany(d, id, {
       name: str(body, 'name', { min: 2, max: 80 }),
       legal_name: nullableStr(body, 'legal_name', { max: 120 }, bad),
       notes: nullableStr(body, 'notes', { max: 400 }, bad),
+      archived: boolField(body, 'archived', bad),
       actor,
       channel,
       nowIso,
