@@ -79,3 +79,6 @@ scripts/.command-runtime-test/
 
 # Hermes Kanban isolated worktrees are local execution workspaces, not repo source.
 .worktrees/
+
+# Command-owned Node runtime, provisioned on first start from an approved, hash-pinned install (see runtime/containment/node-pins.json).
+runtime/node/

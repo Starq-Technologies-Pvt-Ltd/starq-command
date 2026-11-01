@@ -58,10 +58,18 @@ async function gracefulExit(why) {
         })]);
       } finally { clearTimeout(timer); }
     } else {
-      await closeServers([componentModule?.server ?? componentModule?.lifecycleService?.server]);
+      // Prefer a server the component exports; otherwise close every TCP server it
+      // bound in this process (recorded by the listen() wrapper above). PM creates
+      // its server inside a direct-run block and exports nothing, so without this
+      // fallback an owner stop request could never be honoured for it.
+      const exported = componentModule?.server ?? componentModule?.lifecycleService?.server;
+      await closeServers(exported ? [exported] : [...boundServers].filter((s) => s !== control));
     }
     await closeServers([control]);
     process.exitCode = 0;
+    // The listeners are closed; a component's own timers (PM's automation loop)
+    // must not keep a stopped service alive past the owner's grace period.
+    setTimeout(() => process.exit(0), 250);
   } catch (err) {
     log(`shutdown error: ${err.message}`);
     process.exitCode = 1;

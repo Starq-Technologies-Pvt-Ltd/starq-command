@@ -79,7 +79,16 @@ function setInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
+/**
+ * Evidence snapshots are COMMITTED, and each carries a "Captured" timestamp, so
+ * rewriting them on every run made a plain `npx vitest run` dirty twelve tracked
+ * files with nothing but a new clock reading. That breaks "verify this exact
+ * SHA" (a verifier cannot tell their run changed nothing) and invites merge
+ * conflicts between engineers. Regeneration is therefore a deliberate act:
+ * scripts/run-functional-acceptance.mjs sets ACCEPTANCE_WRITE_ARTIFACTS=1.
+ */
 function saveHtmlArtifact(filename: string, title: string, element: HTMLElement) {
+  if (process.env.ACCEPTANCE_WRITE_ARTIFACTS !== '1') return;
   try {
     fs.mkdirSync(ARTIFACTS_DIR, { recursive: true });
     const fullHtml = `<!doctype html>

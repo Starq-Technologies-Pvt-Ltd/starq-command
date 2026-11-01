@@ -1,0 +1,9 @@
+{
+  "source_sha256": "4465189a2af07bbbc496d74b947116c6751410fb8d4c3eb40a9830e619b8f8e5",
+  "schema": "starq.guardian.build/v1",
+  "compiler": "C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe",
+  "compile_args": "/nologo /target:exe /platform:x64 /optimize+ /r:System.Web.Extensions.dll",
+  "status": "EXECUTED_ARGUMENT_PROBE_ONLY_NOT_COMPATIBILITY_ACCEPTED",
+  "supersedes_binary_sha256": "17c7ad9d5a40fc9b8fbde7d08a38ab17282a33b68bf92a2b3233d8a7c7ff15b9",
+  "binary_sha256": "ef462e0583c025efe3015bff838fbd6c443bc82060f6dc0d07b1a76cb6976ce7"
+}

@@ -25,7 +25,7 @@ const browserStart = Date.now();
 const browserRes = spawnSync(
   process.platform === 'win32' ? 'npx.cmd' : 'npx',
   ['vitest', 'run', 'tests/functional-browser-acceptance.test.tsx'],
-  { cwd: ROOT, encoding: 'utf8', env: process.env, shell: true }
+  { cwd: ROOT, encoding: 'utf8', env: { ...process.env, ACCEPTANCE_WRITE_ARTIFACTS: '1' }, shell: true }
 );
 const browserDuration = ((Date.now() - browserStart) / 1000).toFixed(2);
 const browserPassed = browserRes.status === 0;

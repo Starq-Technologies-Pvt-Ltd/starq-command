@@ -127,6 +127,14 @@ export function loadConfig(file, { checkFiles = true } = {}) {
   if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) throw new ConfigError([`${file} has a UTF-8 BOM; it must be BOM-free`]);
   let doc;
   try { doc = JSON.parse(raw.toString('utf8')); } catch (err) { throw new ConfigError([`${file} is not valid JSON: ${err.message}`]); }
+  // The standalone profile runs under a Node runtime Command provisions for itself
+  // (runtime/node), named relative to this file so the install can live anywhere.
+  // Resolved here, so every consumer still sees the absolute path it has always
+  // been given, and the exe identity checks compare against exactly that file.
+  if (doc?.profile?.name === COMMAND_LOCAL_PROFILE && typeof doc.node === 'string' && doc.node && !path.isAbsolute(doc.node)
+    && !doc.node.split(/[\\/]/).includes('..')) { // a climbing path is left as written, for validation to refuse
+    doc.node = path.resolve(path.dirname(file), doc.node);
+  }
   const problems = validateConfig(doc, { checkFiles });
   if (problems.length) throw new ConfigError(problems);
   const sha256 = createHash('sha256').update(raw).digest('hex');
@@ -140,7 +148,11 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
   const observationOnly = doc.profile?.name === OBSERVATION_PROFILE;
   const localProfile = doc.profile?.name === COMMAND_LOCAL_PROFILE;
   if (typeof doc.workspace_root !== 'string' || !path.isAbsolute(doc.workspace_root)) p.push('workspace_root must be an absolute path');
-  if (typeof doc.node !== 'string' || !path.isAbsolute(doc.node)) p.push('node must be an absolute path');
+  // Only the standalone profile may name its runtime relative to the config file
+  // (loadConfig resolves it); it must stay inside the install, never climb out.
+  const relativeNodeOk = localProfile && typeof doc.node === 'string' && doc.node !== ''
+    && !path.isAbsolute(doc.node) && !doc.node.split(/[\\/]/).includes('..');
+  if (typeof doc.node !== 'string' || (!path.isAbsolute(doc.node) && !relativeNodeOk)) p.push('node must be an absolute path');
   if (doc.host !== '127.0.0.1') p.push('host must be 127.0.0.1');
   for (const k of ['identity', 'health', 'graceful_exit', 'broker_request', 'agent_stop']) {
     if (!Number.isInteger(doc.timeouts_ms?.[k]) || doc.timeouts_ms[k] <= 0) p.push(`timeouts_ms.${k} must be a positive integer`);
@@ -214,7 +226,17 @@ export function validateConfig(doc, { checkFiles = true } = {}) {
     else for (const d of c.depends_on) if (!names.includes(d)) p.push(`${c.name}: depends on unknown '${d}'`);
     const h = c.health;
     if (!h || typeof h.path !== 'string' || !h.path.startsWith('/') || !Number.isInteger(h.status)) p.push(`${c.name}: health needs path and status`);
-    else if (!h.json_has && !h.json_equals && !h.body_includes) p.push(`${c.name}: health must assert response content, not just a status`);
+    else if (!h.json_has && !h.json_equals && !h.json_one_of && !h.body_includes) p.push(`${c.name}: health must assert response content, not just a status`);
+    if (h && h.status_in !== undefined && !(Array.isArray(h.status_in) && h.status_in.length > 0 && h.status_in.every(Number.isInteger) && h.status_in.includes(h.status))) {
+      p.push(`${c.name}: health.status_in must be a non-empty list of integers that includes status`);
+    }
+    if (h && h.json_one_of !== undefined && !(h.json_one_of && typeof h.json_one_of === 'object' && !Array.isArray(h.json_one_of)
+      && Object.values(h.json_one_of).every((a) => Array.isArray(a) && a.length > 0 && a.every((x) => typeof x === 'string')))) {
+      p.push(`${c.name}: health.json_one_of must map a field to a non-empty list of strings`);
+    }
+    if (h && h.status_in !== undefined && !h.json_one_of && !h.json_equals) {
+      p.push(`${c.name}: health.status_in must be paired with json_one_of or json_equals so a non-200 still has to assert a recognized body`);
+    }
     if (c.kind === 'vite' && typeof c.vite_config !== 'string') p.push(`${c.name}: vite_config required`);
     if (c.name === 'herdrBroker' && (typeof c.lifecycle_token !== 'string' || typeof c.manifest !== 'string')) p.push('herdrBroker: lifecycle_token and manifest required');
   }

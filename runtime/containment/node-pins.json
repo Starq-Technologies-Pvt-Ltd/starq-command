@@ -1,0 +1,7 @@
+{
+  "schema": "starq.command.node-pins/v1",
+  "note": "Node runtimes Command will run itself under. The one-click launcher copies an installed node.exe into runtime/node/ ONLY if its SHA-256 is listed here, and the containment gate re-checks the copy on every start. Anything else is refused. The first entry is byte-identical to the runtime already pinned by the Herdr Floor compatibility manifest; it is not obtained from, or dependent on, Herdr Floor.",
+  "runtimes": [
+    { "version": "v24.15.0", "platform": "win32-x64", "sha256": "3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5" }
+  ]
+}

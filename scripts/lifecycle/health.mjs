@@ -32,15 +32,23 @@ function dig(obj, dotted) {
 /** @returns {{ok: boolean, detail: string}} */
 export function evaluateHealth(contract, response) {
   if (!response) return { ok: false, detail: 'no response' };
-  if (response.status !== contract.status) return { ok: false, detail: `HTTP ${response.status}, expected ${contract.status}` };
+  // `status_in` lets a contract accept several statuses; absent, `status` alone decides
+  // exactly as before. It exists for a service whose HTTP status reports the
+  // health of its CONTENT (the data service answers 503 while any projection
+  // source is unavailable) rather than whether it is up. Used on its own that
+  // would be too loose, so it is paired with `json_one_of`, which pins the body
+  // to a recognized verdict.
+  const accepted = Array.isArray(contract.status_in) && contract.status_in.length ? contract.status_in : [contract.status];
+  if (!accepted.includes(response.status)) return { ok: false, detail: `HTTP ${response.status}, expected ${accepted.join(' or ')}` };
   if (contract.content_type && !response.contentType.toLowerCase().startsWith(contract.content_type)) {
     return { ok: false, detail: `content-type '${response.contentType}', expected ${contract.content_type}` };
   }
-  if (contract.json_has || contract.json_equals) {
+  if (contract.json_has || contract.json_equals || contract.json_one_of) {
     let doc;
     try { doc = JSON.parse(response.body); } catch { return { ok: false, detail: 'body is not JSON' }; }
     for (const k of contract.json_has ?? []) if (dig(doc, k) === undefined || dig(doc, k) === null) return { ok: false, detail: `JSON lacks '${k}'` };
     for (const [k, v] of Object.entries(contract.json_equals ?? {})) if (dig(doc, k) !== v) return { ok: false, detail: `JSON '${k}' is ${JSON.stringify(dig(doc, k))}, expected ${JSON.stringify(v)}` };
+    for (const [k, allowed] of Object.entries(contract.json_one_of ?? {})) if (!allowed.includes(dig(doc, k))) return { ok: false, detail: `JSON '${k}' is ${JSON.stringify(dig(doc, k))}, expected one of ${JSON.stringify(allowed)}` };
   }
   for (const s of contract.body_includes ?? []) if (!response.body.includes(s)) return { ok: false, detail: `body lacks ${JSON.stringify(s)}` };
   return { ok: true, detail: 'contract satisfied' };

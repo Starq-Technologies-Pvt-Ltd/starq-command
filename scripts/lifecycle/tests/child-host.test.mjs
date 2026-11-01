@@ -71,6 +71,45 @@ test('child host: pipe identity proof, unauthenticated shutdown refused, authent
   }
 });
 
+test('child host: stops a component that exports no server and keeps a timer running (PM shape)', { skip: childHostPrerequisite }, async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'starq-child-'));
+  const entry = path.join(dir, 'svc.mjs');
+  // Like pm-service.mjs: the server is created inside the direct-run block and
+  // never exported, and a recurring timer would otherwise keep the process alive.
+  writeFileSync(entry, [
+    "import http from 'node:http';",
+    "import path from 'node:path';",
+    "import { fileURLToPath } from 'node:url';",
+    "if (path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {",
+    "  setInterval(() => {}, 1000);",
+    "  http.createServer((q, s) => s.end('ok')).listen(0, '127.0.0.1', () => console.log('svc up'));",
+    "}",
+  ].join('\n'));
+  const instance = randomBytes(16).toString('hex');
+  const token = randomBytes(32).toString('base64url');
+  const child = spawn(process.execPath, [CHILD_HOST], {
+    env: { ...process.env, STARQ_LC_NAME: 'pm', STARQ_LC_INSTANCE: instance, STARQ_LC_TOKEN: token, STARQ_LC_KIND: 'module', STARQ_LC_ENTRY: entry, STARQ_LC_PORT: '0', STARQ_LC_HOST: '127.0.0.1', STARQ_LC_ROOT: dir },
+    stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, shell: false,
+  });
+  let out = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { out += d; });
+  const exited = new Promise((r) => child.on('exit', (code) => r(code)));
+  try {
+    for (let i = 0; i < 100 && !out.includes('svc up'); i += 1) await sleep(50);
+    assert.match(out, /svc up/, out);
+    const info = (await inspectProcesses([child.pid])).get(child.pid);
+    const rec = { name: 'pm', pid: child.pid, instance_id: instance, token, exe: info.exe, created_at: info.created };
+    assert.equal((await requestShutdown(rec)).ok, true);
+    const code = await Promise.race([exited, sleep(8000).then(() => 'STILL RUNNING')]);
+    assert.equal(code, 0, `must exit on an owner stop request: ${out}`);
+    assert.doesNotMatch(out, /no supported server shutdown adapter/);
+  } finally {
+    if (child.exitCode === null) child.kill();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('child host refuses to run without its launch environment', { skip: childHostPrerequisite }, async () => {
   const child = spawn(process.execPath, [CHILD_HOST], { env: { ...process.env, STARQ_LC_NAME: '' }, stdio: 'ignore', windowsHide: true });
   const code = await new Promise((r) => child.on('exit', r));

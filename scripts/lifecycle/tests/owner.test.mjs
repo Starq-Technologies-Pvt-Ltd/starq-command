@@ -63,6 +63,8 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
   let listenersFail = false;
   const iso = () => new Date(clock += 1).toISOString().replace('Z', '0000Z');
   const SELF = 999;
+  // What the OS TCP table SHOWS can differ from where processes really listen.
+  const sim = { table: (rows) => rows };
   procs.set(SELF, { found: true, name: 'node.exe', exe: NODE, created: iso() });
 
   const kill = (pid) => {
@@ -85,7 +87,7 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
       return m;
     },
     inspectInfrastructure: async () => [],
-    listListeners: async () => { if (listenersFail) throw new InspectionError('netstat failed'); return listeners.map((l) => ({ ...l })); },
+    listListeners: async () => { if (listenersFail) throw new InspectionError('netstat failed'); return sim.table(listeners.map((l) => ({ ...l }))); },
     spawnChild: (exe, args, opts) => {
       const pid = ++nextPid;
       const name = opts.env.STARQ_LC_NAME;
@@ -102,7 +104,9 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
           PM_ROOM_FROM: opts.env.PM_ROOM_FROM ?? null,
           PM_ROOM_INSTANCE: opts.env.PM_ROOM_INSTANCE ?? null,
           PM_ROOM_SEND_SCRIPT: opts.env.PM_ROOM_SEND_SCRIPT ?? null,
+          STARQ_WORKSPACE: opts.env.STARQ_WORKSPACE ?? null,
         },
+        cwd: opts.cwd ?? null,
       });
       procs.set(pid, { found: true, name: 'node.exe', exe, created: iso() });
       pipes.set(pid, { instance: opts.env.STARQ_LC_INSTANCE, name });
@@ -185,7 +189,7 @@ function world({ mutateConfig = null, env = {}, historicalCloseoutHandoff = null
   };
   const owner = createOwner({ configFile, runtimeDir, env, configOptions: { checkFiles: false }, deps });
   return {
-    dir, configFile, runtimeDir, owner, procs, pipes, listeners, behaviour, health, calls, brokerSim, files, SELF, deps,
+    dir, configFile, runtimeDir, owner, procs, pipes, listeners, behaviour, health, calls, brokerSim, files, SELF, deps, sim,
     statePath: path.join(runtimeDir, 'state.json'),
     set inspectFails(v) { inspectFails = v; }, set listenersFail(v) { listenersFail = v; },
     iso, kill,
@@ -708,6 +712,26 @@ test('STATUS: RUNNING only with full ownership, contract health, owned listeners
   } finally { w.cleanup(); }
 });
 
+test('STATUS: the OS table is a veto, not the proof - a silent or pid-0 table does not unseat a pipe-proven instance', async () => {
+  const w = world();
+  try {
+    await w.owner.start();
+    const view = async (table) => { w.sim.table = table; return w.owner.status(); };
+
+    // Windows machines whose table lists live listeners under pid 0, or not at all.
+    for (const [label, table] of [['silent', () => []], ['pid 0', (rows) => rows.map((r) => ({ ...r, pid: 0 }))]]) {
+      const s = await view(table);
+      assert.equal(s.overall, 'RUNNING', `${label} table: ${JSON.stringify(s.problems)}`);
+      assert.ok(s.components.every((x) => x.listener.owned && x.bound?.ok), `${label} table: every child proven by its control pipe`);
+    }
+
+    // But the table still VETOES: a different real process on a child's port.
+    const s = await view((rows) => [...rows, { port: 5178, pid: 55555 }]);
+    assert.equal(s.overall, 'DEGRADED');
+    assert.ok(s.problems.some((p) => /non-owned/.test(p)));
+  } finally { w.cleanup(); }
+});
+
 test('STATUS: stopped with a foreign listener on a control-plane port is CONFLICT, not STOPPED', async () => {
   const w = world();
   try {
@@ -929,5 +953,74 @@ test('STATUS: profile readiness needs RUNNING, a commissioned owner protocol AND
     const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: { ...w.deps,
       standaloneHerdrGate: async () => ({ resolved: true }), probeStandaloneHerdr: async () => ({ state: 'AVAILABLE' }) } });
     assert.equal((await owner.status()).normal_profile.ready, false);
+  } finally { w.cleanup(); }
+});
+
+// ── Stop must not depend on a fresh containment experiment ──────────────────
+test('STOP completes even when the runtime containment probe can no longer pass', async () => {
+  // Incident: start reached READY, then stop died with "authenticated started
+  // receipt has no root_pid" and the services stayed up. The probe launches a
+  // throwaway child, and stop had no business needing one. A companion whose
+  // probe always fails stands in for that condition; stopping the already
+  // running, already recorded services must not touch it.
+  const w = world();
+  try {
+    const asked = [];
+    const probeFails = (workspace, stateDir, { tier, verifyRuntime }) => {
+      asked.push(verifyRuntime);
+      if (verifyRuntime !== false) throw new Error('G-CONTAINMENT-DEV: runtime containment evidence failed: authenticated started receipt has no root_pid');
+      return { guardian: 'JobGuardian.exe', guardianSha256: 'a'.repeat(64), stateDir, tier };
+    };
+    const kernelClosed = () => ({
+      launch() { throw new Error('stop must never launch'); },
+      status: async () => ({ owned: true, closed: true, active: 0, guardian_gone: true, root_gone: true }),
+      stop: async () => ({ outcome: 'GONE', owned: true, closed: true, active: 0 }),
+      receipt: () => ({ root_pid: 1 }),
+    });
+
+    const owner = createOwner({
+      configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false },
+      deps: {
+        ...w.deps,
+        // Give EVERY child a recorded containment descriptor, as the real
+        // launcher does, so the DEFAULT closeout path is what runs. The world
+        // normally stubs treeClosed as "leaf processes only"; with that stub
+        // removed, a child with no descriptor can never be proven closed.
+        spawnChild: async (...a) => ({ ...(await w.deps.spawnChild(...a)), containment: { kind: 'TEST_JOB' } }),
+        treeClosed: undefined,
+        treeSignalSafe: undefined,
+        containmentOptions: probeFails,
+        nativeContainment: kernelClosed,
+      },
+    });
+
+    assert.equal((await owner.start()).result, RESULT.READY);
+    assert.ok(readState(w.statePath).state.children.every((c) => c.containment), 'fixture needs every child to carry a containment descriptor');
+
+    const r = await owner.stop();
+    assert.equal(r.result, RESULT.STOPPED, `stop failed: ${JSON.stringify(r)}`);
+    assert.ok(asked.length > 0, 'the containment companion was never consulted, so this test proved nothing');
+    assert.ok(asked.every((v) => v === false), `stop requested the runtime probe: ${JSON.stringify(asked)}`);
+  } finally { w.cleanup(); }
+});
+
+// ── Which workspace a child serves is decided by the lifecycle's workspace_root ──
+test('every child is told the lifecycle workspace_root, which decides which database it opens', async () => {
+  // owner.mjs hands each child STARQ_WORKSPACE = cfg.workspace_root, and
+  // server/paths.mjs lets that variable OVERRIDE directory ancestry. So the
+  // workspace_root in the config - not where a child's code happens to live -
+  // chooses the database PM opens in its production mode. An acceptance harness
+  // once relied on code location instead, kept the real workspace_root, and
+  // opened the Founder's live database from a "disposable" stack. This pins the
+  // contract that such isolation must be built on.
+  const w = world();
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const cfg = JSON.parse(readFileSync(w.configFile, 'utf8'));
+    assert.ok(w.calls.spawn.length >= 4, 'fixture should have launched the services');
+    for (const spawn of w.calls.spawn) {
+      assert.equal(spawn.env.STARQ_WORKSPACE, cfg.workspace_root, `${spawn.name} was not handed the lifecycle workspace_root`);
+      assert.ok(spawn.cwd && path.resolve(spawn.cwd).toLowerCase().startsWith(path.resolve(cfg.workspace_root).toLowerCase()), `${spawn.name} runs outside the workspace: ${spawn.cwd}`);
+    }
   } finally { w.cleanup(); }
 });

@@ -33,6 +33,7 @@ import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHe
 import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
 import { provablyGoneAcrossBoot } from './boot-closeout.mjs';
+import { APP_ROOT, localContainmentOptions, localNativeContainment, resolveRootPid } from './containment/local-gate.mjs';
 
 const [herdrStatusComponent, herdrLauncherComponent, herdrContainmentComponent] = await Promise.all([
   importExternalComponent('herdr-floor', 'src/herdr-status.mjs'),
@@ -88,8 +89,62 @@ function forceKillReal(pid) {
   });
 }
 
+/**
+ * Native containment, split by what the caller is about to do.
+ *
+ * `containmentOptions` runs, by default, a RUNTIME PROBE: it launches a
+ * disposable child, waits for its signed started receipt, and proves a Job
+ * Object really contains it. That is the right precondition before LAUNCHING a
+ * new child on a machine - "can we contain what we are about to start?"
+ *
+ * It is the wrong precondition for acting on a descriptor that was ALREADY
+ * issued. `stop`, `status`, the closeout proof and forced recovery only need the
+ * pinned guardian and the recorded descriptor; the kernel answers `owned`,
+ * `closed`, `active` and `root_gone` itself and the guardian reply is validated
+ * strictly. Re-running the probe there added nothing to ownership, yet made
+ * stopping running services depend on a brand new child spawning and writing a
+ * receipt inside a fixed 2.5 s window - so a service that was up could fail to be
+ * stopped through the supported path, with an error about a probe child rather
+ * than about the service. `waitGone` polls, so it paid that cost, about 0.8 s
+ * and a spawned process, on every iteration.
+ *
+ * `verifyRuntime: false` is the companion's own supported option. It skips only
+ * the throwaway-child experiment; the guardian binary pin, source pin, build
+ * schema and dependency-drift checks still run. Nothing about ownership is
+ * relaxed: instance proof over the control pipe, the HMAC receipt and the
+ * kernel's own `owned` verdict are untouched.
+ *
+ * The recorded-descriptor accessor deliberately exposes no `launch`, so the
+ * unprobed path cannot be used to start anything.
+ */
+export function createContainmentAccessors({ containmentOptions: options, nativeContainment: native, resolve }) {
+  const build = (verifyRuntime) => {
+    const { workspace, stateDir, tier } = resolve();
+    return native(options(workspace, stateDir, { tier, verifyRuntime }));
+  };
+  return {
+    forLaunch: () => build(true),
+    forRecorded: () => {
+      const { status, stop, receipt } = build(false);
+      return { status, stop, receipt };
+    },
+  };
+}
+
 export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {}, tier = null }) {
-  const jobs = () => nativeContainment(containmentOptions(cfgOf().workspace_root, runtimeDir, { tier: effectiveTier() }));
+  // The standalone profile contains its children with Command's OWN package
+  // (runtime/containment) and Node runtime; only the full online profile still
+  // uses the Herdr Floor companion. Herdr Floor is not needed to start Command.
+  const isLocalProfile = () => { try { return cfgOf().profile?.name === COMMAND_LOCAL_PROFILE; } catch { return false; } };
+  const containment = createContainmentAccessors({
+    containmentOptions: deps.containmentOptions ?? ((ws, sd, o) => (isLocalProfile()
+      ? localContainmentOptions(APP_ROOT, sd, { ...o, nodePath: cfgOf().node })
+      : containmentOptions(ws, sd, o))),
+    nativeContainment: deps.nativeContainment ?? ((o) => (isLocalProfile() ? localNativeContainment(o) : nativeContainment(o))),
+    resolve: () => ({ workspace: cfgOf().workspace_root, stateDir: runtimeDir, tier: effectiveTier() }),
+  });
+  const jobs = containment.forLaunch;       // launch only: proves a new child can be contained
+  const recorded = containment.forRecorded; // everything else: acts on an already-issued descriptor
   const effectiveTier = () => tier ?? (cfgOf().profile?.tier ?? 'development');
   const inspectionOptions = inspectionTools ? { powershellExe: inspectionTools.powershell } : {};
   const listenerOptions = inspectionTools ? { netstatExe: inspectionTools.netstat } : {};
@@ -99,18 +154,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     listListeners: deps.listListeners ?? (() => listListeners(listenerOptions)),
     spawnChild: deps.spawnChild ?? (async (exe, args, opts, reserve) => {
       const child = jobs().launch({ argv: [exe, ...args], ...opts }, reserve);
-      if (!await resolvePid(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
+      if (!await (isLocalProfile() ? resolveRootPid : resolvePid)(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
       return child;
     }),
     proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),
     proveBoundAddress: deps.proveBoundAddress ?? ((child) => proveBoundAddress(child)),
     requestShutdown: deps.requestShutdown ?? ((child) => requestShutdown(child)),
     gracefulStopContained: deps.gracefulStopContained ?? ((child, graceMs) => child.containment
-      ? jobs().stop(child.containment, { force: false, graceMs })
+      ? recorded().stop(child.containment, { force: false, graceMs })
       : Promise.resolve({ outcome: 'UNKNOWN', detail: 'contained graceful stop requires the recorded job descriptor' })),
     historicalCloseoutHandoff: deps.historicalCloseoutHandoff ?? evaluateHistoricalCloseoutHandoff,
     recordedHistoricalCloseoutRecovery: deps.recordedHistoricalCloseoutRecovery ?? evaluateRecordedHistoricalCloseoutRecovery,
-    recoverOwnedJob: deps.recoverOwnedJob ?? ((containment, graceMs) => jobs().stop(containment, { force: true, graceMs })),
+    recoverOwnedJob: deps.recoverOwnedJob ?? ((descriptor, graceMs) => recorded().stop(descriptor, { force: true, graceMs })),
     checkHealth: deps.checkHealth ?? ((host, comp) => checkHealth(host, comp)),
     brokerRequest: deps.brokerRequest ?? brokerRequestReal,
     readFile: deps.readFile ?? ((f) => readFileSync(f, 'utf8')),
@@ -120,7 +175,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     selfPid: deps.selfPid ?? process.pid,
     treeClosed: deps.treeClosed ?? (async (child) => {
       if (!child.containment) return false;
-      if ((await jobs().status(child.containment)).closed === true) return true;
+      if ((await recorded().status(child.containment)).closed === true) return true;
       // The guardian can only prove closeout from its `closed.json` receipt,
       // which an unclean shutdown never writes — so its `closed:false` means
       // "still open" OR "cannot tell", indistinguishably. Consult the reboot
@@ -136,7 +191,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       journal('closeout.boot_proof', { name: child.name, proven: verdict.proven, reason: verdict.reason, ...verdict.basis });
       return verdict.proven;
     }),
-    treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
+    treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await recorded().status(child.containment)).owned === true : false),
     prerequisites: deps.prerequisites ?? ((cfg) => {
       if (cfg.profile?.name === OBSERVATION_PROFILE) return readObservationGates(cfg.workspace_root, cfg);
       if (cfg.profile?.name === COMMAND_LOCAL_PROFILE) return readCommandLocalGates(cfg.workspace_root, cfg);
@@ -207,7 +262,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     if (child.containment && !deps.treeClosed) {
       const deadline = Date.now() + cfg.timeouts_ms.graceful_exit;
       for (;;) {
-        const proof = await jobs().status(child.containment);
+        const proof = await recorded().status(child.containment);
         if (proof.owned && proof.closed && proof.active === 0) return 'GONE';
         if (!proof.owned || Date.now() >= deadline) return proof.owned ? 'STILL_RUNNING' : 'UNKNOWN';
         await d.sleep(d.pollMs);
@@ -874,14 +929,23 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       const entry = { name, port: c.port, recorded: Boolean(rec), pid: rec?.pid ?? null, declared_status: rec?.status ?? null };
       entry.ownership = !rec ? 'NOT_RECORDED' : rec.status === 'EXITED' ? (rec.tree_closeout_verified === true ? 'EXITED' : 'EXITED_UNVERIFIED') : verdicts.get(name)?.verdict ?? 'UNKNOWN';
       entry.ownership_detail = rec && rec.status !== 'EXITED' ? verdicts.get(name)?.detail ?? null : null;
+      let bound = null;
       if (entry.ownership === 'OWNED') {
         entry.health = await d.checkHealth(cfg.host, c);
+        // Authenticated proof of where this instance listens. The OS TCP table on
+        // some Windows machines reports live listeners under pid 0 (or not at all),
+        // so it cannot be what decides ownership; it only vetoes (see below).
+        bound = await d.proveBoundAddress(rec);
+        entry.bound = { ok: bound.ok, supported: bound.supported, addresses: bound.addresses, detail: bound.detail };
       }
       if (listeners) {
         const rows = listeners.filter((l) => l.port === c.port);
+        const confirmed = Boolean(bound?.ok && boundOnPort(bound.addresses, c.port));
+        const foreign = rows.some((l) => l.pid !== rec?.pid && l.pid !== 0);
+        const tableAgrees = rows.length > 0 && rows.every((l) => l.pid === rec?.pid);
         entry.listener = {
-          present: rows.length > 0,
-          owned: rows.length > 0 && entry.ownership === 'OWNED' && rows.every((l) => l.pid === rec.pid),
+          present: rows.length > 0 || confirmed,
+          owned: entry.ownership === 'OWNED' && !foreign && (confirmed || (bound?.supported === false && tableAgrees)),
           pids: rows.map((l) => l.pid),
           classifications: rows.map((l) => {
             const info = listenerInfos.get(l.pid);

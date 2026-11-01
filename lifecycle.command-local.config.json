@@ -1,8 +1,8 @@
 {
   "schema": "starq.command.lifecycle.config/v1",
-  "note": "command-local/v1 — the Founder's standalone daily-driver profile (CV-C1c). PM, Data and UI are required and fail closed; Building is optional and started best-effort, never blocking readiness. Herdr Broker and Herdr are declared optional but are not in this graph (use lifecycle.config.json / the full starq-online profile when Herdr is wanted). No WSL, Room broker or standalone-Herdr ownership is required. Runtime port/URL env overrides are REJECTED, as in every profile.",
+  "note": "command-local/v1 — the Founder's standalone daily-driver profile (CV-C1c). PM, Data and UI are required and fail closed; Building is optional and started best-effort, never blocking readiness. Herdr Broker and Herdr are declared optional but are not in this graph (use lifecycle.config.json / the full starq-online profile when Herdr is wanted). No WSL, Room broker, standalone-Herdr ownership or Herdr Floor installation is required: the Node runtime (runtime/node, provisioned from an approved hash-pinned install) and the containment package (runtime/containment) ship with Command. Runtime port/URL env overrides are REJECTED, as in every profile.",
   "workspace_root": "D:\\StarqTech",
-  "node": "D:\\StarqTech\\00_STARQ_HQ\\operations\\herdr-floor\\runtime\\nodejs\\node.exe",
+  "node": "runtime/node/node.exe",
   "host": "127.0.0.1",
   "timeouts_ms": {
     "identity": 10000,
@@ -22,15 +22,26 @@
       "health": {
         "path": "/api/health",
         "status": 200,
+        "status_in": [
+          200,
+          503
+        ],
         "content_type": "application/json",
-        "json_equals": {
-          "health.overall": "OK"
-        },
         "json_has": [
           "assembled_at",
           "workspace",
-          "health"
-        ]
+          "health",
+          "health.overall"
+        ],
+        "json_one_of": {
+          "health.overall": [
+            "OK",
+            "UNAVAILABLE",
+            "STALE",
+            "DRIFT",
+            "UNREADABLE"
+          ]
+        }
       }
     },
     {
