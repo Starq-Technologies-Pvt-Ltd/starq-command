@@ -107,6 +107,9 @@ async function startServer() {
     PM_DB_PATH: tempDb,
     PM_PORT: String(serverPort),
     PM_ROOM_POST: 'off',
+    // CV-C6: fresh databases are empty by default, so a test that needs
+    // the Starq fixtures must ask for them explicitly.
+    COMMAND_PROVISION: 'starq',
     COMMAND_OBSERVATION_ONLY: '1',
   };
   serverProcess = spawn(process.execPath, [COMMAND_ENTRY], {

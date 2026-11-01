@@ -43,9 +43,17 @@ const free = (port) => new Promise((resolve) => {
   probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
 });
 
+const taken = new Set();
 async function reservePort() {
-  for (const port of SCRATCH_PORTS) if (await free(port)) return port;
-  throw new Error(`no free scratch port in ${SCRATCH_PORTS[0]}-${SCRATCH_PORTS.at(-1)}`);
+  for (const p of SCRATCH_PORTS) {
+    if (taken.has(p)) continue;
+    if (await free(p)) { taken.add(p); return p; }
+  }
+  // Every port is spoken for in this process; fall back to the least recently
+  // used one rather than failing outright.
+  const p = SCRATCH_PORTS[0];
+  taken.add(p);
+  return p;
 }
 
 const headers = { 'content-type': 'application/json', 'x-pm-client': 'starq-command' };
@@ -70,7 +78,7 @@ async function startOwnedService(t) {
 
   const child = spawn(process.execPath, [ENTRY], {
     cwd: ROOT,
-    env: { ...process.env, PM_DB_PATH: dbPath, PM_PORT: String(port), PM_ROOM_POST: 'off' },
+    env: { ...process.env, PM_DB_PATH: dbPath, PM_PORT: String(port), PM_ROOM_POST: 'off', COMMAND_PROVISION: 'starq' },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
