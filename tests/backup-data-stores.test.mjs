@@ -159,3 +159,104 @@ test('the CLI refuses a same-directory backup and keeps the source file', (t) =>
   assert.match(proc.stderr, /refusing backup/);
   assert.deepEqual(fingerprint(dbPath), before);
 });
+
+// ── no-clobber publication regressions ────────────────────────────────────
+
+function backupResidue(dir) {
+  return fs.readdirSync(dir).filter((name) => name.startsWith('.partial-'));
+}
+
+function makeFileDb(root, rows) {
+  const src = path.join(root, 'data');
+  const out = path.join(root, 'out');
+  makeDb(path.join(src, 'pm.db'), rows);
+  return { src, out, dbPath: path.join(src, 'pm.db') };
+}
+
+test('publish links the backup into place and never renames a temp over a destination', () => {
+  const source = fs.readFileSync(SCRIPT, 'utf8');
+  assert.match(source, /fs\.linkSync\(temp, dest\)/);
+  assert.doesNotMatch(source, /renameSync\(temp, dest\)/);
+});
+
+test('new publication links the backup into place and leaves no temp', (t) => {
+  const root = tempDir(t, 'command-backup-fresh-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'fresh' }]);
+  const before = fingerprint(dbPath);
+  const manifest = backupDataStores(src, out);
+  assert.equal(manifest.files['pm.db'].backup_integrity_check, 'ok');
+  assert.deepEqual(fingerprint(dbPath), before);
+  assert.deepEqual(fingerprint(path.join(out, 'pm.db')).rows, before.rows);
+  assert.deepEqual(backupResidue(out), []);
+});
+
+test('retire-and-replace of an existing backup preserves data and clears the retired copy', (t) => {
+  const root = tempDir(t, 'command-backup-retire-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'new backup' }]);
+  fs.mkdirSync(out, { recursive: true });
+  makeDb(path.join(out, 'pm.db'), [{ id: 'OLD', title: 'prior backup' }]);
+  const sourceBefore = fingerprint(dbPath);
+  const manifest = backupDataStores(src, out);
+  assert.equal(manifest.files['pm.db'].backup_integrity_check, 'ok');
+  assert.deepEqual(fingerprint(dbPath), sourceBefore);
+  assert.deepEqual(fingerprint(path.join(out, 'pm.db')).rows, [{ id: 'T-1', title: 'new backup' }]);
+  assert.deepEqual(fs.readdirSync(out).filter((n) => n.startsWith('.partial-') || n.includes('.replaced-')), []);
+});
+
+test('a destination created during fresh publication is not overwritten', (t) => {
+  const root = tempDir(t, 'command-backup-race-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'ours' }]);
+  const sourceBefore = fingerprint(dbPath);
+  const competitor = Buffer.from('competitor-kept-bytes');
+  const competitorHash = createHash('sha256').update(competitor).digest('hex');
+  const realLink = fs.linkSync;
+  fs.linkSync = (existing, neu) => {
+    fs.writeFileSync(neu, competitor);   // a competitor wins the name just before our link
+    return realLink(existing, neu);      // the real link now fails EEXIST
+  };
+  t.after(() => { fs.linkSync = realLink; });
+  try {
+    assert.throws(() => backupDataStores(src, out), (error) => {
+      assert.equal(error.code, 'BACKUP_DESTINATION_UNSAFE');
+      assert.match(error.message, /not overwritten/);
+      return true;
+    });
+    assert.equal(createHash('sha256').update(fs.readFileSync(path.join(out, 'pm.db'))).digest('hex'), competitorHash);
+    assert.deepEqual(fingerprint(dbPath), sourceBefore);
+    assert.deepEqual(backupResidue(out), []);
+  } finally {
+    fs.linkSync = realLink;
+  }
+});
+
+test('a competitor during retire-and-replace preserves the prior backup and reports incomplete', (t) => {
+  const root = tempDir(t, 'command-backup-retire-race-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'ours' }]);
+  fs.mkdirSync(out, { recursive: true });
+  makeDb(path.join(out, 'pm.db'), [{ id: 'OLD', title: 'prior backup' }]);
+  const sourceBefore = fingerprint(dbPath);
+  const competitor = Buffer.from('competitor-during-replace');
+  const competitorHash = createHash('sha256').update(competitor).digest('hex');
+  const realLink = fs.linkSync;
+  fs.linkSync = (existing, neu) => {
+    fs.writeFileSync(neu, competitor);   // competitor takes the freed name after retire
+    return realLink(existing, neu);      // EEXIST
+  };
+  t.after(() => { fs.linkSync = realLink; });
+  try {
+    let retiredPath = null;
+    assert.throws(() => backupDataStores(src, out), (error) => {
+      assert.equal(error.code, 'BACKUP_PUBLISH_INCOMPLETE');
+      assert.match(error.message, /prior backup preserved at/);
+      retiredPath = error.retired;
+      return true;
+    });
+    assert.equal(createHash('sha256').update(fs.readFileSync(path.join(out, 'pm.db'))).digest('hex'), competitorHash);
+    assert.ok(retiredPath && fs.existsSync(retiredPath));
+    assert.deepEqual(fingerprint(retiredPath).rows, [{ id: 'OLD', title: 'prior backup' }]);
+    assert.deepEqual(fingerprint(dbPath), sourceBefore);
+    assert.deepEqual(backupResidue(out), []);
+  } finally {
+    fs.linkSync = realLink;
+  }
+});

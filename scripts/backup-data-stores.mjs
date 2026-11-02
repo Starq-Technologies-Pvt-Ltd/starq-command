@@ -101,22 +101,57 @@ export function backupDataStores(srcDir, outDir) {
     createdByUs.delete(path.resolve(temp));
   };
 
+  // Publication is exclusive and no-clobber: the backup is linked into place
+  // with fs.linkSync, which fails EEXIST when the name already exists (including
+  // a symlink), so a destination created by another process is never
+  // overwritten. rename is used only to move our OWN prior backup aside
+  // (retire), never to publish over a name that may have been raced.
+  const linkIntoPlace = (temp, dest) => {
+    fs.linkSync(temp, dest);
+    try { fs.unlinkSync(temp); } catch { /* temp hard-link lingers; dest is committed */ }
+    createdByUs.delete(path.resolve(temp));
+  };
+
   const publish = (temp, dest) => {
     distinctFromSources(temp, sources, 'temporary file');
     distinctFromSources(dest, sources, 'destination');
     if (!fs.existsSync(dest)) {
-      fs.renameSync(temp, dest);
-      createdByUs.delete(path.resolve(temp));
-      return;
+      try {
+        linkIntoPlace(temp, dest);
+        return;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        // A competitor created dest after our check. Never overwrite it.
+        throw Object.assign(
+          new Error(`refusing backup: ${dest} was created by another process during publication; not overwritten`),
+          { code: 'BACKUP_DESTINATION_UNSAFE' },
+        );
+      }
     }
+    // Intentional retire-and-replace of a backup already present at this name.
     const retired = `${dest}.replaced-${process.pid}-${randomBytes(4).toString('hex')}`;
     distinctFromSources(retired, sources, 'retired backup');
     fs.renameSync(dest, retired);
     try {
-      fs.renameSync(temp, dest);
-      createdByUs.delete(path.resolve(temp));
+      linkIntoPlace(temp, dest);
     } catch (error) {
-      try { if (!fs.existsSync(dest) && fs.existsSync(retired)) fs.renameSync(retired, dest); } catch { /* leave both names for the operator */ }
+      if (error?.code === 'EEXIST') {
+        // A competitor took the freed name during replacement. Never overwrite
+        // it; the prior backup stays under `retired` and we report incomplete.
+        throw Object.assign(
+          new Error(`backup publication incomplete: ${dest} was recreated by another process during replacement; prior backup preserved at ${retired}`),
+          { code: 'BACKUP_PUBLISH_INCOMPLETE', retired },
+        );
+      }
+      // Other failure: restore the prior backup to its original name only if the
+      // name is free. Never overwrite a competitor; otherwise keep the retired
+      // copy under its recoverable name for the operator.
+      try {
+        if (!fs.existsSync(dest)) {
+          fs.linkSync(retired, dest);
+          fs.unlinkSync(retired);
+        }
+      } catch { /* leave the retired copy under its recoverable name */ }
       throw error;
     }
     distinctFromSources(retired, sources, 'retired backup');
