@@ -1,0 +1,202 @@
+# Public-facing documentation audit — 2026-11-02
+
+Scope: a review of public-facing documentation and assets after the repository
+became publicly visible, covering sensitive disclosures, outdated development
+material, misleading product claims, and broken documentation links. This audit
+**reports** findings; it changes no source code and deletes no historical
+records. Recommendations are for Founder decision.
+
+## Summary
+
+- A **preliminary scan of tracked files** found no credentials, tokens, private
+  keys, or production secrets; the only secret-shaped strings are read-only
+  guards, idempotency tokens, and `.env.example` reference keys that are
+  explicitly commented as reference-only. **This is not proof that the repository
+  is clean.** It did not cover Git history, binary assets, or every path
+  exhaustively, so a dedicated disclosure audit remains an open recommendation
+  (see finding 8).
+- The largest disclosure concern is the **operational dashboard screenshot**,
+  which shows one operator's real AI-provider stack and subscription-usage ratios.
+- The previous `README.md` was **substantially outdated and founder-surface
+  specific**, described the product as a read-only "Phases 1–5" projection, and
+  contained **broken relative links** pointing outside the repository.
+- Numerous **dated engineering records** in the repository root are historical
+  and should be preserved as evidence, but are easy to mistake for current
+  product documentation.
+
+## Findings
+
+### 1. Operational screenshot discloses real operating data — recommend Founder decision
+
+`STARQ Command Centre Dashboard.png` (~2 MB) is a real capture of the Overview
+surface. It discloses, for one operator's configuration:
+
+- the digital-staff roster and each worker's provider/access and model mapping
+  (e.g. which agents run on which of OpenAI / Anthropic / Google / xAI /
+  Microsoft),
+- **subscription-usage ratios** (per-provider percentages),
+- host OS details and the Founder's identity as Administrator.
+
+None of this is a credential, but together it is internal operating detail.
+
+**Recommendation:** keep the original asset **and its Git history untouched**
+pending a Founder decision (done). The standing recommendation is to replace it
+with a purpose-built, **synthetic-data** screenshot rather than treat it as a
+generic promotional image; alternatively remove it. The rewritten README caption
+now states plainly that the image contains real operating information and points
+here. This audit does not remove, alter, or rewrite the asset or its history.
+
+### 2. Founder email present in one historical record
+
+`TAKEOVER_RECONCILIATION_2026-10-27.md` records a git author identity with an
+email address. This is a historical engineering record and is already present in
+the Git commit history, so editing the single document does not un-disclose it.
+
+**Recommendation:** no change to the historical record (preservation). If the
+Founder wants the address out of forward-facing material, the control is at the
+Git-identity / commit level, not in documentation edits.
+
+### 3. Previous README was outdated and misleading as current product doc
+
+The prior `README.md`:
+
+- Described Command as "the permanent Founder operating surface for Starq Dev
+  Studio" and a pure "DERIVED_PROJECTION … not an SSOT," which no longer matches
+  the product — Command now owns **writable** operating records (PM, org, tasks,
+  comms) alongside its read-only projections (see
+  [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) and the `package.json` description).
+- Led with a "Phases 1–5" narrative and historical phase authorizations as the
+  product's headline identity.
+- Carried **historical, pre-cutover startup instructions** that `cd` into
+  `D:\!starq` (explicitly marked read-only history) and a documentation-status
+  banner dated 03 Oct 2026.
+
+**Action taken:** `README.md` rewritten to present Command as an AI-native
+Organizational Operating System for human and AI workforces, grounded in the
+current code, with an honest operating-status section. The phase history remains
+available in the preserved `PHASE7_*.md` and convergence records.
+
+### 4. Broken documentation links in the previous README
+
+Three relative links pointed outside the repository and were broken on GitHub:
+
+- `](../../corporate-library/STARQ_CANONICAL_CORPORATE_LIBRARY_2026-10-03/05_COMMAND_OS_CANONICAL_DEFINITION.md)`
+- `](../../DOCUMENTATION_INDEX.md)`
+- `](../starq-lifecycle/STARQ_LIFECYCLE.md)`
+
+**Action taken:** removed from the rewritten README. The current README links
+only to files that exist inside the repository.
+
+### 5. `index.html` meta description is stale (source change — flagged, not changed)
+
+`index.html` still describes the app as "the Founder operating surface for Starq
+Dev Studio. A derived projection of canonical Starq truth." This is public-facing
+copy but lives in a shipped source file.
+
+**Recommendation:** update the `<meta name="description">` (and consider the
+`<title>`) to match the current product framing. Not changed here, to respect the
+"no functional source changes" boundary; propose it as a follow-up alongside any
+other UI copy refresh.
+
+### 6. Dated engineering records are easy to mistake for current docs
+
+The repository root holds many dated records (WAVE_*, PHASE7_*, DESIGN_INTEGRATION_*,
+COMMAND_*_AUDIT_*, handovers, etc.) plus `docs/convergence/`. These are valuable
+historical evidence and must be preserved.
+
+**Recommendation:** keep them in place (done), and route readers through the new
+[`docs/README.md`](README.md) index, which separates **current** guides from a
+clearly labelled **historical** section. A later, separately authorized cleanup
+could move historical records under a `docs/history/` tree; this audit does not
+move files.
+
+### 7. Draft governance documents correctly disclaim themselves
+
+`NOTICE.md`, `SECURITY.md`, and `CONTRIBUTING.md` are drafts and say so, claim no
+completed audit, and record that license/ownership language is pending Founder
+approval. `SECURITY.md` also honestly records the accepted-but-unresolved dev
+dependency advisories.
+
+**Recommendation:** no change; these are appropriately honest. Finalize when the
+Founder approves license and security-contact language.
+
+### 8. A full disclosure audit is still open
+
+The scan in this review covered tracked text files only. It did not
+exhaustively cover Git history, binary assets (including the dashboard image),
+or every file. A public repository warrants a dedicated disclosure audit —
+history scanning for secrets, and a review of binary and large assets — before
+any broader distribution.
+
+**Recommendation:** commission a separate, exhaustive disclosure audit. Treat
+the present scan as preliminary and non-exhaustive.
+
+## Corrections applied after Founder QA (2026-11-02)
+
+Following independent Founder QA of the draft PR, the following documentation
+accuracy corrections were made (documentation only; no application code,
+lifecycle logic, data files, settings, or historical evidence changed):
+
+- **Isolation.** The quick start no longer calls `npm run dev` + `pm:start`
+  safely isolated. `pm:start` without `PM_DB_PATH` resolves to the canonical
+  operating database; only a scratch `PM_DB_PATH` with an in-range `PM_PORT`
+  (what `verify:local` uses) isolates writes. The data service may read canonical
+  sources. Three run modes are now distinguished: verified isolated, ordinary
+  development, and live.
+- **Backup architecture.** `scripts/lifecycle/backup.mjs` (operational startup
+  backup/restore with retention/pruning) and `scripts/backup-data-stores.mjs`
+  (immutable versioned architecture) are now described as the distinct mechanisms
+  they are, no longer conflated.
+- **Runtime.** Documented that the PM service uses `node:sqlite`, that Node 20 is
+  insufficient, and that the verified operating runtime is Node 24.15.0 on
+  Windows, distinct from the permissive `engines` field. Application config was
+  not changed.
+- **Releases.** Corrected to state that historical `archive/*` Git tags exist but
+  none is an authorized public product release.
+- **Disclosure scan.** Qualified as a preliminary tracked-file scan, with a
+  standing recommendation for a full disclosure audit (finding 8).
+- **Portability.** README now states Command is designed as a standalone product
+  while acknowledging the current canonical projections and operating profiles
+  carry Starq-specific workspace integration, and that general third-party
+  installation is not accepted.
+
+### Final operating-documentation pass (after second Founder QA)
+
+- **Canonical DB name.** Corrected references to the current canonical operating
+  database from `data/pm-board.db` to **`data/pm-operating.db`** (verified against
+  `CANONICAL.pmBoardDb` in `server/paths.mjs`). `data/pm-board.db` is the legacy
+  name (`pmBoardLegacyDb`).
+- **`verify:local --keep`.** Corrected: the script always calls `stopService()`
+  on completion, so `--keep` preserves the scratch **files**, it does not leave
+  the service running. npm flag forwarding shown accurately as
+  `npm run verify:local -- --keep` / `-- --port 519X`.
+- **Scratch port gating.** Clarified that a `5190–5199` scratch binding requires
+  **both** `PM_DB_PATH` and an in-range `PM_PORT`; `PM_DB_PATH` alone still binds
+  the production port `5176` (an explicit out-of-range `PM_PORT` is rejected).
+- **Absolute isolation claims.** Replaced "safe anywhere" / "never touches any
+  canonical store" with precise claims: scratch mode isolates PM **writes** to the
+  scratch DB, while **read-only** access to canonical workspace inputs can still
+  occur when a workspace is present.
+- **Smoke tests distinguished.** Codex's **66/66 contained Windows lifecycle
+  smoke** (operating acceptance over the real control plane) is now clearly
+  distinguished from the smaller `verify:local` daily-driver functional test.
+
+## What was deliberately not done
+
+- No source/behavior changes, no data access, no deployments, no release tags, no
+  repository visibility change, no merge.
+- No historical record deleted, moved, or redacted.
+- No founder-private operational data removed from the screenshot (flagged for
+  Founder decision instead).
+
+## Verification performed
+
+- Preliminary (non-exhaustive) scan of **tracked text files** for emails and
+  secret-shaped keywords (`secret`, `password`, `api[-_]key`, `token`, `bearer`,
+  `private[-_]key`, PEM/AWS key patterns) across docs, config, and server files —
+  no credentials found. Git history and binary assets were not covered (finding 8).
+- Confirmed the three README links resolve outside the repository.
+- Read the dashboard screenshot to assess disclosure.
+- Cross-checked the rewritten README and new guides against `package.json`,
+  `vite.config.ts`, the `server/` route surface, `src/components/shell.tsx`
+  navigation, and the lifecycle configs.
