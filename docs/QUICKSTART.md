@@ -94,7 +94,10 @@ npm run dev           # data service (:5177) + Vite UI (:5173)
 | Data service (`server/data-service.mjs`) | `5177` | Read-only canonical projection (`GET`/`HEAD` only). May **read** canonical sources when a Starq workspace resolves. |
 | Vite UI | `5173` | Desktop-first shell; proxies `/api/*` to the services. |
 
-Open **http://localhost:5173**. The writable PM service is a separate process
+Open **http://localhost:5173** in a fresh tab only for an authorized PM instance
+on port 5176. For a scratch server on `PM_PORT=5193`, open
+**http://localhost:5173/#home?pm_port=5193** before editing; substitute your
+actual scratch port. The writable PM service is a separate process
 (the `dev` script does not start it):
 
 ```bash
