@@ -1,5 +1,5 @@
 /**
- * Shared SQLite path literal and a read-only VACUUM INTO.
+ * Shared SQLite path literal and verified no-clobber publication.
  *
  * VACUUM INTO cannot take a bound parameter. The destination is quoted, and
  * the copy is refused when it is not a different file from the source.
@@ -8,7 +8,7 @@
  * 1. Cooperative Starq processes are not coordinated by a lock file. An
  *    existing destination name fails closed with EEXIST and is not modified.
  * 2. Another process that replaces the staging directory entry after
- *    verification is refused. The verified database is the inode held on the
+ *    verification is refused. The verified object is the inode held on the
  *    fd opened before publication. The substituted directory entry is not
  *    published and not unlinked. The call does not return integrity "ok".
  * 3. Another process that rewrites that same inode before publication changes
@@ -21,13 +21,17 @@
  *    path again. Node's link() of that proc path fails EXDEV because it does
  *    not follow the descriptor, so GNU ln -L is the primitive that names the
  *    inode. Windows cannot hard-link a handle: the bytes are read from the
- *    verifying handle, written to a new file, and exclusive-linked. Success
- *    requires the destination file index and digest to match that image.
- *    A mismatch is failure. There is no rename fallback.
+ *    verifying handle, written to a new file in the private staging directory,
+ *    and exclusive-linked. Success requires the destination file index and
+ *    digest to match that image. A mismatch is failure. There is no fallback
+ *    that replaces an existing name.
  *
- * Cleanup removes only a temp whose device and inode are still the one this
- * process created. The source, a pre-existing destination, and a substituted
- * file are never unlinked.
+ * Temps live in a private mkdtemp directory (mode 0700) on the destination
+ * volume. Cleanup may unlink a name in that directory only while the fd this
+ * process still holds refers to the inode it created and a fresh fstat of the
+ * directory entry still names that inode. If the entry's inode differs, the
+ * name is left in place and the call throws BACKUP_CLEANUP_INCOMPLETE.
+ * Public names, including the destination, are never unlinked.
  *
  * Used by the data-store backup and the Windows lifecycle acceptance seed.
  */
@@ -40,10 +44,11 @@ import { classifyFilesystemPath } from '../server/room-path.mjs';
 
 /**
  * Injection point for deterministic tests. Production calls these functions.
- * The default publishes through the exclusive primitive, not through rename.
+ * The default publishes through the exclusive primitive.
  */
 export const publishSeam = {
   beforeExclusivePublish(_tempPath) {},
+  beforeCleanupUnlink(_file) {},
   placeExclusive(existingPath, destination) {
     placeExclusiveDefault(existingPath, destination);
   },
@@ -58,6 +63,15 @@ export function sqlitePathLiteral(filePath) {
     throw error;
   }
   return `'${normalized.replaceAll("'", "''")}'`;
+}
+
+/** Private staging directory on the same volume as `anchor`. Mode 0700. */
+export function createPrivateStagingDir(anchor) {
+  const parent = path.dirname(path.resolve(anchor));
+  fs.mkdirSync(parent, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(parent, `.staging-${process.pid}-`));
+  try { fs.chmodSync(dir, 0o700); } catch { /* mode bits are advisory on Windows */ }
+  return dir;
 }
 
 function refuseAlias(source, candidate) {
@@ -79,7 +93,7 @@ function readAll(fd) {
     offset += count;
   }
   if (offset !== size) {
-    const error = new Error('short read from the verified database handle');
+    const error = new Error('short read from the verified handle');
     error.code = 'BACKUP_STAGING_SUBSTITUTED';
     throw error;
   }
@@ -90,15 +104,61 @@ function digestOf(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-function unlinkOwned(file, owned, source) {
-  if (!owned || !file || !fs.existsSync(file)) return;
+function insidePrivate(file, privateDir) {
+  const rel = path.relative(path.resolve(privateDir), path.resolve(file));
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * Unlink `file` only when it is inside `privateDir` and a fresh fstat of that
+ * directory entry still names the inode held by `heldFd`.
+ */
+export function releaseOwnedTemp(file, heldFd, privateDir, source) {
+  if (file === undefined || heldFd === undefined || heldFd === null || !privateDir) return;
   const resolved = path.resolve(file);
-  if (source && resolved === path.resolve(source)) return;
-  let current;
-  try { current = fs.statSync(file, { bigint: true }); }
-  catch { return; }
-  if (current.dev !== owned.dev || current.ino !== owned.ino) return;
-  fs.rmSync(resolved, { force: true });
+  if (source && resolved === path.resolve(source)) {
+    throw Object.assign(new Error('refusing to unlink the source'), { code: 'BACKUP_CLEANUP_INCOMPLETE', preserved: resolved });
+  }
+  if (!insidePrivate(resolved, privateDir)) {
+    throw Object.assign(
+      new Error(`refusing to unlink ${resolved} outside the private staging directory`),
+      { code: 'BACKUP_CLEANUP_INCOMPLETE', preserved: resolved },
+    );
+  }
+  publishSeam.beforeCleanupUnlink(resolved);
+  let entryFd;
+  try {
+    entryFd = fs.openSync(resolved, 'r');
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  try {
+    const entry = fs.fstatSync(entryFd, { bigint: true });
+    const held = fs.fstatSync(heldFd, { bigint: true });
+    if (entry.dev !== held.dev || entry.ino !== held.ino) {
+      throw Object.assign(
+        new Error(`cleanup left ${resolved} in place because its directory entry is not the inode this process holds`),
+        { code: 'BACKUP_CLEANUP_INCOMPLETE', preserved: resolved },
+      );
+    }
+  } finally {
+    fs.closeSync(entryFd);
+  }
+  fs.unlinkSync(resolved);
+}
+
+/** Remove a private staging directory only when it is already empty. */
+export function removeEmptyPrivateDir(privateDir) {
+  try {
+    fs.rmdirSync(privateDir);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw Object.assign(
+      new Error(`private staging directory ${privateDir} still holds a file that was not removed`),
+      { code: 'BACKUP_CLEANUP_INCOMPLETE', preserved: privateDir, cause: error },
+    );
+  }
 }
 
 function exclusiveFailure(error, destination) {
@@ -142,9 +202,8 @@ function assertPublishedMatches(destination, owned, verifiedDigest) {
     const stat = fs.fstatSync(fd, { bigint: true });
     const digest = digestOf(readAll(fd));
     if (stat.dev !== owned.dev || stat.ino !== owned.ino || digest !== verifiedDigest) {
-      const error = new Error(`refusing VACUUM INTO: published file ${destination} is not the verified database`);
+      const error = new Error(`published file ${destination} is not the verified object`);
       error.code = 'BACKUP_PUBLISH_MISMATCH';
-      error.ours = stat.dev === owned.dev && stat.ino === owned.ino;
       throw error;
     }
   } finally {
@@ -152,26 +211,18 @@ function assertPublishedMatches(destination, owned, verifiedDigest) {
   }
 }
 
-function publishVerified(fd, owned, verifiedBytes, verifiedDigest, destination, source) {
+function publishObject(fd, owned, verifiedBytes, verifiedDigest, destination, source, privateDir) {
   if (process.platform === 'linux') {
     try {
       publishSeam.placeExclusive(`/proc/${process.pid}/fd/${fd}`, destination);
     } catch (error) {
       throw exclusiveFailure(error, destination);
     }
-    try {
-      assertPublishedMatches(destination, owned, verifiedDigest);
-    } catch (error) {
-      if (error.ours) unlinkOwned(destination, owned, source);
-      throw error;
-    }
+    assertPublishedMatches(destination, owned, verifiedDigest);
     return;
   }
 
-  const image = path.join(
-    path.dirname(destination),
-    `.vacuum-image-${process.pid}-${randomBytes(6).toString('hex')}.db`,
-  );
+  const image = path.join(privateDir, `image-${randomBytes(4).toString('hex')}.db`);
   const imageFd = fs.openSync(image, 'wx');
   const imageStat = fs.fstatSync(imageFd, { bigint: true });
   try {
@@ -185,27 +236,71 @@ function publishVerified(fd, owned, verifiedBytes, verifiedDigest, destination, 
     }
     fs.fsyncSync(imageFd);
   } catch (error) {
+    try { releaseOwnedTemp(image, imageFd, privateDir, source); }
+    catch (cleanup) {
+      if (cleanup.code === 'BACKUP_CLEANUP_INCOMPLETE') {
+        fs.closeSync(imageFd);
+        throw cleanup;
+      }
+    }
     fs.closeSync(imageFd);
-    unlinkOwned(image, imageStat, source);
     throw error;
   }
-  fs.closeSync(imageFd);
   try {
     publishSeam.placeExclusive(image, destination);
     assertPublishedMatches(destination, imageStat, verifiedDigest);
+    releaseOwnedTemp(image, imageFd, privateDir, source);
   } catch (error) {
-    if (error.ours) unlinkOwned(destination, imageStat, source);
-    unlinkOwned(image, imageStat, source);
-    if (error.code === 'BACKUP_PUBLISH_MISMATCH') throw error;
-    throw exclusiveFailure(error, destination);
+    if (error.code !== 'BACKUP_PUBLISH_MISMATCH' && error.code !== 'BACKUP_CLEANUP_INCOMPLETE' && error.code !== 'BACKUP_STAGING_SUBSTITUTED') {
+      try { releaseOwnedTemp(image, imageFd, privateDir, source); }
+      catch (cleanup) {
+        if (cleanup.code === 'BACKUP_CLEANUP_INCOMPLETE') {
+          fs.closeSync(imageFd);
+          throw cleanup;
+        }
+      }
+      fs.closeSync(imageFd);
+      throw exclusiveFailure(error, destination);
+    }
+    fs.closeSync(imageFd);
+    throw error;
   }
-  unlinkOwned(image, imageStat, source);
+  fs.closeSync(imageFd);
+}
+
+/**
+ * Publish the inode held by `fd` to `destination`.
+ * `stagingPath` is the private-directory entry that must still name that inode.
+ * A substituted entry is not published and not unlinked.
+ */
+export function publishVerifiedFd(fd, stagingPath, destination, { source, privateDir } = {}) {
+  if (!privateDir) {
+    throw Object.assign(new Error('verified publication requires a private staging directory'), { code: 'BACKUP_DESTINATION_UNSAFE' });
+  }
+  const verifiedBytes = readAll(fd);
+  const verifiedDigest = digestOf(verifiedBytes);
+  const owned = fs.fstatSync(fd, { bigint: true });
+  publishSeam.beforeExclusivePublish(stagingPath);
+  let current = null;
+  try { current = fs.statSync(stagingPath, { bigint: true }); } catch { current = null; }
+  if (!current || current.dev !== owned.dev || current.ino !== owned.ino) {
+    throw Object.assign(new Error(
+      `refusing publication: staging path ${stagingPath} no longer names the verified object; the substituted file was not published or deleted`,
+    ), { code: 'BACKUP_STAGING_SUBSTITUTED', preserved: stagingPath });
+  }
+  const heldAgain = readAll(fd);
+  if (digestOf(heldAgain) !== verifiedDigest) {
+    throw Object.assign(new Error('refusing publication: the verified object changed before publication'), { code: 'BACKUP_STAGING_SUBSTITUTED' });
+  }
+  publishObject(fd, owned, heldAgain, verifiedDigest, destination, source, privateDir);
+  return { destination, digest: verifiedDigest, bytes: heldAgain.length };
 }
 
 /**
  * Copy a SQLite database with VACUUM INTO.
  * The source is opened read-only. The destination must not exist and must
- * not resolve to the source. Nothing here deletes or replaces the source.
+ * not resolve to the source. Nothing here deletes or replaces the source,
+ * a pre-existing destination, or a substituted staging inode.
  */
 export function vacuumIntoDistinct(sourcePath, destinationPath) {
   const source = path.resolve(sourcePath);
@@ -231,29 +326,16 @@ export function vacuumIntoDistinct(sourcePath, destinationPath) {
     throw error;
   }
 
-  const temp = path.join(
-    path.dirname(destination),
-    `.vacuum-${process.pid}-${randomBytes(6).toString('hex')}.db`,
-  );
+  const privateDir = createPrivateStagingDir(destination);
+  const temp = path.join(privateDir, 'vacuum.db');
   sqlitePathLiteral(temp);
   refuseAlias(source, temp);
 
   const db = new DatabaseSync(source, { readOnly: true });
   let fd;
-  let owned;
   try {
     db.exec(`VACUUM INTO ${sqlitePathLiteral(temp)}`);
     fd = fs.openSync(temp, 'r');
-    owned = fs.fstatSync(fd, { bigint: true });
-  } catch (error) {
-    if (fd !== undefined) fs.closeSync(fd);
-    unlinkOwned(temp, owned, source);
-    throw error;
-  } finally {
-    db.close();
-  }
-
-  try {
     const check = new DatabaseSync(temp, { readOnly: true });
     let verdict;
     try {
@@ -265,31 +347,26 @@ export function vacuumIntoDistinct(sourcePath, destinationPath) {
     if (verdict !== 'ok') {
       throw new Error(`VACUUM INTO copy failed integrity_check: ${verdict}`);
     }
-    const verifiedBytes = readAll(fd);
-    const verifiedDigest = digestOf(verifiedBytes);
-    publishSeam.beforeExclusivePublish(temp);
-    let current;
-    try { current = fs.statSync(temp, { bigint: true }); }
-    catch { current = null; }
-    if (!current || current.dev !== owned.dev || current.ino !== owned.ino) {
-      const error = new Error(`refusing VACUUM INTO: staging path ${temp} no longer names the verified database; the substituted file was not published or deleted`);
-      error.code = 'BACKUP_STAGING_SUBSTITUTED';
-      throw error;
-    }
-    const heldAgain = readAll(fd);
-    if (digestOf(heldAgain) !== verifiedDigest) {
-      const error = new Error('refusing VACUUM INTO: the verified database changed before publication');
-      error.code = 'BACKUP_STAGING_SUBSTITUTED';
-      throw error;
-    }
-    refuseAlias(source, destination);
-    publishVerified(fd, owned, heldAgain, verifiedDigest, destination, source);
-    unlinkOwned(temp, owned, source);
-    return { destination, integrity: verdict };
+    const published = publishVerifiedFd(fd, temp, destination, { source, privateDir });
+    releaseOwnedTemp(temp, fd, privateDir, source);
+    removeEmptyPrivateDir(privateDir);
+    return { destination, integrity: verdict, digest: published.digest, bytes: published.bytes };
   } catch (error) {
-    unlinkOwned(temp, owned, source);
+    if (fd !== undefined && error.code !== 'BACKUP_STAGING_SUBSTITUTED' && error.code !== 'BACKUP_CLEANUP_INCOMPLETE') {
+      try { releaseOwnedTemp(temp, fd, privateDir, source); }
+      catch (cleanup) {
+        if (cleanup.code === 'BACKUP_CLEANUP_INCOMPLETE') throw cleanup;
+      }
+      try { removeEmptyPrivateDir(privateDir); }
+      catch (cleanup) {
+        if (cleanup.code === 'BACKUP_CLEANUP_INCOMPLETE') throw cleanup;
+      }
+    }
     throw error;
   } finally {
-    fs.closeSync(fd);
+    db.close();
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch { /* closed by an earlier failure path */ }
+    }
   }
 }
