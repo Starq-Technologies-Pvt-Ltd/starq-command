@@ -39,8 +39,9 @@
  *   cycle   restart, and recovery after a child is killed out from under it
  *
  * SAFETY
- *   - never opens or writes the live database; the seed is read with a read-only
- *     handle and copied with VACUUM INTO
+ *   - never writes the live database; the seed is a read-only VACUUM INTO through
+ *     scripts/sqlite-vacuum.mjs, which quotes the path and refuses a destination
+ *     that resolves to the source
  *   - never matches processes by name; every signal is to a PID recorded in the
  *     lifecycle's own state file, and only after confirming it is still our node
  *   - refuses to start if the Command ports are already held by anything else
@@ -60,6 +61,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { resolveWorkspace } from '../../server/paths.mjs';
 import { selectStrays } from './stray-processes.mjs';
 import { verifyNodeRuntime } from '../lifecycle/containment/local-gate.mjs';
+import { vacuumIntoDistinct } from '../sqlite-vacuum.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const GIT = fs.existsSync('C:\\Program Files\\Git\\cmd\\git.exe') ? 'C:\\Program Files\\Git\\cmd\\git.exe' : 'git';
@@ -146,10 +148,7 @@ function build() {
   fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
 
   fs.mkdirSync(path.dirname(DB()), { recursive: true });
-  if (SEED) {
-    const src = new DatabaseSync(SEED, { readOnly: true });
-    try { src.exec(`VACUUM INTO '${DB().split(path.sep).join('/')}'`); } finally { src.close(); }
-  }
+  if (SEED) vacuumIntoDistinct(SEED, DB());
   pass('build', `workspace ${WS} from ${sha.slice(0, 7)}, ${tracked.length} tracked files, no Herdr Floor, no lifecycle package, no pre-provisioned runtime${SEED ? ', seeded from a read-only copy' : ', empty database'}`);
   return sha;
 }

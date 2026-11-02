@@ -1288,14 +1288,15 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/comms/people') {
     const c = commsRecords();
-    const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
     if (!c.ok) {
-      return sendJson(res, 200, {
+      // The directory loader treats any 2xx body as people. An unreadable
+      // Room must not look like an identities-only directory with no activity.
+      return sendJson(res, 503, {
         state: c.state || STATE.UNAVAILABLE,
         error: c.reason,
-        people: peopleDirectory(identitiesSource.data, []),
       });
     }
+    const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
     return sendJson(res, 200, { state: 'OK', people: peopleDirectory(identitiesSource.data, c.records) });
   }
 

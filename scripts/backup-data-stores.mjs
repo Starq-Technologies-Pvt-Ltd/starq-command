@@ -18,20 +18,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { classifyFilesystemPath } from '../server/room-path.mjs';
+import { sqlitePathLiteral } from './sqlite-vacuum.mjs';
+
+export { sqlitePathLiteral };
 
 const arg = (name) => {
   const i = process.argv.indexOf(name);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
 };
-
-/** SQLite string literal for a filesystem path. VACUUM INTO cannot take a bound parameter. */
-export function sqlitePathLiteral(filePath) {
-  const normalized = path.resolve(filePath).split(path.sep).join('/');
-  if (/[\u0000-\u001f]/.test(normalized)) {
-    throw Object.assign(new Error('backup path contains a control character'), { code: 'BACKUP_DESTINATION_UNSAFE' });
-  }
-  return `'${normalized.replaceAll("'", "''")}'`;
-}
 
 function distinctFromSources(candidate, sources, label) {
   for (const file of sources) {
