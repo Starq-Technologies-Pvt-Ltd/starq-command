@@ -44,6 +44,17 @@ function sha256(file) {
 }
 
 /**
+ * Filesystem identity of a file: device + inode (the file itself, preserved
+ * across a rename) plus size and mtime. A competitor that replaces the name
+ * with a different file gets a new inode; one that overwrites in place changes
+ * size/mtime. Either way the identity differs. Throws ENOENT when absent.
+ */
+function fileIdentity(file) {
+  const st = fs.statSync(file, { bigint: true });
+  return `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs}`;
+}
+
+/**
  * Copy every store in `srcDir` into a different directory.
  * Throws before deleting anything when the destination is the source, an
  * alias of the source, or not provably different.
@@ -112,48 +123,99 @@ export function backupDataStores(srcDir, outDir) {
     createdByUs.delete(path.resolve(temp));
   };
 
+  // Restore a file we control into `dest` exclusively: link it in (EEXIST if a
+  // competitor holds the name) then drop the retired name. Returns where the
+  // file ended up — `dest` if restored, otherwise its retired name.
+  const restoreExclusive = (retired, dest) => {
+    try {
+      fs.linkSync(retired, dest);
+      fs.unlinkSync(retired);
+      return dest;
+    } catch { /* dest is held by another process; leave the file under `retired` */ }
+    return retired;
+  };
+
   const publish = (temp, dest) => {
     distinctFromSources(temp, sources, 'temporary file');
     distinctFromSources(dest, sources, 'destination');
-    if (!fs.existsSync(dest)) {
+
+    // Record the identity of any prior backup at `dest`. We verify AFTER the
+    // retire rename that what we moved aside is this same file, never a
+    // competitor that raced in. ENOENT means a fresh exclusive publish.
+    let expected = null;
+    try {
+      expected = fileIdentity(dest);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+
+    const publishFresh = () => {
       try {
         linkIntoPlace(temp, dest);
         return;
       } catch (error) {
         if (error?.code !== 'EEXIST') throw error;
-        // A competitor created dest after our check. Never overwrite it.
+        // A competitor created dest. Never overwrite it.
         throw Object.assign(
           new Error(`refusing backup: ${dest} was created by another process during publication; not overwritten`),
           { code: 'BACKUP_DESTINATION_UNSAFE' },
         );
       }
+    };
+
+    if (expected === null) {
+      publishFresh();
+      return;
     }
-    // Intentional retire-and-replace of a backup already present at this name.
+
+    // Retire-and-replace. The rename is unconditional; we verify the retired
+    // file's identity afterward rather than gating the rename on a pre-check,
+    // which would reopen the same TOCTOU.
     const retired = `${dest}.replaced-${process.pid}-${randomBytes(4).toString('hex')}`;
     distinctFromSources(retired, sources, 'retired backup');
-    fs.renameSync(dest, retired);
+    try {
+      fs.renameSync(dest, retired);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        // The prior backup vanished before we could retire it; publish exclusively.
+        publishFresh();
+        return;
+      }
+      throw error;
+    }
+
+    // What did we actually move aside?
+    if (fileIdentity(retired) !== expected) {
+      // A competitor replaced `dest` before retirement. Never delete or
+      // overwrite it: restore it to `dest` exclusively if that name is free,
+      // else leave it under the recoverable retired name. Our backup is NOT
+      // published; report an explicit conflict — never success.
+      const preserved = restoreExclusive(retired, dest);
+      throw Object.assign(
+        new Error(`backup retirement conflict: ${dest} was replaced by another process before retirement; that file was preserved at ${preserved} and never deleted; the backup was not completed`),
+        { code: 'BACKUP_RETIRE_CONFLICT', preserved },
+      );
+    }
+
+    // Identity verified: `retired` is our own prior backup. Publish ours.
     try {
       linkIntoPlace(temp, dest);
     } catch (error) {
       if (error?.code === 'EEXIST') {
-        // A competitor took the freed name during replacement. Never overwrite
-        // it; the prior backup stays under `retired` and we report incomplete.
+        // A competitor took the freed name during replacement. Our verified
+        // prior backup stays under `retired`; never overwrite the competitor.
         throw Object.assign(
           new Error(`backup publication incomplete: ${dest} was recreated by another process during replacement; prior backup preserved at ${retired}`),
           { code: 'BACKUP_PUBLISH_INCOMPLETE', retired },
         );
       }
-      // Other failure: restore the prior backup to its original name only if the
-      // name is free. Never overwrite a competitor; otherwise keep the retired
-      // copy under its recoverable name for the operator.
-      try {
-        if (!fs.existsSync(dest)) {
-          fs.linkSync(retired, dest);
-          fs.unlinkSync(retired);
-        }
-      } catch { /* leave the retired copy under its recoverable name */ }
+      // Other failure: restore our verified prior backup to its name, exclusively.
+      restoreExclusive(retired, dest);
       throw error;
     }
+
+    // Published, and the retired file was verified as our own prior backup, so
+    // it is safe to delete.
     distinctFromSources(retired, sources, 'retired backup');
     fs.rmSync(retired, { force: true });
   };

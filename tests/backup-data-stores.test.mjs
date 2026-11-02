@@ -260,3 +260,43 @@ test('a competitor during retire-and-replace preserves the prior backup and repo
     fs.linkSync = realLink;
   }
 });
+
+test('a competitor that replaces the destination immediately before retirement is preserved, not deleted', (t) => {
+  const root = tempDir(t, 'command-backup-retire-swap-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'ours' }]);
+  fs.mkdirSync(out, { recursive: true });
+  const destPath = path.join(out, 'pm.db');
+  makeDb(destPath, [{ id: 'OLD', title: 'prior backup' }]);   // our prior backup
+  const sourceBefore = fingerprint(dbPath);
+  const competitor = Buffer.from('competitor-replaced-dest-before-retire');
+  const competitorHash = createHash('sha256').update(competitor).digest('hex');
+  const realRename = fs.renameSync;
+  let swapped = false;
+  fs.renameSync = (from, to) => {
+    if (!swapped && path.resolve(from) === path.resolve(destPath)) {
+      swapped = true;
+      fs.rmSync(from);                     // our prior backup is removed...
+      fs.writeFileSync(from, competitor);  // ...and a different file (new inode) now holds the name
+    }
+    return realRename(from, to);
+  };
+  t.after(() => { fs.renameSync = realRename; });
+  try {
+    let preserved = null;
+    assert.throws(() => backupDataStores(src, out), (error) => {
+      assert.equal(error.code, 'BACKUP_RETIRE_CONFLICT');
+      assert.match(error.message, /not completed/);
+      preserved = error.preserved;
+      return true;
+    });
+    // the competitor's bytes survive under a recoverable name and are never deleted
+    assert.ok(preserved && fs.existsSync(preserved));
+    assert.equal(createHash('sha256').update(fs.readFileSync(preserved)).digest('hex'), competitorHash);
+    // source database untouched; no manifest falsely claiming success; our temp cleaned
+    assert.deepEqual(fingerprint(dbPath), sourceBefore);
+    assert.equal(fs.existsSync(path.join(out, 'backup-manifest.json')), false);
+    assert.deepEqual(fs.readdirSync(out).filter((n) => n.startsWith('.partial-')), []);
+  } finally {
+    fs.renameSync = realRename;
+  }
+});
