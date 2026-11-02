@@ -269,25 +269,28 @@ export default function App() {
           ref={mainRef}
           className="surface-grid flex-1 overflow-y-auto"
         >
-          {status === 'LOADING' && !surface ? (
-            founderNavView ? (
-              <div className="px-4 pb-4" data-founder-nav-while-core-loading="">
-                <FounderNavSurface view={route.view} />
-              </div>
-            ) : (
-              <LoadingState />
-            )
-          ) : null}
+          {founderNavView ? (
+            <FounderOperatingFrame
+              status={status}
+              surface={surface}
+              error={error}
+              onRetry={() => void refresh()}
+              view={route.view}
+              buildingStatus={buildingStatus}
+              buildingStale={buildingStale}
+              buildingError={buildingError}
+            />
+          ) : (
+            <>
+          {status === 'LOADING' && !surface ? <LoadingState /> : null}
 
           {status === 'UNAVAILABLE' && !surface ? (
             <>
               <UnavailableState
                 reason={
-                  pmFallbackRoute || (founderNavView && route.view !== 'records')
+                  pmFallbackRoute
                     ? 'The core data service is unavailable. This PM surface uses its separate service.'
-                    : founderNavView
-                      ? 'The core data service is unavailable. The records view does not read that service and does not invent rows.'
-                      : 'The read-only data service is not reachable.'
+                    : 'The read-only data service is not reachable.'
                 }
                 detail={error}
                 onRetry={() => void refresh()}
@@ -316,11 +319,6 @@ export default function App() {
                   )}
                 </div>
               ) : null}
-              {founderNavView ? (
-                <div className="px-4 pb-4" data-founder-nav-without-core-projection="">
-                  <FounderNavSurface view={route.view} />
-                </div>
-              ) : null}
             </>
           ) : null}
 
@@ -338,29 +336,14 @@ export default function App() {
                     Data service unreachable
                   </p>
                   <p className="mt-0.5 text-foreground/90">
-                    {founderNavView ? (
-                      <>
-                        The core projection cannot be refreshed. This view stays on its own surface.{' '}
-                        {error}
-                      </>
-                    ) : (
-                      <>
-                        What follows is the last successfully read projection and is{' '}
-                        <span className="font-medium">NOT current</span>. {error}
-                      </>
-                    )}
+                    What follows is the last successfully read projection and is{' '}
+                    <span className="font-medium">NOT current</span>. {error}
                   </p>
                 </div>
               </div>
-              {founderNavView ? (
-                <div className="mt-4" data-founder-nav-without-core-projection="">
-                  <FounderNavSurface view={route.view} />
-                </div>
-              ) : (
-                <div className={cn('mt-4 opacity-70')}>
-                  <BuildingSurface route={route} surface={surface} />
-                </div>
-              )}
+              <div className={cn('mt-4 opacity-70')}>
+                <BuildingSurface route={route} surface={surface} />
+              </div>
             </div>
           ) : null}
 
@@ -379,13 +362,11 @@ export default function App() {
                 stale={buildingStale}
                 error={buildingError}
               />
-              {founderNavView ? (
-                <FounderNavSurface view={route.view} />
-              ) : (
-                <BuildingSurface route={route} surface={surface} />
-              )}
+              <BuildingSurface route={route} surface={surface} />
             </div>
           ) : null}
+            </>
+          )}
         </main>
 
         {/*
@@ -429,6 +410,82 @@ export default function App() {
             </div>
           </details>
         </footer>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One operating surface for every core-service status.
+ *
+ * Banners above it change when the 15-second core poll drops or recovers.
+ * The surface itself stays mounted, so unsaved organization and project
+ * input is not discarded while the separate PM service is still healthy.
+ */
+function FounderOperatingFrame({
+  status,
+  surface,
+  error,
+  onRetry,
+  view,
+  buildingStatus,
+  buildingStale,
+  buildingError,
+}: {
+  status: string;
+  surface: Parameters<typeof GlobalBanners>[0]['surface'] | null;
+  error: string | null;
+  onRetry: () => void;
+  view: string;
+  buildingStatus: string;
+  buildingStale: boolean;
+  buildingError: string | null;
+}) {
+  const coreDown = status === 'UNAVAILABLE';
+  return (
+    <div className={coreDown && surface ? 'p-4' : 'flex flex-col'}>
+      {status === 'LOADING' && !surface ? (
+        <span className="sr-only" data-founder-nav-while-core-loading="">
+          Operating surface stays mounted while the core projection loads.
+        </span>
+      ) : null}
+      {coreDown && !surface ? (
+        <UnavailableState
+          reason={
+            view === 'records'
+              ? 'The core data service is unavailable. The records view does not read that service and does not invent rows.'
+              : 'The core data service is unavailable. This PM surface uses its separate service.'
+          }
+          detail={error}
+          onRetry={onRetry}
+        />
+      ) : null}
+      {coreDown && surface ? (
+        <div className="flex items-start gap-3 rounded-md border border-truth-drift/40 bg-truth-drift-soft/60 px-3 py-2 text-xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-truth-drift" />
+          <div>
+            <p className="font-semibold uppercase tracking-wider text-truth-drift">
+              Data service unreachable
+            </p>
+            <p className="mt-0.5 text-foreground/90">
+              The core projection cannot be refreshed. This view stays on its own surface.{' '}
+              {error}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {status === 'READY' && surface ? (
+        <>
+          <GlobalBanners surface={surface} />
+          <BuildingOriginBanner status={buildingStatus} stale={buildingStale} error={buildingError} />
+        </>
+      ) : null}
+      <div
+        className={coreDown && surface ? 'mt-4' : status === 'READY' && surface ? undefined : 'px-4 pb-4'}
+        data-founder-nav-while-core-loading={status === 'LOADING' && !surface ? '' : undefined}
+        data-founder-nav-without-core-projection={coreDown ? '' : undefined}
+      >
+        <FounderNavSurface view={view} />
       </div>
     </div>
   );

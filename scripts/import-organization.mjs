@@ -9,7 +9,14 @@ import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { importOrganization } from '../server/pm-import.mjs';
-import { resolveWorkspace, abs } from '../server/paths.mjs';
+import { resolveWorkspace, abs, CANONICAL } from '../server/paths.mjs';
+
+/** Same operating store the PM service opens when PM_DB_PATH is unset. */
+export function resolveDefaultImportDbPath(env = process.env) {
+  if (env.PM_DB_PATH) return path.resolve(env.PM_DB_PATH);
+  const workspace = resolveWorkspace();
+  return workspace.root ? abs(workspace.root, CANONICAL.pmBoardDb) : null;
+}
 
 function parseArgs() {
   const argv = process.argv.slice(2);
@@ -37,20 +44,17 @@ function parseArgs() {
     process.exit(2);
   }
 
-  if (!dbPath) {
-    if (process.env.PM_DB_PATH) {
-      dbPath = path.resolve(process.env.PM_DB_PATH);
-    } else {
-      const workspace = resolveWorkspace();
-      dbPath = workspace.root ? abs(workspace.root, 'data/pm-operating.db') : path.resolve('data/pm-operating.db');
-    }
-  }
+  if (!dbPath) dbPath = resolveDefaultImportDbPath();
 
   return { snapshot, dbPath, dryRun, onConflict };
 }
 
 function main() {
   const { snapshot, dbPath, dryRun, onConflict } = parseArgs();
+  if (!dbPath) {
+    console.error('Error: workspace unresolved and no --db or PM_DB_PATH. Refusing to create a separate database.');
+    process.exit(2);
+  }
 
   let db;
   try {

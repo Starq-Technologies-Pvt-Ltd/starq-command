@@ -371,18 +371,23 @@ export function importLegacyPmSnapshot(handle, { dbPath, nowIso, json }) {
       const sourceKey = `command-pm-v1:${task.id}`;
       const rawPayload = json({ task, history: historyByTask.get(task.id) ?? [] });
       const payloadHash = createHash('sha256').update(rawPayload).digest('hex');
-      // A legacy row is linked when its id is free. When a live task already
-      // owns that id, the payload is kept and the link stays null so the live
-      // row is not treated as the historical record.
-      let resolution = 'IMPORTED';
-      let linkedTaskId = task.id;
-      let liveCollision = false;
+      // This function writes archive rows only. It does not insert pm_tasks,
+      // so an id that is merely unused is not evidence the archive can be
+      // linked. A missing pm_tasks table is the same fact, not a free id.
+      // A live row with this id is a different record and stays unlinked.
+      let liveRow = null;
       try {
-        liveCollision = Boolean(handle.prepare('SELECT id FROM pm_tasks WHERE id = ?').get(task.id));
-      } catch {
-        liveCollision = false;
+        liveRow = handle.prepare('SELECT id FROM pm_tasks WHERE id = ?').get(task.id) ?? null;
+      } catch (error) {
+        if (!/no such table/i.test(String(error?.message ?? error))) throw error;
+        liveRow = null;
       }
-      if (liveCollision) {
+      let resolution;
+      let linkedTaskId;
+      if (liveRow) {
+        resolution = 'ARCHIVED_ID_COLLISION';
+        linkedTaskId = null;
+      } else {
         resolution = 'ARCHIVED_ID_COLLISION';
         linkedTaskId = null;
       }

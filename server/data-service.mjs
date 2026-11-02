@@ -1238,13 +1238,11 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/comms/channels') {
     const c = commsRecords();
     if (!c.ok) {
-      return sendJson(res, 200, {
+      // The channel loader treats any 2xx body as a directory. An unreadable
+      // Room must stay a non-success until that client reads state itself.
+      return sendJson(res, 503, {
         state: c.state || STATE.UNAVAILABLE,
         error: c.reason,
-        tail_sequence: 0,
-        record_count: 0,
-        assembled_at: new Date().toISOString(),
-        channels: { common: { id: 'common', kind: 'common', label: 'Common Room', count: 0 }, projects: [], dms: [] },
       });
     }
     return sendJson(res, 200, {
@@ -1257,17 +1255,10 @@ const server = http.createServer(async (req, res) => {
     const c = commsRecords();
     const channel = url.searchParams.get('channel') || 'common';
     if (!c.ok) {
-      return sendJson(res, 200, {
+      return sendJson(res, 503, {
         state: c.state || STATE.UNAVAILABLE,
         error: c.reason,
-        tail_sequence: 0,
-        assembled_at: new Date().toISOString(),
         channel,
-        total: 0,
-        returned: 0,
-        has_more: false,
-        oldest_sequence: null,
-        messages: [],
       });
     }
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 100)));
@@ -1283,14 +1274,12 @@ const server = http.createServer(async (req, res) => {
     const from = url.searchParams.get('from') || null;
     const project = url.searchParams.get('project') || null;
     if (!c.ok) {
-      return sendJson(res, 200, {
+      return sendJson(res, 503, {
         state: c.state || STATE.UNAVAILABLE,
         error: c.reason,
         query: q,
         from,
         project,
-        returned: 0,
-        messages: [],
       });
     }
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));

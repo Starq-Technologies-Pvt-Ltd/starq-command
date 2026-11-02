@@ -7,72 +7,217 @@
  * consistent snapshot of the committed state, including anything still in the
  * write-ahead log, while the source is opened read-only and never modified.
  *
+ * The destination is proven distinct from the source before any removal or
+ * replacement. A failed backup deletes only a temp file this process created.
+ *
  * Usage: node scripts/backup-data-stores.mjs --data <dir> --out <dir>
  */
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { classifyFilesystemPath } from '../server/room-path.mjs';
 
-const arg = (name, fallback) => {
+const arg = (name) => {
   const i = process.argv.indexOf(name);
-  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
 };
-const SRC = path.resolve(arg('--data'));
-const OUT = path.resolve(arg('--out'));
-fs.mkdirSync(OUT, { recursive: true });
 
-const sha256 = (f) => createHash('sha256').update(fs.readFileSync(f)).digest('hex');
-const manifest = { created_at: new Date().toISOString(), source: SRC, files: {} };
+/** SQLite string literal for a filesystem path. VACUUM INTO cannot take a bound parameter. */
+export function sqlitePathLiteral(filePath) {
+  const normalized = path.resolve(filePath).split(path.sep).join('/');
+  if (/[\u0000-\u001f]/.test(normalized)) {
+    throw Object.assign(new Error('backup path contains a control character'), { code: 'BACKUP_DESTINATION_UNSAFE' });
+  }
+  return `'${normalized.replaceAll("'", "''")}'`;
+}
 
-for (const name of fs.readdirSync(SRC).sort()) {
-  const src = path.join(SRC, name);
-  if (!fs.statSync(src).isFile()) continue;
-
-  if (name.endsWith('.db')) {
-    const out = path.join(OUT, name);
-    if (fs.existsSync(out)) fs.rmSync(out);
-    const db = new DatabaseSync(src, { readOnly: true });
-    try {
-      // SQLite requires forward slashes inside the SQL string literal.
-      db.exec(`VACUUM INTO '${out.split(path.sep).join('/')}'`);
-    } finally {
-      db.close();
+function distinctFromSources(candidate, sources, label) {
+  for (const file of sources) {
+    const verdict = classifyFilesystemPath(file.src, candidate);
+    if (verdict !== 'DIFFERENT') {
+      throw Object.assign(
+        new Error(`refusing backup: ${label} ${candidate} is ${verdict} relative to source ${file.src}`),
+        { code: 'BACKUP_DESTINATION_UNSAFE' },
+      );
     }
-    // Verify the copy opens and passes its own integrity check.
-    const check = new DatabaseSync(out, { readOnly: true });
-    let verdict;
-    try {
-      const row = check.prepare('PRAGMA integrity_check').get();
-      verdict = row.integrity_check ?? Object.values(row)[0];
-    } finally {
-      check.close();
-    }
-    manifest.files[name] = {
-      kind: 'sqlite',
-      source_bytes: fs.statSync(src).size,
-      source_sha256: sha256(src),
-      backup_bytes: fs.statSync(out).size,
-      backup_sha256: sha256(out),
-      backup_integrity_check: verdict,
-    };
-    console.log(`${verdict === 'ok' ? 'OK  ' : 'FAIL'} ${name} -> ${(fs.statSync(out).size / 1048576).toFixed(1)}MB (${verdict})`);
-  } else if (!name.endsWith('-wal') && !name.endsWith('-shm')) {
-    // WAL/SHM are not copied: VACUUM INTO already folded their contents in,
-    // and a stale WAL beside a restored database is a hazard, not a backup.
-    const out = path.join(OUT, name);
-    fs.copyFileSync(src, out);
-    manifest.files[name] = { kind: 'file', source_sha256: sha256(src), backup_sha256: sha256(out) };
-    console.log(`OK   ${name} (copied)`);
   }
 }
 
-const manifestPath = path.join(OUT, 'backup-manifest.json');
-fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-console.log(`\nmanifest: ${manifestPath}`);
-const bad = Object.entries(manifest.files).filter(([, f]) => f.kind === 'sqlite' && f.backup_integrity_check !== 'ok');
-if (bad.length) {
-  console.error(`FAILED integrity: ${bad.map(([n]) => n).join(', ')}`);
-  process.exit(1);
+function sha256(file) {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
-console.log(`all ${Object.keys(manifest.files).length} stores backed up and verified`);
+
+/**
+ * Copy every store in `srcDir` into a different directory.
+ * Throws before deleting anything when the destination is the source, an
+ * alias of the source, or not provably different.
+ */
+export function backupDataStores(srcDir, outDir) {
+  if (!srcDir || !outDir) {
+    throw Object.assign(new Error('both --data and --out are required'), { code: 'BACKUP_DESTINATION_UNSAFE' });
+  }
+  const srcRoot = path.resolve(srcDir);
+  const outRoot = path.resolve(outDir);
+  if (!fs.existsSync(srcRoot) || !fs.statSync(srcRoot).isDirectory()) {
+    throw Object.assign(new Error(`source directory not found: ${srcRoot}`), { code: 'BACKUP_DESTINATION_UNSAFE' });
+  }
+  const directoryRelation = classifyFilesystemPath(srcRoot, outRoot);
+  if (directoryRelation !== 'DIFFERENT') {
+    throw Object.assign(
+      new Error(`refusing backup: destination directory is ${directoryRelation} relative to source ${srcRoot}`),
+      { code: 'BACKUP_DESTINATION_UNSAFE' },
+    );
+  }
+
+  fs.mkdirSync(outRoot, { recursive: true });
+  const afterCreate = classifyFilesystemPath(srcRoot, outRoot);
+  if (afterCreate !== 'DIFFERENT') {
+    throw Object.assign(
+      new Error(`refusing backup: destination directory is ${afterCreate} relative to source ${srcRoot}`),
+      { code: 'BACKUP_DESTINATION_UNSAFE' },
+    );
+  }
+
+  const sources = [];
+  for (const name of fs.readdirSync(srcRoot).sort()) {
+    const src = path.join(srcRoot, name);
+    if (!fs.statSync(src).isFile()) continue;
+    sources.push({ name, src });
+  }
+
+  const plan = [];
+  for (const file of sources) {
+    if (file.name.endsWith('-wal') || file.name.endsWith('-shm')) continue;
+    const dest = path.join(outRoot, file.name);
+    distinctFromSources(dest, sources, 'destination');
+    plan.push({ ...file, dest, kind: file.name.endsWith('.db') ? 'sqlite' : 'file' });
+  }
+  const manifestPath = path.join(outRoot, 'backup-manifest.json');
+  distinctFromSources(manifestPath, sources, 'manifest');
+
+  const manifest = { created_at: new Date().toISOString(), source: srcRoot, files: {} };
+  const createdByUs = new Set();
+
+  const discardTemp = (temp) => {
+    if (!temp || !createdByUs.has(path.resolve(temp)) || !fs.existsSync(temp)) return;
+    distinctFromSources(temp, sources, 'temporary file');
+    fs.rmSync(temp, { force: true });
+    createdByUs.delete(path.resolve(temp));
+  };
+
+  const publish = (temp, dest) => {
+    distinctFromSources(temp, sources, 'temporary file');
+    distinctFromSources(dest, sources, 'destination');
+    if (!fs.existsSync(dest)) {
+      fs.renameSync(temp, dest);
+      createdByUs.delete(path.resolve(temp));
+      return;
+    }
+    const retired = `${dest}.replaced-${process.pid}-${randomBytes(4).toString('hex')}`;
+    distinctFromSources(retired, sources, 'retired backup');
+    fs.renameSync(dest, retired);
+    try {
+      fs.renameSync(temp, dest);
+      createdByUs.delete(path.resolve(temp));
+    } catch (error) {
+      try { if (!fs.existsSync(dest) && fs.existsSync(retired)) fs.renameSync(retired, dest); } catch { /* leave both names for the operator */ }
+      throw error;
+    }
+    distinctFromSources(retired, sources, 'retired backup');
+    fs.rmSync(retired, { force: true });
+  };
+
+  try {
+    for (const item of plan) {
+      const temp = path.join(outRoot, `.partial-${process.pid}-${randomBytes(4).toString('hex')}-${item.name}`);
+      distinctFromSources(temp, sources, 'temporary file');
+      createdByUs.add(path.resolve(temp));
+      try {
+        if (item.kind === 'sqlite') {
+          const db = new DatabaseSync(item.src, { readOnly: true });
+          try {
+            db.exec(`VACUUM INTO ${sqlitePathLiteral(temp)}`);
+          } finally {
+            db.close();
+          }
+          const check = new DatabaseSync(temp, { readOnly: true });
+          let verdict;
+          try {
+            const row = check.prepare('PRAGMA integrity_check').get();
+            verdict = row.integrity_check ?? Object.values(row)[0];
+          } finally {
+            check.close();
+          }
+          if (verdict !== 'ok') {
+            throw new Error(`${item.name} backup failed integrity_check: ${verdict}`);
+          }
+          publish(temp, item.dest);
+          manifest.files[item.name] = {
+            kind: 'sqlite',
+            source_bytes: fs.statSync(item.src).size,
+            source_sha256: sha256(item.src),
+            backup_bytes: fs.statSync(item.dest).size,
+            backup_sha256: sha256(item.dest),
+            backup_integrity_check: verdict,
+          };
+        } else {
+          fs.copyFileSync(item.src, temp);
+          publish(temp, item.dest);
+          manifest.files[item.name] = {
+            kind: 'file',
+            source_sha256: sha256(item.src),
+            backup_sha256: sha256(item.dest),
+          };
+        }
+      } catch (error) {
+        discardTemp(temp);
+        throw error;
+      }
+    }
+  } catch (error) {
+    for (const temp of createdByUs) discardTemp(temp);
+    throw error;
+  }
+
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  return manifest;
+}
+
+function main() {
+  const src = arg('--data');
+  const out = arg('--out');
+  if (!src || !out) {
+    console.error('Usage: node scripts/backup-data-stores.mjs --data <dir> --out <dir>');
+    process.exit(2);
+  }
+  try {
+    const manifest = backupDataStores(src, out);
+    for (const [name, file] of Object.entries(manifest.files)) {
+      if (file.kind === 'sqlite') {
+        const verdict = file.backup_integrity_check;
+        console.log(`${verdict === 'ok' ? 'OK  ' : 'FAIL'} ${name} -> ${(file.backup_bytes / 1048576).toFixed(1)}MB (${verdict})`);
+      } else {
+        console.log(`OK   ${name} (copied)`);
+      }
+    }
+    const manifestPath = path.join(path.resolve(out), 'backup-manifest.json');
+    console.log(`\nmanifest: ${manifestPath}`);
+    const bad = Object.entries(manifest.files).filter(([, file]) => file.kind === 'sqlite' && file.backup_integrity_check !== 'ok');
+    if (bad.length) {
+      console.error(`FAILED integrity: ${bad.map(([name]) => name).join(', ')}`);
+      process.exit(1);
+    }
+    console.log(`all ${Object.keys(manifest.files).length} stores backed up and verified`);
+  } catch (error) {
+    console.error(error.message);
+    process.exit(error.code === 'BACKUP_DESTINATION_UNSAFE' ? 2 : 1);
+  }
+}
+
+const isDirectRun = process.argv[1]
+  ? path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
+  : false;
+
+if (isDirectRun) main();

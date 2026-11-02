@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { sqlitePathLiteral } from '../scripts/backup-data-stores.mjs';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const commandRoot = path.resolve(__dir, '..');
@@ -36,7 +37,7 @@ function disposableCopy(t) {
   t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } });
   const copy = path.join(dir, 'pm-operating-copy.db');
   const source = new DatabaseSync(liveDbPath, { readOnly: true });
-  try { source.exec(`VACUUM INTO '${copy.split(path.sep).join('/')}'`); }
+  try { source.exec(`VACUUM INTO ${sqlitePathLiteral(copy)}`); }
   finally { source.close(); }
   return copy;
 }
