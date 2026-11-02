@@ -60,6 +60,10 @@ test('a path with an apostrophe and spaces copies without changing the source', 
   assert.equal(result.integrity, 'ok');
   assert.deepEqual(fingerprint(source), before);
   assert.deepEqual(fingerprint(destination).rows, rows);
+  const sourceStat = fs.statSync(source);
+  const destinationStat = fs.statSync(destination);
+  assert.notEqual(`${sourceStat.dev}:${sourceStat.ino}`, `${destinationStat.dev}:${destinationStat.ino}`);
+  assert.equal(destinationStat.nlink, 1);
   assert.deepEqual(ownedTemps(path.dirname(destination)), []);
 });
 
@@ -83,6 +87,11 @@ test('a destination that is the source, a case alias, or a file symlink is rejec
     assert.equal(error.code, 'BACKUP_DESTINATION_UNSAFE');
     return true;
   });
+
+  const hard = path.join(root, 'hard-link.db');
+  fs.linkSync(source, hard);
+  assert.throws(() => vacuumIntoDistinct(source, hard), /SAME/);
+  assert.equal(fs.statSync(hard).ino, fs.statSync(source).ino);
 
   assert.deepEqual(fingerprint(source), before);
   assert.equal(fs.readlinkSync(link), source);
@@ -137,6 +146,102 @@ test('an existing distinct destination is refused rather than replaced', (t) => 
 
   assert.deepEqual(fingerprint(source), sourceBefore);
   assert.deepEqual(fingerprint(destination), destBefore);
+});
+
+test('a destination created immediately before publication is not replaced', (t) => {
+  const root = tempDir(t, 'starq-vac-race-');
+  const source = path.join(root, 'source.db');
+  const destination = path.join(root, 'board.db');
+  const rows = [{ id: 'T-1', title: "O'Brien task" }];
+  makeDb(source, rows);
+  const sourceBefore = fingerprint(source);
+  const competitor = Buffer.from('competitor-kept-bytes');
+  const competitorHash = createHash('sha256').update(competitor).digest('hex');
+  const realLink = fs.linkSync;
+  const realRename = fs.renameSync;
+  let renameCalls = 0;
+  let publishedHash = null;
+  fs.renameSync = (...args) => {
+    renameCalls += 1;
+    return realRename(...args);
+  };
+  fs.linkSync = (existing, neu) => {
+    fs.writeFileSync(neu, competitor);
+    publishedHash = createHash('sha256').update(fs.readFileSync(neu)).digest('hex');
+    return realLink(existing, neu);
+  };
+  t.after(() => {
+    fs.linkSync = realLink;
+    fs.renameSync = realRename;
+  });
+
+  try {
+    assert.throws(() => vacuumIntoDistinct(source, destination), (error) => {
+      assert.equal(error.code, 'BACKUP_DESTINATION_UNSAFE');
+      assert.match(error.message, /already exists/);
+      return true;
+    });
+
+    const competitorAfter = createHash('sha256').update(fs.readFileSync(destination)).digest('hex');
+    assert.equal(publishedHash, competitorHash);
+    assert.equal(competitorAfter, competitorHash);
+    assert.deepEqual(fingerprint(source), sourceBefore);
+    assert.equal(renameCalls, 0);
+    assert.deepEqual(ownedTemps(root), []);
+  } finally {
+    fs.linkSync = realLink;
+    fs.renameSync = realRename;
+  }
+});
+
+test('an unavailable exclusive link fails closed without renaming', (t) => {
+  const root = tempDir(t, 'starq-vac-noclobber-');
+  const realLink = fs.linkSync;
+  const realRename = fs.renameSync;
+  t.after(() => {
+    fs.linkSync = realLink;
+    fs.renameSync = realRename;
+  });
+
+  for (const code of ['ENOTSUP', 'EXDEV', 'EPERM']) {
+    const source = path.join(root, code, 'source.db');
+    const destination = path.join(root, code, 'board.db');
+    const kept = path.join(root, code, 'preexisting.db');
+    makeDb(source, [{ id: code, title: 'source row' }]);
+    makeDb(kept, [{ id: 'KEEP', title: 'pre-existing' }]);
+    const sourceBefore = fingerprint(source);
+    const keptBefore = fingerprint(kept);
+    let renameCalls = 0;
+    fs.renameSync = () => {
+      renameCalls += 1;
+      throw new Error('rename fallback is forbidden');
+    };
+    fs.linkSync = () => {
+      const error = new Error(`simulated ${code}`);
+      error.code = code;
+      throw error;
+    };
+
+    assert.throws(() => vacuumIntoDistinct(source, destination), (error) => {
+      assert.equal(error.code, 'BACKUP_DESTINATION_UNSAFE');
+      assert.match(error.message, new RegExp(`exclusive hard link is unavailable \\(${code}\\)`));
+      return true;
+    });
+
+    assert.equal(fs.existsSync(destination), false);
+    assert.equal(renameCalls, 0);
+    assert.deepEqual(fingerprint(source), sourceBefore);
+    assert.deepEqual(fingerprint(kept), keptBefore);
+    assert.deepEqual(ownedTemps(path.join(root, code)), []);
+    fs.linkSync = realLink;
+    fs.renameSync = realRename;
+  }
+});
+
+test('publication uses an exclusive hard link and has no rename fallback', () => {
+  const helper = fs.readFileSync(path.join(ROOT, 'scripts', 'sqlite-vacuum.mjs'), 'utf8');
+  assert.match(helper, /fs\.linkSync\(temp, destination\)/);
+  assert.doesNotMatch(helper, /\brenameSync\b/);
 });
 
 test('the Windows acceptance seed calls the shared helper instead of interpolating a path', () => {
