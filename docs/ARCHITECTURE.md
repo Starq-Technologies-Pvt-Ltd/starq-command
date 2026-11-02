@@ -48,7 +48,8 @@ and room-sync state are **owned** by Command and written through the PM service
 - dependency rules that fail closed (archiving a unit with active positions, or
   a position with active appointments, is refused with HTTP 409
   `HAS_DEPENDENTS`),
-- a write-client header and origin pinning so only the intended UI can write,
+- loopback Host/Origin checks and an `X-PM-Client` write header to constrain browser
+  access; these are not per-user authentication and do not exclude local non-browser clients,
 - isolation controls: scratch mode (set `PM_DB_PATH` to an absolute `*.db` path
   that is not a protected store) writes to a separate database; to also move off
   the production port you must set an in-range `PM_PORT` (5190–5199) — `PM_DB_PATH`
