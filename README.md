@@ -133,16 +133,16 @@ command, the runtime requirements, and the live-operation prerequisites, is in
 > runtime is **Node 24.15.0 on Windows**. Treat the permissive engines field as a
 > floor for the pure UI build, not as verified operating support.
 
-### Verified isolated operation (scratch-DB write isolation)
+### Isolated verification (scratch-DB writes; blocked at this baseline)
 
-This is the only procedure that confines all **writes** to a scratch database.
-It drives the real PM service against an **isolated scratch instance** — it sets
-both a scratch `PM_DB_PATH` and an in-range `PM_PORT`, so it binds an unused
-`5190–5199` port and writes only to the scratch DB — and exercises the full
-Founder daily-driver cycle: create an org, a project, a task, transition it,
-restart, recover, then back up, mutate, restore, and verify. It may still read
-canonical workspace inputs read-only if a workspace is present; it never writes
-to a canonical store.
+This procedure configures the PM service with a scratch `PM_DB_PATH` and an
+in-range `PM_PORT`, so it writes only to the scratch DB. However, the current
+`verify:local` runner is blocked on a fresh database: default provisioning is
+empty, and it attempts to create a project before registering anyone, which
+`createProject()` rejects. No safeguard-preserving scratch bootstrap has been
+validated, so the runner does not currently verify the advertised end-to-end
+cycle. It may still read canonical workspace inputs read-only if a workspace
+is present.
 
 ```bash
 npm install
@@ -153,10 +153,15 @@ npm run verify:local  # scratch PM server: writes only to the scratch DB
 
 ```bash
 npm run dev           # data service (:5177) + Vite UI (:5173)
-npm run pm:start      # writable PM service (:5176)
+# PowerShell alternative: $env:PM_ROOM_POST = 'off'; npm run pm:start
+PM_ROOM_POST=off npm run pm:start  # POSIX shell; Room posting disabled
 ```
 
-Open **http://localhost:5173**. Be aware of the isolation boundary:
+Open **http://localhost:5173** only for an authorized PM instance on port 5176.
+For a scratch server on `PM_PORT=5193`, open
+**http://localhost:5173/#home?pm_port=5193** before editing; substitute the
+actual scratch port. The PM browser client calls the service directly rather
+than through Vite's `/api/*` proxy. Be aware of the isolation boundary:
 
 - `npm run pm:start` **without** `PM_DB_PATH` resolves to the **canonical**
   operating database (`data/pm-operating.db`) whenever a Starq workspace
@@ -168,7 +173,8 @@ Open **http://localhost:5173**. Be aware of the isolation boundary:
   present. It never writes, but it is not reading from nothing.
 
 Run ordinary development against the canonical workspace only with
-authorization; otherwise use `verify:local` or run with a scratch `PM_DB_PATH`.
+authorization; otherwise use a scratch `PM_DB_PATH` and `PM_PORT`. `verify:local`
+is not a passing fresh-database cycle at this baseline (see above).
 
 ### Verification
 
@@ -203,12 +209,14 @@ suites. Its **live Windows operation** is owned and accepted separately:
 - The Windows operating owner's most recent full **contained Windows lifecycle
   smoke** passed **66 / 66** checks. This is the operating-acceptance smoke over
   the real multi-service control plane — distinct from, and much larger than, the
-  `verify:local` daily-driver functional test described in the quick start.
+  `verify:local` attempt described in the quick start, which is blocked on a
+  fresh database at this baseline.
 - **Four lifecycle cases and live backup/restore acceptance remain open.**
-- The core Founder operating journey (org, workforce, projects/tasks, attention,
-  persistence, backup/restore) has been exercised with all optional companion
-  services offline, with the safety guards left enforced
-  ([acceptance report](artifacts/acceptance/ACCEPTANCE_REPORT.md)).
+- The acceptance report records an earlier exercise of the core Founder
+  operating journey with optional companion services offline
+  ([acceptance report](artifacts/acceptance/ACCEPTANCE_REPORT.md)); the current
+  fresh-database `verify:local` runner is blocked at project creation and does
+  not reproduce that cycle.
 
 **Releases.** Historical archival Git tags exist (`archive/*` baselines from the
 development history). None of them is an authorized public product release: there

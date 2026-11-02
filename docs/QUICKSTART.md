@@ -3,11 +3,14 @@
 This guide separates the ways Command can be run, because they carry very
 different risk. There are three distinct modes, not two:
 
-- **Verified isolated operation** (`verify:local`) drives the real PM service
-  against a scratch database (`PM_DB_PATH`) on an in-range scratch `PM_PORT`
-  (5190–5199). All **writes** go to the scratch DB only; it may still **read**
-  canonical workspace inputs read-only when a workspace is present, and it never
-  writes to a canonical store.
+- **Isolated verification attempt** (`verify:local`) configures the real PM
+  service with a scratch database (`PM_DB_PATH`) and in-range scratch `PM_PORT`
+  (5190–5199), so its writes stay in the scratch DB. At this baseline, the runner
+  is blocked on a fresh database: it creates a project before registering anyone,
+  which `createProject()` rejects. No scratch bootstrap procedure has been
+  validated; do not treat this command as a passing end-to-end verification.
+  The service may still **read** canonical workspace inputs when a workspace is
+  present.
 - **Ordinary development** (`npm run dev` + `npm run pm:start`) runs the services
   directly. It is **not inherently isolated**: when a Starq workspace resolves,
   `pm:start` writes to the canonical operating database and the data service reads
@@ -18,9 +21,9 @@ different risk. There are three distinct modes, not two:
   open, and it must not be run without explicit Founder authorization.
 
 If you are reviewing Command and do not intend to **write** to canonical data,
-use verified isolated operation, or set both a scratch `PM_DB_PATH` and an
-in-range `PM_PORT` before any write. Be aware the projection surfaces may still
-read canonical inputs read-only when a workspace is present.
+set both a scratch `PM_DB_PATH` and an in-range `PM_PORT` before any write.
+Be aware the projection surfaces may still read canonical inputs read-only when
+a workspace is present.
 
 ---
 
@@ -37,16 +40,17 @@ read canonical inputs read-only when a workspace is present.
 - A POSIX or Windows shell. The UI build has no OS-specific requirement; the
   verified operating runtime and live operation are Windows-hosted.
 - No credentials or private workspace are needed to build the UI or run the
-  verified isolated self-test. Command does not auto-load `.env`; `.env.example`
-  is reference only and must never hold credentials or private paths.
+  `verify:local` attempt described below. Command does not auto-load `.env`;
+  `.env.example` is reference only and must never hold credentials or private
+  paths.
 
 ---
 
-## Verified isolated operation (scratch-DB write isolation)
+## Isolated verification (scratch-DB writes; blocked at this baseline)
 
-This is the only run procedure that confines all PM **writes** to a scratch
-database. It may still read canonical workspace inputs read-only when a workspace
-is present; it never writes to a canonical store.
+This procedure confines PM **writes** to a scratch database. It may still read
+canonical workspace inputs read-only when a workspace is present; it never writes
+to a canonical store.
 
 ### 1. Install
 
@@ -54,15 +58,15 @@ is present; it never writes to a canonical store.
 npm install
 ```
 
-### 2. Exercise the full operating cycle, isolated
+### 2. Current baseline limitation
 
-`verify:local` drives the real PM service against an **isolated scratch
-instance** — it sets both its own scratch `PM_DB_PATH` database and an in-range
-`PM_PORT` (an unused `5190–5199`) — and proves the Founder daily-driver cycle end
-to end: start, read org/projects, create a project and task, update status,
-persist and read back, restart, recover, then back up, mutate, restore, and
-verify. Its writes go only to the scratch DB; it never writes to the canonical
-operating database.
+`verify:local` sets its own scratch `PM_DB_PATH` database and an in-range
+`PM_PORT` (an unused `5190–5199`), confining its writes to the scratch DB rather
+than the canonical operating database. However, the current runner is blocked
+on a fresh database: default provisioning is empty, and it attempts to create a
+project before registering anyone, which `createProject()` rejects. No
+safeguard-preserving scratch bootstrap has been validated, so this command does
+not currently verify the advertised end-to-end cycle.
 
 ```bash
 npm run verify:local
@@ -162,8 +166,8 @@ real control plane.
 - The Windows operating owner's most recent full **contained Windows lifecycle
   smoke** reported **66 / 66** checks passing. This is the operating-acceptance
   smoke over the real multi-service control plane — a much larger and different
-  test from the `verify:local` daily-driver functional check in the sections
-  above. Do not equate the two.
+  test from the `verify:local` attempt above, which is currently blocked on a
+  fresh database. Do not equate the reported smoke with a completed scratch cycle.
 - **Four lifecycle cases and live backup/restore acceptance remain open.**
 - These are reported figures from the operating owner, not an independent
   acceptance by this documentation work.
@@ -178,9 +182,10 @@ unaccepted. Execution is not acceptance.
 - **Ports already in use.** The UI (`5173`) and preview (`4173`) use
   `strictPort` and will fail rather than silently move. Free the port or stop
   the other process.
-- **Writes are refused.** The PM service enforces origin pinning and a
-  write-client header; writes must originate from the proxied UI. In scratch mode
-  (`PM_DB_PATH` set), an **explicit** `PM_PORT` outside `5190–5199` is rejected
+- **Writes are refused.** The PM service uses loopback Host/Origin checks and a
+  public write-client header as browser-request guards; they are not authentication
+  or exclusive UI access, and a local client can send the header directly. In
+  scratch mode (`PM_DB_PATH` set), an **explicit** `PM_PORT` outside `5190–5199` is rejected
   (the service exits); with no `PM_PORT`, scratch still binds the production port
   5176, so set an in-range `PM_PORT` to get a scratch port.
 - **Projection surfaces show `UNAVAILABLE` / `STALE` / `UNKNOWN`.** That is
