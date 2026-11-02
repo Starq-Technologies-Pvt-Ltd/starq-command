@@ -25,6 +25,12 @@ matters: the writable and projection namespaces are routed to their owning
 services before the catch-all `/api` falls through to the read-only data
 service.
 
+**Runtime note.** The PM service persists through `node:sqlite` (`DatabaseSync`),
+a built-in that Node 20 does not provide. The `package.json` `engines` field
+(`node >=20`) is therefore a floor for the UI build only; the verified operating
+runtime is **Node 24.15.0 on Windows**. Anything that starts the PM service —
+including `verify:local` — needs that runtime, not Node 20.
+
 ## The two data regimes
 
 The single most important architectural fact is that Command holds two kinds of
@@ -42,8 +48,12 @@ and room-sync state are **owned** by Command and written through the PM service
   a position with active appointments, is refused with HTTP 409
   `HAS_DEPENDENTS`),
 - a write-client header and origin pinning so only the intended UI can write,
-- isolation controls: a scratch mode binds only an unused `5190–5199` port and a
-  separate database, and refuses to point at the operating database.
+- isolation controls: a scratch mode (set `PM_DB_PATH` to an absolute `*.db`
+  path that is not a protected store) binds only an unused `5190–5199` port and a
+  separate database. **Without** `PM_DB_PATH`, the service resolves to the
+  **canonical** operating database (`data/pm-board.db`) whenever a Starq
+  workspace resolves — so plain `npm run pm:start` is not isolated; only a
+  scratch `PM_DB_PATH` (what `verify:local` uses) is.
 
 Representative routes: `/api/pm/org/{companies,units,positions,people,appointments}`,
 `/api/pm/projects`, `/api/pm/tasks`, `/api/pm/milestones`,
@@ -130,10 +140,22 @@ local-driver profile). `scripts/command-lifecycle.mjs` and the scripts under
 components in dependency order. Runtime port/URL overrides are **rejected, not
 merged** — the config file is the single source of control-plane truth.
 
-Backup and restore (`scripts/lifecycle/backup.mjs`, `scripts/verify-restore.mjs`,
-`scripts/backup-data-stores.mjs`) publish each backup as a new verified version
-and verify identity on retirement. Live backup/restore acceptance on Windows is
-still open (see [the operating status](../README.md#operating-status)).
+There are **two distinct backup mechanisms**, and they must not be conflated:
+
+- **Operational startup backup/restore** — `scripts/lifecycle/backup.mjs`. The
+  local daily-driver path: a `VACUUM INTO` backup-on-start and a stopped-state
+  restore, written beside the DB as `backups/pm-operating-<timestamp>.db`,
+  integrity-checked, sha256-stamped, and **pruned to the most recent N** (default
+  14). Restore refuses while Command is serving and first takes a pre-restore
+  safety snapshot.
+- **Immutable versioned backup architecture** — `scripts/backup-data-stores.mjs`.
+  Reads every Command data store read-only and publishes each run as a **new
+  immutable version**; previous version files and manifests are never rewritten
+  or deleted, and the latest manifest is the longest history whose recorded
+  digests still match. `scripts/verify-restore.mjs` checks restore integrity.
+
+Live backup/restore acceptance on Windows is still open (see
+[the operating status](../README.md#operating-status)).
 
 > These lifecycle commands drive the real, Windows-hosted canonical workspace
 > and are not part of disposable development. Do not run them without explicit

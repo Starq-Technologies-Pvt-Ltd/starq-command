@@ -24,11 +24,13 @@ structural, not cosmetic.
 
 ![Starq Command — Company Operating System overview](STARQ%20Command%20Centre%20Dashboard.png)
 
-> The screenshot above is an illustrative capture of the Overview surface. The
-> staff roster, provider mix, and subscription-usage figures in it reflect one
-> operator's configuration; treat them as an interface example, not a
-> specification. See the [documentation audit](docs/DOCUMENTATION_AUDIT_2026-11-02.md)
-> for the standing recommendation on this asset.
+> **This screenshot contains real operating information.** The staff roster,
+> provider/model mix, host details, and subscription-usage ratios in it are one
+> operator's actual configuration, not synthetic demo data. It is retained
+> unchanged pending a Founder decision; the standing recommendation is to replace
+> it with a purpose-built, synthetic-data capture rather than treat it as a
+> generic promotional image. See the
+> [documentation audit](docs/DOCUMENTATION_AUDIT_2026-11-02.md).
 
 ---
 
@@ -97,44 +99,69 @@ data boundary is one place and is testable. See
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full map, including the
 honesty-state machine, the read-only path guard, and the surface catalogue.
 
+### Portability
+
+Command is designed as a **standalone organizational product** — the operating
+model (organization, workforce, projects, tasks, comms) is not specific to any
+one company. In its current state, however, the canonical projection surfaces and
+the operating lifecycle profiles still carry **Starq-specific workspace
+integration**: they resolve a Starq workspace, read canonical Starq sources, and
+assume a Windows-hosted layout. General, third-party, out-of-the-box installation
+has **not** been built or accepted. The product direction is portable; the
+present configuration is Starq-coupled.
+
 ---
 
 ## Quick start
 
 A concise version is below. The full guide, including every verification
-command and the live-operation prerequisites, is in
+command, the runtime requirements, and the live-operation prerequisites, is in
 [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
-> **Two very different modes.** *Disposable* operation runs the app and its
-> isolated self-test against scratch data and is safe to run on any machine.
-> *Live* operation drives the real control plane against a separately managed,
-> Windows-hosted canonical workspace and is **not yet independently accepted** —
-> do not run it without explicit Founder authorization.
+> **Three distinct modes, not two.** *Verified isolated* operation runs the app's
+> self-test against a scratch database on an isolated port and never touches any
+> canonical store. *Ordinary development* runs the services directly — and when a
+> Starq workspace is present, those services resolve to canonical sources, so it
+> is **not** inherently isolated. *Live* operation drives the real control plane
+> and is **not yet independently accepted.** Know which one you are in.
 
-### Disposable operation (safe anywhere)
+> **Runtime.** The `package.json` `engines` field is permissive (`node >=20`),
+> but it understates the real requirement: the PM service uses `node:sqlite`
+> (`DatabaseSync`), which Node 20 does not provide. The verified operating
+> runtime is **Node 24.15.0 on Windows**. Treat the permissive engines field as a
+> floor for the pure UI build, not as verified operating support.
 
-Requires Node.js 20+.
+### Verified isolated operation (safe anywhere)
+
+This is the only procedure that is guaranteed not to touch a canonical database.
+It drives the real PM service against an **isolated scratch instance** — its own
+`PM_DB_PATH` database and an unused `5190–5199` port — and exercises the full
+Founder cycle: create an org, a project, a task, transition it, restart, recover,
+then back up, mutate, restore, and verify.
 
 ```bash
 npm install
-npm run dev
+npm run verify:local  # scratch PM server, isolated DB and port; no canonical access
 ```
 
-`npm run dev` starts the read-only data service (`:5177`) and the Vite UI
-(`:5173`). Open **http://localhost:5173**. The writable PM service is started
-separately:
+### Ordinary development (not inherently isolated)
 
 ```bash
-npm run pm:start      # writable operating records on :5176
+npm run dev           # data service (:5177) + Vite UI (:5173)
+npm run pm:start      # writable PM service (:5176)
 ```
 
-To exercise the full Founder operating cycle — create an org, a project, a task,
-transition it, restart, recover, then back up / mutate / restore — against an
-**isolated scratch instance** that never touches any canonical database:
+Open **http://localhost:5173**. Be aware of the isolation boundary:
 
-```bash
-npm run verify:local  # spawns a scratch PM server on an unused 5190–5199 port
-```
+- `npm run pm:start` **without** `PM_DB_PATH` resolves to the **canonical**
+  operating database (`data/pm-board.db`) whenever a Starq workspace resolves. It
+  is isolated only when you set a scratch `PM_DB_PATH` (which is what
+  `verify:local` does). Do not treat plain `pm:start` as disposable.
+- The read-only data service may **read** canonical sources when a workspace is
+  present. It never writes, but it is not reading from nothing.
+
+Run ordinary development against the canonical workspace only with
+authorization; otherwise use `verify:local` or run with a scratch `PM_DB_PATH`.
 
 ### Verification
 
@@ -173,6 +200,11 @@ suites. Its **live Windows operation** is owned and accepted separately:
   persistence, backup/restore) has been exercised with all optional companion
   services offline, with the safety guards left enforced
   ([acceptance report](artifacts/acceptance/ACCEPTANCE_REPORT.md)).
+
+**Releases.** Historical archival Git tags exist (`archive/*` baselines from the
+development history). None of them is an authorized public product release: there
+is no release tag, no published package, and no release has been cut. Do not read
+the archival tags as versioned product releases.
 
 Execution is not acceptance. Command never marks its own work accepted; live use
 waits on independent verification. Known gaps are tracked in

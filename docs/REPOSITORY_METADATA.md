@@ -35,8 +35,10 @@ open-source release.
 
 ## About-panel checkboxes
 
-- **Releases:** leave disabled / empty. No release tags exist and none are
-  authorized.
+- **Releases:** leave disabled / empty. Historical archival Git tags exist
+  (`archive/*` development baselines), but none is an authorized public product
+  release — no release has been cut and none is authorized. Do not surface the
+  archival tags as product releases.
 - **Packages / Environments / Deployments:** leave off. Nothing is published.
 - **Include in the home page "Used by":** not applicable (no published package).
 

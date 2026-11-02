@@ -8,10 +8,13 @@ records. Recommendations are for Founder decision.
 
 ## Summary
 
-- **No credentials, tokens, private keys, or production secrets** were found in
-  tracked files. The only secret-shaped strings are read-only guards, idempotency
-  tokens, and `.env.example` reference keys that are explicitly commented as
-  reference-only with instructions never to store credentials.
+- A **preliminary scan of tracked files** found no credentials, tokens, private
+  keys, or production secrets; the only secret-shaped strings are read-only
+  guards, idempotency tokens, and `.env.example` reference keys that are
+  explicitly commented as reference-only. **This is not proof that the repository
+  is clean.** It did not cover Git history, binary assets, or every path
+  exhaustively, so a dedicated disclosure audit remains an open recommendation
+  (see finding 8).
 - The largest disclosure concern is the **operational dashboard screenshot**,
   which shows one operator's real AI-provider stack and subscription-usage ratios.
 - The previous `README.md` was **substantially outdated and founder-surface
@@ -36,10 +39,12 @@ surface. It discloses, for one operator's configuration:
 
 None of this is a credential, but together it is internal operating detail.
 
-**Recommendation:** the Founder decides whether to (a) keep it as-is, (b) replace
-it with a purpose-built screenshot using synthetic/demo data, or (c) remove it.
-The rewritten README keeps the image as an interface example with a caption
-pointing here, pending that decision. This audit does not remove it unilaterally.
+**Recommendation:** keep the original asset **and its Git history untouched**
+pending a Founder decision (done). The standing recommendation is to replace it
+with a purpose-built, **synthetic-data** screenshot rather than treat it as a
+generic promotional image; alternatively remove it. The rewritten README caption
+now states plainly that the image contains real operating information and points
+here. This audit does not remove, alter, or rewrite the asset or its history.
 
 ### 2. Founder email present in one historical record
 
@@ -115,6 +120,45 @@ dependency advisories.
 **Recommendation:** no change; these are appropriately honest. Finalize when the
 Founder approves license and security-contact language.
 
+### 8. A full disclosure audit is still open
+
+The scan in this review covered tracked text files only. It did not
+exhaustively cover Git history, binary assets (including the dashboard image),
+or every file. A public repository warrants a dedicated disclosure audit —
+history scanning for secrets, and a review of binary and large assets — before
+any broader distribution.
+
+**Recommendation:** commission a separate, exhaustive disclosure audit. Treat
+the present scan as preliminary and non-exhaustive.
+
+## Corrections applied after Founder QA (2026-11-02)
+
+Following independent Founder QA of the draft PR, the following documentation
+accuracy corrections were made (documentation only; no application code,
+lifecycle logic, data files, settings, or historical evidence changed):
+
+- **Isolation.** The quick start no longer calls `npm run dev` + `pm:start`
+  safely isolated. `pm:start` without `PM_DB_PATH` resolves to the canonical
+  `data/pm-board.db`; only a scratch `PM_DB_PATH` (what `verify:local` uses) is
+  isolated. The data service may read canonical sources. Three run modes are now
+  distinguished: verified isolated, ordinary development, and live.
+- **Backup architecture.** `scripts/lifecycle/backup.mjs` (operational startup
+  backup/restore with retention/pruning) and `scripts/backup-data-stores.mjs`
+  (immutable versioned architecture) are now described as the distinct mechanisms
+  they are, no longer conflated.
+- **Runtime.** Documented that the PM service uses `node:sqlite`, that Node 20 is
+  insufficient, and that the verified operating runtime is Node 24.15.0 on
+  Windows, distinct from the permissive `engines` field. Application config was
+  not changed.
+- **Releases.** Corrected to state that historical `archive/*` Git tags exist but
+  none is an authorized public product release.
+- **Disclosure scan.** Qualified as a preliminary tracked-file scan, with a
+  standing recommendation for a full disclosure audit (finding 8).
+- **Portability.** README now states Command is designed as a standalone product
+  while acknowledging the current canonical projections and operating profiles
+  carry Starq-specific workspace integration, and that general third-party
+  installation is not accepted.
+
 ## What was deliberately not done
 
 - No source/behavior changes, no data access, no deployments, no release tags, no
@@ -125,9 +169,10 @@ Founder approves license and security-contact language.
 
 ## Verification performed
 
-- Repository-wide scan for emails, and for secret-shaped keywords (`secret`,
-  `password`, `api[-_]key`, `token`, `bearer`, `private[-_]key`, PEM/AWS key
-  patterns) across tracked docs, config, and server files — no credentials found.
+- Preliminary (non-exhaustive) scan of **tracked text files** for emails and
+  secret-shaped keywords (`secret`, `password`, `api[-_]key`, `token`, `bearer`,
+  `private[-_]key`, PEM/AWS key patterns) across docs, config, and server files —
+  no credentials found. Git history and binary assets were not covered (finding 8).
 - Confirmed the three README links resolve outside the repository.
 - Read the dashboard screenshot to assess disclosure.
 - Cross-checked the rewritten README and new guides against `package.json`,
