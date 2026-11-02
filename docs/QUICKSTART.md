@@ -101,7 +101,8 @@ actual scratch port. The writable PM service is a separate process
 (the `dev` script does not start it):
 
 ```bash
-npm run pm:start      # writable PM service on :5176
+# PowerShell alternative: $env:PM_ROOM_POST = 'off'; npm run pm:start
+PM_ROOM_POST=off npm run pm:start  # POSIX shell; Room posting disabled
 ```
 
 > **Isolation boundary — read before running `pm:start`.** With **no**
