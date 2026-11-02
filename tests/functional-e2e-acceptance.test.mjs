@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { portableWorkspaceRoot } from './portable-workspace.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const COMMAND_ENTRY = path.join(ROOT, 'server', 'pm-service.mjs');
@@ -68,7 +69,7 @@ async function startServer(dbPath) {
   serverPort = await unusedPort();
   const env = {
     ...process.env,
-    STARQ_WORKSPACE: 'D:/StarqTech',
+    STARQ_WORKSPACE: portableWorkspaceRoot(),
     PM_DB_PATH: dbPath,
     PM_PORT: String(serverPort),
     PM_ROOM_POST: 'off',

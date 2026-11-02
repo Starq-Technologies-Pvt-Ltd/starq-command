@@ -1,0 +1,23 @@
+{
+  "registry_id": "STARQ-COMMAND-PM-PROJECTS-PORTABLE-FIXTURE",
+  "schema_version": "2.0.0",
+  "note": "Minimal catalog for hosted tests. command is the foreign key historical PM tests insert against. buzzlab is the project the provisioning guard deletes; it has no seeded tasks. This file is not the company project registry.",
+  "projects": [
+    {
+      "id": "command",
+      "name": "Starq Command",
+      "prefix": "CMD",
+      "description": "Portable fixture project so an empty checkout can seed the command board.",
+      "hold_state": null,
+      "source_gap": null
+    },
+    {
+      "id": "buzzlab",
+      "name": "BuzzLab",
+      "prefix": "BUZZ",
+      "description": "Portable fixture project with no seeded tasks, so a restart test can delete it.",
+      "hold_state": null,
+      "source_gap": null
+    }
+  ]
+}

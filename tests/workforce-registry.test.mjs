@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { portableWorkspaceRoot } from './portable-workspace.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import {
   initOrgSchema,
@@ -85,7 +86,7 @@ async function startServer() {
   serverPort = await unusedPort();
   const env = {
     ...process.env,
-    STARQ_WORKSPACE: 'D:/StarqTech',
+    STARQ_WORKSPACE: portableWorkspaceRoot(),
     PM_DB_PATH: tempDb,
     PM_PORT: String(serverPort),
     PM_ROOM_POST: 'off',
