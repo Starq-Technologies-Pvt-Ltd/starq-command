@@ -234,8 +234,22 @@ test('observer gates fail closed on missing inventory and configuration/ownershi
   assert.ok(validateConfig(drifted, { checkFiles: false }).some((p) => /data.port|shared_lock_file/.test(p)));
 });
 
-test('observer inventory declares the real child host and the historical incorrect path fails closed', () => {
+test('observer inventory declares the real child host and the historical incorrect path fails closed', (t) => {
   const cfg = loadConfig(PROFILE_CONFIG);
+  /*
+    The observation profile is canonical-bound by design: its inventory names the
+    child host under the CONFIGURED workspace, not under whichever checkout the
+    suite happens to run in. This assertion compares that against this checkout's
+    own scripts/ directory, so it can only hold where the two are the same place.
+    In any worktree or clone it failed with a path mismatch that said nothing about
+    correctness. Skip with the reason there; it runs for real in the canonical
+    checkout, which is where the observation profile is used.
+  */
+  const configuredRoot = path.join(cfg.workspace_root, '00_STARQ_HQ', 'operations', 'starq-command');
+  if (path.resolve(PACKAGE_ROOT).toLowerCase() !== path.resolve(configuredRoot).toLowerCase()) {
+    t.skip(`running from ${PACKAGE_ROOT}, not the configured canonical checkout ${configuredRoot}; the observation inventory is canonical-bound`);
+    return;
+  }
   const specs = observationRuntimeSpecs(cfg.workspace_root, cfg);
   const child = specs.find((spec) => spec.owner === 'observation-child-host');
   const expected = path.join(PACKAGE_ROOT, 'scripts/lifecycle-child.mjs');
@@ -423,6 +437,7 @@ test('observer and full profile share one exclusive lifecycle lock; incomplete r
           return { pid, unref() {} };
         },
         proveInstance: async () => ({ ok: true, detail: 'simulated owner-issued proof' }),
+        proveBoundAddress: async () => ({ ok: false, supported: false, addresses: [], detail: 'simulated host predates the bound op' }),
         requestShutdown: async (child) => {
           shutdownOrder.push(child.name);
           processes.delete(child.pid);
@@ -472,6 +487,7 @@ test('simulated ready startup requests only the three observation services and n
           return { pid, unref() {} };
         },
         proveInstance: async () => ({ ok: true, detail: 'simulated authenticated identity' }),
+        proveBoundAddress: async () => ({ ok: false, supported: false, addresses: [], detail: 'simulated host predates the bound op' }),
         checkHealth: async () => ({ ok: true, detail: 'simulated health contract' }),
         brokerRequest: async (...args) => { brokerCalls.push(args); throw new Error('broker must not be contacted'); },
       },

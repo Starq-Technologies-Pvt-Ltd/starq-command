@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "note": "Synthetic registry for hosted tests. It is not the company identity registry.",
+  "identities": [
+    {
+      "identityId": "ident-portable-cursor",
+      "canonicalHandle": "cursor",
+      "displayName": "Cursor",
+      "role": "Lead engineer",
+      "status": "active",
+      "authorityLevel": "NONE"
+    },
+    {
+      "identityId": "ident-portable-antigravity",
+      "canonicalHandle": "antigravity",
+      "displayName": "Antigravity",
+      "role": "Builder",
+      "status": "active",
+      "authorityLevel": "NONE"
+    }
+  ]
+}

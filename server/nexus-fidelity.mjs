@@ -44,13 +44,15 @@
  * and the provenance says exactly which board it came from.
  */
 
+import { createHash } from 'node:crypto';
+
 /** Named columns: type is TEXT throughout — Nexus values are type-unstable
  *  (priority is string|number, acceptance array|string, pr number|string), and
  *  coercing them to a typed column is how fidelity gets lost. */
 const FIDELITY_COLUMNS = [
   'nexus_task_id', 'nexus_source_file', 'nexus_source_key', 'nexus_status',
   'nexus_project', 'nexus_attributes',
-  'phase', 'sprint', 'epic', 'lane', 'milestone', 'release_track', 'module', 'task_group',
+  'phase', 'sprint', 'epic', 'lane', 'milestone', 'release_track', 'module', 'task_group', 'work_package',
   'workers_json', 'priority_raw',
   'dispatched_at', 'dispatched_by', 'started_at', 'claimed_at',
   'completed_at', 'completed_by', 'done_at', 'accepted_at', 'accepted_by',
@@ -277,10 +279,13 @@ export function restoreCollidedRecords(handle, { nowIso, boardsById }) {
 
     handle.prepare("UPDATE pm_source_records SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
       .run(key, row.source_key);
-    try {
-      handle.prepare("UPDATE pm_source_record_versions SET task_id = ?, resolution = 'IMPORTED' WHERE source_key = ?")
-        .run(key, row.source_key);
-    } catch {}
+    // Versions are append-only. Record the IMPORTED link as a new row and
+    // leave the DUPLICATE_TASK_ID row in place.
+    const payloadHash = createHash('sha256').update(row.raw_payload).digest('hex');
+    handle.prepare(`
+      INSERT INTO pm_source_record_versions (source_key, payload_sha256, source_system, source_file, source_row_index, task_id, resolution, raw_status, raw_payload, imported_at)
+      VALUES (?, ?, 'starqNexus', ?, ?, ?, 'IMPORTED', ?, ?, ?)
+    `).run(row.source_key, payloadHash, row.source_file, row.source_row_index, key, p.status ? String(p.status) : null, row.raw_payload, ts);
 
     restored.push({ source_key: row.source_key, original_id: originalId, stored_as: key, project_id: projectId });
   }

@@ -68,6 +68,8 @@ import {
   importLegacyPmSnapshot,
   mapKanbanStatus,
 } from './nexus-kanban.mjs';
+import { initOpsAutomationSchema, startOpsAutomation } from './ops-automation.mjs';
+import { handleOpsRoutes } from './pm-ops-routes.mjs';
 
 // Production is always 5176. A disposable verification instance (PM_DB_PATH set)
 // may use one unused loopback port in 5190-5199 and nothing else.
@@ -155,14 +157,14 @@ function identityLevels() {
     throw new HttpError(503, 'UNAVAILABLE', 'Identity registry unreadable; writes refused (fail closed).');
   }
 }
-const FOUNDER_LEVELS = new Set(['ROOT_GENESIS', 'FOUNDER', 'OWNER']);
-function isFounderHandle(handle) {
-  const level = identityLevels().get(handle);
-  return FOUNDER_LEVELS.has(level) || handle === 'ali' || handle === 'mustarq';
-}
 function knownHandles() {
-  const ids = new Set(identityLevels().keys());
+  const ids = new Set();
   if (db) for (const h of orgPeopleHandles(db)) ids.add(h);
+  try {
+    for (const h of identityLevels().keys()) ids.add(h);
+  } catch (e) {
+    if (!ids.size) throw e;
+  }
   return ids;
 }
 function localLedgerRef({ actor, purpose, kind, taskId }) {
@@ -178,7 +180,9 @@ function localLedgerRef({ actor, purpose, kind, taskId }) {
     verified_at: nowIso(),
     received_at: nowIso(),
     authority_level: identityLevels().get(actor) ?? 'LOCAL_COMMAND',
-    root_authority: isFounderHandle(actor),
+    // `actor` is caller-supplied, so a local record is never root authority,
+    // whatever handle it names.
+    root_authority: false,
     mentions_task: true,
     task_id: taskId ?? null,
   };
@@ -396,6 +400,7 @@ export function initSchema(handle) {
       BEGIN SELECT RAISE(ABORT, 'tasks are never deleted; move them to DONE'); END;
   `);
   initOrgSchema(handle);
+  initOpsAutomationSchema(handle);
   ensureGatedColumns(handle);
   // Founder 28 Oct: promote the full original Nexus record out of raw_payload
   // back into queryable columns, and restore the records the importer's global
@@ -613,14 +618,118 @@ export function seedCurrentCommandWork(handle) {
   handle.prepare('UPDATE pm_projects SET next_seq = ? WHERE id = ?').run(seq, 'command');
 }
 
+/**
+ * ── CV-C6: provisioning is a FIRST-RUN choice, never a startup repair ──────
+ *
+ * Seeding and the Nexus/legacy imports used to run on EVERY start. They are
+ * written to insert only what is missing, which reads as harmless and is not:
+ * a record the Founder deleted is simply re-inserted at the next start. That
+ * was demonstrated on a disposable copy of the live database — delete project
+ * `buzzlab`, start the service once, and it is back. The same mechanism also
+ * rebuilt Starq's organization inside any new database, so every fresh
+ * installation became a Starq installation.
+ *
+ * So the decision is recorded once, in `pm_meta.provisioning`, and after that
+ * the provisioning path is never entered again:
+ *
+ *   empty                  created empty and left alone (fresh installations)
+ *   starq-fixtures@<ver>   provisioned on request from the in-repo fixtures
+ *   legacy-seeded          predates this guard; back-filled on first start
+ *
+ * The existing operating database lands on `legacy-seeded` because it already
+ * holds organizational data, so no seed or import can ever touch it again.
+ * That is what makes this safe: preservation comes from the guard, not from
+ * each seed function being careful.
+ *
+ * Schema migrations are NOT provisioning and still run every start.
+ */
+export const PROVISIONING = Object.freeze({
+  EMPTY: 'empty',
+  LEGACY: 'legacy-seeded',
+  STARQ: `starq-fixtures@${SCHEMA_VERSION}`,
+});
+
+/** Tables whose contents mean "this database already belongs to someone". */
+export const ORGANIZATIONAL_TABLES = ['pm_projects', 'pm_tasks', 'org_companies', 'org_people'];
+
+export function hasOrganizationalData(handle) {
+  for (const table of ORGANIZATIONAL_TABLES) {
+    try {
+      if (Number(handle.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n) > 0) return true;
+    } catch { /* table absent in a partially built schema */ }
+  }
+  return false;
+}
+
+function readProvisioning(handle) {
+  try {
+    return handle.prepare("SELECT value FROM pm_meta WHERE key = 'provisioning'").get()?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Decide once what this database is, and record it.
+ * @returns {{mode: string, provision: boolean, decided: boolean}}
+ */
+export function resolveProvisioning(handle, { requested = process.env.COMMAND_PROVISION ?? null } = {}) {
+  const existing = readProvisioning(handle);
+  if (existing) return { mode: existing, provision: false, decided: false };
+
+  let mode;
+  let provision = false;
+  if (hasOrganizationalData(handle)) {
+    // Never reclassify an existing database by what was asked for today.
+    mode = PROVISIONING.LEGACY;
+  } else if (String(requested).toLowerCase() === 'starq') {
+    mode = PROVISIONING.STARQ;
+    provision = true;
+  } else {
+    mode = PROVISIONING.EMPTY;
+  }
+
+  handle.exec('BEGIN IMMEDIATE');
+  try {
+    handle.prepare('INSERT OR REPLACE INTO pm_meta (key, value) VALUES (?, ?)').run('provisioning', mode);
+    handle.exec('COMMIT');
+  } catch (e) {
+    try { handle.exec('ROLLBACK'); } catch { /* never began */ }
+    throw e;
+  }
+  return { mode, provision, decided: true };
+}
+
 export function startDatabase() {
   let dbPath;
   try {
     dbPath = resolveDbPath();
     if (!dbPath) throw new Error('Workspace unresolved.');
     const handle = openDatabase(dbPath);
+    // initSchema carries the migrations (ensureGatedColumns, ensureFidelityColumns,
+    // org and ops schema). Those are not provisioning and run on every start,
+    // including for a database that is never seeded again.
     initSchema(handle);
-    const drift = seedProjects(handle);
+
+    const provisioning = resolveProvisioning(handle);
+    const drift = [`provisioning: ${provisioning.mode}${provisioning.decided ? ' (recorded on this start)' : ''}`];
+
+    if (!provisioning.provision) {
+      if (provisioning.mode === PROVISIONING.LEGACY && provisioning.decided) {
+        drift.push('existing organizational data detected; startup seeding and imports are disabled for this database from now on');
+      }
+      const check = integrity(handle);
+      if (!check.ok) {
+        handle.close();
+        dbState = { state: 'UNAVAILABLE', reason: `integrity_check failed: ${check.detail}`, path: dbPath, integrity: check.detail, seed_drift: drift };
+        return;
+      }
+      db = handle;
+      dbState = { state: 'OK', reason: null, path: dbPath, integrity: 'ok', seed_drift: drift };
+      return;
+    }
+
+    drift.push(...seedProjects(handle));
     seedOperatingOrg(handle, nowIso);
     seedCurrentCommandWork(handle);
     try {
@@ -719,6 +828,10 @@ export function hydrate(row, pending = 0) {
   task.epic = row.epic ?? null;
   task.sprint = row.sprint ?? null;
   task.milestone = row.milestone ?? null;
+  task.milestone_id = row.milestone_id ?? null;
+  task.work_package = row.work_package ?? null;
+  task.is_deliverable = Boolean(row.is_deliverable);
+  task.deliverable_kind = row.deliverable_kind ?? null;
   task.release_track = row.release_track ?? null;
   task.priority_raw = row.priority_raw ?? null;
   task.acceptance_json = row.acceptance_json ?? null;
@@ -1038,7 +1151,12 @@ function updateTask(id, body) {
         type: verdict.rejecting ? 'REJECTED' : 'STAGE_CHANGED',
         from: task.stage,
         to: targetStage,
-        detail: { note: note ?? null, board_column: next.status, ungated: verdict.ungated === true },
+        detail: {
+          note: note ?? null,
+          board_column: next.status,
+          ungated: verdict.ungated === true,
+          ...(verdict.start_authorization ? { start_authorization: verdict.start_authorization } : {}),
+        },
         post: false,
       });
     } else if (body.status !== undefined && body.status !== task.status) {
@@ -1110,25 +1228,41 @@ function orgWrite(fn) {
   }
 }
 
-function createProject(body) {
+function createProject(body, d = null) {
   only(body, ['actor', 'id', 'name', 'prefix', 'description']);
-  handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const actor = handleField(body, 'actor', { required: true, allowUnassigned: false });
+  const workforce = orgPeopleHandles(d || requireDb());
+  if (workforce.length === 0) {
+    throw bad('actor is not a known active identity.', [`actor: ${actor} is not an active identity handle`]);
+  }
   const id = str(body, 'id', { min: 2, max: 40, required: true }).toLowerCase();
   if (!/^[a-z][a-z0-9-]{1,39}$/.test(id)) throw bad('Project id invalid.', ['id must be lowercase letters, digits and hyphen']);
   const name = str(body, 'name', { min: 2, max: 80, required: true });
   const prefix = str(body, 'prefix', { min: 2, max: 4, required: true }).toUpperCase();
   if (!/^[A-Z]{2,4}$/.test(prefix)) throw bad('prefix invalid.', ['prefix must be 2-4 letters']);
   const description = str(body, 'description', { max: 400 }) ?? '';
-  return tx((d) => {
-    if (getProjectRow(id)) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
-    if (d.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix)) {
+  const insert = (handle) => {
+    const existing = handle.prepare('SELECT * FROM pm_projects WHERE id = ?').get(id);
+    const archived = existing && (existing.archived_at || existing.status === 'archived');
+    if (existing && !archived) throw new HttpError(409, 'PROJECT_EXISTS', `Project already exists: ${id}.`);
+    const prefixOwner = handle.prepare('SELECT id FROM pm_projects WHERE prefix = ?').get(prefix);
+    if (prefixOwner && prefixOwner.id !== id) {
       throw new HttpError(409, 'PREFIX_EXISTS', `Prefix already in use: ${prefix}.`);
     }
-    d.prepare(
-      'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
-    ).run(id, name, prefix, description, nowIso());
-    return { ...getProjectRow(id), hold: effectiveHold(getProjectRow(id)) };
-  });
+    if (archived) {
+      handle.prepare(
+        'UPDATE pm_projects SET name = ?, prefix = ?, description = ?, archived_at = NULL, status = ?, hold_state = NULL WHERE id = ?',
+      ).run(name, prefix, description, 'active', id);
+    } else {
+      handle.prepare(
+        'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, NULL, 1, ?)',
+      ).run(id, name, prefix, description, nowIso());
+    }
+    const row = handle.prepare('SELECT * FROM pm_projects WHERE id = ?').get(id);
+    return { ...row, hold: effectiveHold(row) };
+  };
+  if (d) return insert(d);
+  return tx((handle) => insert(handle));
 }
 
 function attention() {
@@ -1338,6 +1472,7 @@ export function portfolio() {
       };
       const done = mine.filter((t) => t.status === 'DONE').length;
       const done_historical = mine.filter((t) => t.status === 'DONE' && t.provenance === PROVENANCE.HISTORICAL).length;
+      const historical_total = mine.filter((t) => t.provenance === PROVENANCE.HISTORICAL).length;
       const withCommit = mine.filter((t) => t.status === 'DONE' && (t.commit_sha || t.commit)).length;
       const withAcceptance = mine.filter((t) => t.status === 'DONE' && (t.acceptance_json || t.accepted_at)).length;
       const capability = p.id === 'erp' ? { implemented: 7, total: 49, percent: 14 } : null;
@@ -1356,6 +1491,7 @@ export function portfolio() {
         source_gap: p.source_gap,
         total: mine.length,
         done_historical,
+        historical_total,
         open: mine.filter((t) => t.status !== 'DONE').length,
         counts,
         stages,
@@ -1456,6 +1592,13 @@ async function handle(req, res) {
       if (!String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) throw new HttpError(415, 'CONTENT_TYPE', 'Content-Type must be application/json.');
     }
 
+    if (await handleOpsRoutes(req, res, {
+      url, p, origin, db: () => requireDb(), tx, send, readBody, HttpError, bad, only, str, handleField,
+      createProject, createTask, updateTask, listProjects, taskDetail, portfolio, hydrate,
+      getProjectRow, getTaskRow, effectiveHold, logEvent, nowIso, ROOT, ROOM_POST,
+      deliverDigest: async (summary) => postToRoom(`PM DAILY DIGEST · ${summary.date}\nCompleted (24h): ${summary.completed_last_24h.length} · Started (24h): ${summary.started_last_24h.length} · Blocked: ${summary.blocked_tasks.length} · At-risk milestones: ${summary.at_risk_milestones.length}`),
+    })) return;
+
     if (req.method === 'GET' && p === '/api/pm/health') return send(res, 200, health(), origin);
     if (req.method === 'GET' && p === '/api/pm/nexus/sources') {
       return send(res, 200, nexusSources(url.searchParams.get('file') || null), origin);
@@ -1484,9 +1627,10 @@ async function handle(req, res) {
     if (req.method === 'GET' && p === '/api/pm/attention') return send(res, 200, attention(), origin);
     if (req.method === 'POST' && p === '/api/pm/org/companies') {
       const body = await readBody(req);
-      only(body, ['actor', 'name', 'legal_name', 'notes']);
+      only(body, ['actor', 'id', 'name', 'legal_name', 'notes']);
       handleField(body, 'actor', { required: true, allowUnassigned: false });
       return send(res, 201, orgWrite((d) => orgCreateCompany(d, {
+        id: str(body, 'id', { max: 64 }),
         name: str(body, 'name', { min: 2, max: 80, required: true }),
         legal_name: str(body, 'legal_name', { max: 120 }),
         notes: str(body, 'notes', { max: 400 }),
@@ -1623,12 +1767,15 @@ if (isDirectRun) {
   else {
     if (ROOM_POST) requireExplicitRoomWriter();
     startDatabase();
+    const opsAuto = db ? startOpsAutomation(() => db, {
+      deliver: async (summary) => postToRoom(`PM DAILY DIGEST · ${summary.date}\nCompleted (24h): ${summary.completed_last_24h.length} · Started (24h): ${summary.started_last_24h.length} · Blocked: ${summary.blocked_tasks.length} · At-risk milestones: ${summary.at_risk_milestones.length}`),
+    }) : null;
     const server = http.createServer((req, res) => { void handle(req, res); });
     server.listen(PORT, HOST, () => {
       console.log(json({ service: 'starq-command-pm', listening: `${HOST}:${PORT}`, db_state: dbState.state, db: dbState.path, room_post: ROOM_POST ? 'ON' : 'OFF', reason: dbState.reason }));
       setTimeout(enqueueRoomSync, 3000);
     });
-    const shutdown = () => { server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
+    const shutdown = () => { opsAuto?.stop(); server.close(); try { db?.close(); } catch { /* ignore */ } process.exit(0); };
     process.on('SIGINT', shutdown);
     process.on('SIGTERM', shutdown);
   }

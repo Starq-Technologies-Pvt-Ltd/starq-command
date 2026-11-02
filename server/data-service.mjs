@@ -1237,7 +1237,14 @@ const server = http.createServer(async (req, res) => {
   // ── Communications (the messenger). Read-only projection of the Room. ──────
   if (url.pathname === '/api/comms/channels') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    if (!c.ok) {
+      // The channel loader treats any 2xx body as a directory. An unreadable
+      // Room must stay a non-success until that client reads state itself.
+      return sendJson(res, 503, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+      });
+    }
     return sendJson(res, 200, {
       state: 'OK', tail_sequence: c.tail_sequence, record_count: c.record_count,
       assembled_at: c.assembled_at, channels: listChannels(c.records),
@@ -1246,8 +1253,14 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/comms/messages') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
     const channel = url.searchParams.get('channel') || 'common';
+    if (!c.ok) {
+      return sendJson(res, 503, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        channel,
+      });
+    }
     const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 100)));
     const before = url.searchParams.get('before') ? Number(url.searchParams.get('before')) : null;
     const includeCoordination = url.searchParams.get('coordination') !== 'exclude';
@@ -1257,17 +1270,32 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/api/comms/search') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
     const q = url.searchParams.get('q') || '';
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     const from = url.searchParams.get('from') || null;
     const project = url.searchParams.get('project') || null;
+    if (!c.ok) {
+      return sendJson(res, 503, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+        query: q,
+        from,
+        project,
+      });
+    }
+    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 50)));
     return sendJson(res, 200, { state: 'OK', ...searchMessages(c.records, q, { limit, from, project }) });
   }
 
   if (url.pathname === '/api/comms/people') {
     const c = commsRecords();
-    if (!c.ok) return sendJson(res, 503, { state: c.state, error: c.reason });
+    if (!c.ok) {
+      // The directory loader treats any 2xx body as people. An unreadable
+      // Room must not look like an identities-only directory with no activity.
+      return sendJson(res, 503, {
+        state: c.state || STATE.UNAVAILABLE,
+        error: c.reason,
+      });
+    }
     const identitiesSource = loadSource(CANONICAL.identities, resolveWorkspace().root);
     return sendJson(res, 200, { state: 'OK', people: peopleDirectory(identitiesSource.data, c.records) });
   }

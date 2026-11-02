@@ -1,16 +1,57 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { sqlitePathLiteral } from '../scripts/backup-data-stores.mjs';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const commandRoot = path.resolve(__dir, '..');
-const dbPath = path.resolve(commandRoot, 'data', 'pm-operating.db');
-const baselineHashesPath = 'D:/StarqTech/_backup/pm-pre-migration-20261028/baseline_hashes.json';
+const liveDbPath = path.resolve(commandRoot, 'data', 'pm-operating.db');
+const baselineHashesPath = process.env.W0_BASELINE_HASHES
+  ?? 'D:/StarqTech/_backup/pm-pre-migration-20261028/baseline_hashes.json';
 
-test('Deliverable C §6.5: All 11 Provenance & Data Integrity Assertions', () => {
+/**
+ * These assertions describe the Founder's ACTUAL operating data, so they can
+ * only run where that data exists. Two things were wrong with how they ran.
+ *
+ * They opened `data/pm-operating.db` directly — and assertion 4 opened it for
+ * WRITING, to prove an append-only trigger rejects an UPDATE. The trigger does
+ * reject it, so nothing was mutated, but a test holding a write handle on the
+ * live operating database is a hazard the preservation directive forbids: if
+ * that trigger were ever missing, the test itself would be the thing that
+ * corrupted the data.
+ *
+ * And because the path is repo-relative, every worktree and clone failed with
+ * "unable to open database file" — one of the five long-standing failures.
+ *
+ * Both are fixed the same way: copy the live database to a disposable file with
+ * VACUUM INTO from a READ-ONLY handle, and run every assertion, including the
+ * write probe, against the copy. When the live database or the baseline file is
+ * absent, the suite says so and skips rather than failing for the wrong reason.
+ */
+function disposableCopy(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'command-w0-'));
+  t.after(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* best effort */ } });
+  const copy = path.join(dir, 'pm-operating-copy.db');
+  const source = new DatabaseSync(liveDbPath, { readOnly: true });
+  try { source.exec(`VACUUM INTO ${sqlitePathLiteral(copy)}`); }
+  finally { source.close(); }
+  return copy;
+}
+
+test('Deliverable C §6.5: All 11 Provenance & Data Integrity Assertions', (t) => {
+  if (!fs.existsSync(liveDbPath)) {
+    t.skip(`operating database not present at ${liveDbPath}; these assertions describe real operating data`);
+    return;
+  }
+  if (!fs.existsSync(baselineHashesPath)) {
+    t.skip(`pre-migration baseline hashes not present at ${baselineHashesPath}; set W0_BASELINE_HASHES to override`);
+    return;
+  }
+  const dbPath = disposableCopy(t);
   const db = new DatabaseSync(dbPath, { readOnly: true });
 
   // 1. SELECT COUNT(*) FROM pm_tasks WHERE provenance='LIVE' AND nexus_source_key IS NOT NULL -> 0

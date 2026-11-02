@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
@@ -27,10 +28,44 @@ import {
 import { seedOperatingOrg } from '../server/operating-org.mjs';
 import { resolveWorkspace, CANONICAL, abs } from '../server/paths.mjs';
 
-test('WP-0: Full Portfolio & Source Convergence (18 Nexus boards, 1,349 tasks, fidelity)', () => {
+/**
+ * Where the recovered Nexus boards actually are.
+ *
+ * `recovered/nexus` is gitignored, so it exists only in the checkout that owns
+ * it. A worktree or fresh clone has no copy, and this test used to FAIL there
+ * with "Exactly one collision restored, 0 !== 1" - a message that reads like a
+ * product defect in historical collision restoration when the real cause is
+ * that no boards were loaded. That made "0 failures" true only on the machine
+ * that happened to hold the data.
+ *
+ * Resolution order: the product's own root (STARQ_NEXUS_DATA_ROOT or the
+ * checkout-relative recovered tree), then the same tree inside the canonical
+ * workspace checkout, which is how an isolated worktree under D:\StarqTech
+ * still exercises the real boards. The boards are only READ; every write in this
+ * test goes to an in-memory database.
+ *
+ * Returns null when the boards are genuinely unavailable, so the test can say so
+ * rather than fail for the wrong reason.
+ */
+function resolveNexusBoards(workspaceRoot) {
+  const marker = 'starqbooks-tasks.json';
+  const candidates = [
+    NEXUS_DATA_ROOT,
+    workspaceRoot && path.join(workspaceRoot, '00_STARQ_HQ', 'operations', 'starq-command', 'recovered', 'nexus', 'starqNexus', 'data'),
+  ].filter(Boolean);
+  return candidates.find((dir) => fs.existsSync(path.join(dir, marker))) ?? null;
+}
+
+test('WP-0: Full Portfolio & Source Convergence (18 Nexus boards, 1,349 tasks, fidelity)', (t) => {
   const ws = resolveWorkspace();
   const root = ws.root;
   assert.ok(root, 'Workspace root must resolve');
+
+  const nexusDataRoot = resolveNexusBoards(root);
+  if (!nexusDataRoot) {
+    t.skip('recovered Nexus boards not present (gitignored); set STARQ_NEXUS_DATA_ROOT to the starqNexus/data directory to run this');
+    return;
+  }
 
   const nowIso = () => '2026-10-28T12:00:00.000Z';
   const json = (v) => JSON.stringify(v);
@@ -50,7 +85,7 @@ test('WP-0: Full Portfolio & Source Convergence (18 Nexus boards, 1,349 tasks, f
   const importSummary = importNexusBoards(db, {
     nowIso,
     json,
-    dataRoot: NEXUS_DATA_ROOT,
+    dataRoot: nexusDataRoot,
   });
   assert.equal(importSummary.boards.length, 19);
 

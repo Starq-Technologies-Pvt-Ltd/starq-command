@@ -108,7 +108,58 @@ test('legacy Command PM database is preserved as archived records without collid
   legacy.prepare('INSERT INTO pm_meta VALUES (?,?)').run('db_id', 'legacy-db-id');
   legacy.prepare('INSERT INTO pm_projects VALUES (?,?,?,?,?,?,?,?)').run('command', 'Starq Command', 'CMD', '', null, null, 5, '2026-10-13');
   legacy.prepare('INSERT INTO pm_tasks VALUES (?,?,?,?,?,?,?)').run('PM-CMD-001', 'command', 'Historical closed work', 'CLOSED', 'cursor', 'antigravity', 'legacy notes');
+  legacy.prepare('INSERT INTO pm_tasks VALUES (?,?,?,?,?,?,?)').run('PM-CMD-009', 'command', 'Historical work with no live row', 'CLOSED', 'cursor', 'antigravity', 'unlinked notes');
   legacy.prepare('INSERT INTO pm_status_log VALUES (?,?,?,?,?,?,?,?,?)').run(1, 'PM-CMD-001', 'STATUS_CHANGED', 'ACCEPTANCE', 'CLOSED', 'claude', '{"reason":"verified"}', '2026-10-14T00:00:00.000Z', '{"sequence":42}');
+  legacy.close();
+
+  const db = new DatabaseSync(':memory:');
+  t.after(() => db.close());
+  db.exec(`
+    CREATE TABLE pm_import_sources (source_file TEXT PRIMARY KEY, source_system TEXT, content_sha256 TEXT, row_count INTEGER, imported_at TEXT);
+    CREATE TABLE pm_source_records (source_key TEXT PRIMARY KEY, source_system TEXT, source_file TEXT, source_row_index INTEGER, task_id TEXT, resolution TEXT, raw_status TEXT, payload_sha256 TEXT, raw_payload TEXT, imported_at TEXT, UNIQUE(source_file,source_row_index));
+    CREATE TABLE pm_import_source_versions (source_file TEXT, content_sha256 TEXT, row_count INTEGER, imported_at TEXT, PRIMARY KEY(source_file,content_sha256));
+    CREATE TABLE pm_source_record_versions (source_key TEXT, payload_sha256 TEXT, source_system TEXT, source_file TEXT, source_row_index INTEGER, task_id TEXT, resolution TEXT, raw_status TEXT, raw_payload TEXT, imported_at TEXT, PRIMARY KEY(source_key,payload_sha256));
+    CREATE TABLE pm_tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, project_id TEXT);
+  `);
+  db.prepare('INSERT INTO pm_tasks (id, title, project_id) VALUES (?, ?, ?)').run('PM-CMD-001', 'Live native task', 'command');
+  const imported = importLegacyPmSnapshot(db, { dbPath: sourcePath, nowIso: () => '2026-10-27T00:00:00.000Z', json: JSON.stringify });
+  assert.equal(imported.preserved, 2);
+  assert.equal(imported.history_rows, 1);
+  assert.equal(imported.projects, 1);
+  const row = db.prepare("SELECT * FROM pm_source_records WHERE source_key = 'command-pm-v1:PM-CMD-001'").get();
+  assert.equal(row.source_system, 'starqCommand-pm-board-v1');
+  assert.equal(row.task_id, null);
+  assert.equal(row.resolution, 'ARCHIVED_ID_COLLISION');
+  const raw = JSON.parse(row.raw_payload);
+  assert.equal(raw.task.id, 'PM-CMD-001');
+  assert.equal(raw.task.status, 'CLOSED');
+  assert.equal(raw.history[0].detail, '{"reason":"verified"}');
+  assert.equal(raw.history[0].room_ref, '{"sequence":42}');
+  const absent = db.prepare("SELECT * FROM pm_source_records WHERE source_key = 'command-pm-v1:PM-CMD-009'").get();
+  assert.equal(absent.task_id, null, 'an unused legacy id must not be linked when no pm_tasks row is created');
+  assert.equal(absent.resolution, 'ARCHIVED_ID_COLLISION');
+  assert.equal(JSON.parse(absent.raw_payload).task.title, 'Historical work with no live row');
+  assert.equal(db.prepare('SELECT title FROM pm_tasks WHERE id = ?').get('PM-CMD-001').title, 'Live native task');
+  const dangling = db.prepare(
+    'SELECT COUNT(*) AS n FROM pm_source_records r WHERE r.task_id IS NOT NULL AND r.task_id NOT IN (SELECT id FROM pm_tasks)',
+  ).get();
+  assert.equal(Number(dangling.n), 0);
+});
+
+test('legacy import does not treat a missing pm_tasks table as a free id', (t) => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'command-legacy-pm-notable-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const sourcePath = path.join(dir, 'pm-board.db');
+  const legacy = new DatabaseSync(sourcePath);
+  legacy.exec(`
+    CREATE TABLE pm_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE pm_projects (id TEXT PRIMARY KEY, name TEXT);
+    CREATE TABLE pm_tasks (id TEXT PRIMARY KEY, title TEXT, status TEXT);
+    CREATE TABLE pm_status_log (id INTEGER PRIMARY KEY, task_id TEXT);
+  `);
+  legacy.prepare('INSERT INTO pm_meta VALUES (?,?)').run('db_id', 'legacy-db-id');
+  legacy.prepare('INSERT INTO pm_projects VALUES (?,?)').run('command', 'Starq Command');
+  legacy.prepare('INSERT INTO pm_tasks VALUES (?,?,?)').run('PM-CMD-009', 'Archive only', 'CLOSED');
   legacy.close();
 
   const db = new DatabaseSync(':memory:');
@@ -121,15 +172,8 @@ test('legacy Command PM database is preserved as archived records without collid
   `);
   const imported = importLegacyPmSnapshot(db, { dbPath: sourcePath, nowIso: () => '2026-10-27T00:00:00.000Z', json: JSON.stringify });
   assert.equal(imported.preserved, 1);
-  assert.equal(imported.history_rows, 1);
-  assert.equal(imported.projects, 1);
-  const row = db.prepare('SELECT * FROM pm_source_records').get();
-  assert.equal(row.source_system, 'starqCommand-pm-board-v1');
-  assert.equal(row.task_id, 'PM-CMD-001');
-  assert.equal(row.resolution, 'IMPORTED');
-  const raw = JSON.parse(row.raw_payload);
-  assert.equal(raw.task.id, 'PM-CMD-001');
-  assert.equal(raw.task.status, 'CLOSED');
-  assert.equal(raw.history[0].detail, '{"reason":"verified"}');
-  assert.equal(raw.history[0].room_ref, '{"sequence":42}');
+  const row = db.prepare('SELECT task_id, resolution, raw_payload FROM pm_source_records').get();
+  assert.equal(row.task_id, null);
+  assert.equal(row.resolution, 'ARCHIVED_ID_COLLISION');
+  assert.equal(JSON.parse(row.raw_payload).task.id, 'PM-CMD-009');
 });

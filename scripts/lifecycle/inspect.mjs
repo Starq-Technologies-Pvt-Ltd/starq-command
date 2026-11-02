@@ -64,7 +64,11 @@ export async function listListeners({ execFileImpl = execFile, netstatExe = 'net
     if (!/Proto\s+Local Address/i.test(text)) throw new InspectionError(`netstat ${proto} output not recognised`);
     for (const line of text.split(/\r?\n/)) {
       const m = /^\s*TCP\s+(\S+):(\d+)\s+\S+\s+LISTENING\s+(\d+)\s*$/i.exec(line);
-      if (m) rows.push({ address: m[1], port: Number(m[2]), pid: Number(m[3]) });
+      // pid 0 is the System Idle Process, which can never own a socket. netstat
+      // shows it for kernel records whose owning process has gone (a stopped
+      // service's port keeps a LISTENING row for a while, yet bind() on it
+      // succeeds), so it names nobody and must not read as a foreign listener.
+      if (m && Number(m[3]) !== 0) rows.push({ address: m[1], port: Number(m[2]), pid: Number(m[3]) });
     }
   }
   return rows;

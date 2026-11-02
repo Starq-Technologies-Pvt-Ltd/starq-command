@@ -371,10 +371,26 @@ export function importLegacyPmSnapshot(handle, { dbPath, nowIso, json }) {
       const sourceKey = `command-pm-v1:${task.id}`;
       const rawPayload = json({ task, history: historyByTask.get(task.id) ?? [] });
       const payloadHash = createHash('sha256').update(rawPayload).digest('hex');
-      // P-1: The four legacy Command tasks PM-CMD-001..004 are archived early work items,
-      // not identical to the live native Command tasks. They must be preserved as ARCHIVED_ID_COLLISION.
-      const resolution = 'ARCHIVED_ID_COLLISION';
-      const linkedTaskId = null;
+      // This function writes archive rows only. It does not insert pm_tasks,
+      // so an id that is merely unused is not evidence the archive can be
+      // linked. A missing pm_tasks table is the same fact, not a free id.
+      // A live row with this id is a different record and stays unlinked.
+      let liveRow = null;
+      try {
+        liveRow = handle.prepare('SELECT id FROM pm_tasks WHERE id = ?').get(task.id) ?? null;
+      } catch (error) {
+        if (!/no such table/i.test(String(error?.message ?? error))) throw error;
+        liveRow = null;
+      }
+      let resolution;
+      let linkedTaskId;
+      if (liveRow) {
+        resolution = 'ARCHIVED_ID_COLLISION';
+        linkedTaskId = null;
+      } else {
+        resolution = 'ARCHIVED_ID_COLLISION';
+        linkedTaskId = null;
+      }
       const lastVer = handle.prepare(
         'SELECT resolution, task_id, payload_sha256 FROM pm_source_record_versions WHERE source_key = ? ORDER BY rowid DESC LIMIT 1'
       ).get(sourceKey);

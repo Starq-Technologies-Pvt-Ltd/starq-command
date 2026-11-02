@@ -1,0 +1,21 @@
+# Byte-pinned evidence assets.
+#
+# `board/board-manifest.json` records sha256 hashes of the EXACT bytes of the
+# board assets, and the offline board tests verify those pins. This machine has
+# `core.autocrlf=true` and the repository had no attributes file, so the same
+# commit checked out with different bytes in different working trees: the
+# canonical checkout held LF while a fresh worktree checkout held CRLF, making
+# `command-board.json` 3,158 bytes larger and every byte pin fail. A Linux CI
+# runner, which converts nothing, would produce a third result again.
+#
+# That is why the offline board suite passed for whoever ran it in the canonical
+# directory and reported CONFLICT for anyone reviewing it elsewhere. Marking
+# these assets as binary stops normalization touching them, so one commit means
+# one set of bytes on every platform and in every checkout.
+board/*.json -text
+board/snapshots/** -text
+
+# JobGuardian.cs is hash-pinned by runtime/containment/guardian-build.json.
+# A default Windows checkout (core.autocrlf=true) otherwise rewrites LF to CRLF
+# and the containment gate rejects the changed source. -text keeps the committed bytes.
+runtime/containment/JobGuardian.cs -text

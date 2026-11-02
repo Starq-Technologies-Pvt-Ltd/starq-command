@@ -58,15 +58,65 @@ async function gracefulExit(why) {
         })]);
       } finally { clearTimeout(timer); }
     } else {
-      await closeServers([componentModule?.server ?? componentModule?.lifecycleService?.server]);
+      // Prefer a server the component exports; otherwise close every TCP server it
+      // bound in this process (recorded by the listen() wrapper above). PM creates
+      // its server inside a direct-run block and exports nothing, so without this
+      // fallback an owner stop request could never be honoured for it.
+      const exported = componentModule?.server ?? componentModule?.lifecycleService?.server;
+      await closeServers(exported ? [exported] : [...boundServers].filter((s) => s !== control));
     }
     await closeServers([control]);
     process.exitCode = 0;
+    // The listeners are closed; a component's own timers (PM's automation loop)
+    // must not keep a stopped service alive past the owner's grace period.
+    setTimeout(() => process.exit(0), 250);
   } catch (err) {
     log(`shutdown error: ${err.message}`);
     process.exitCode = 1;
     shuttingDown = false;
   }
+}
+
+/*
+  Observe binds rather than hunting for exports.
+
+  Components expose their server differently and some do not expose it at all:
+  the data service exports `server`, Vite keeps an `httpServer`, and the
+  herdr-floor broker creates its server inside compose() and exports only that
+  factory. Guessing export shapes would be fragile and would mean editing
+  external components, including the frozen data service.
+
+  Instead the host records every TCP server that successfully binds inside THIS
+  process, by wrapping listen() before the component is imported. The control
+  pipe binds a named pipe, whose address() is a string rather than {port}, so it
+  is naturally excluded below.
+*/
+const boundServers = new Set();
+const nativeListen = net.Server.prototype.listen;
+net.Server.prototype.listen = function patchedListen(...args) {
+  this.once('listening', () => boundServers.add(this));
+  this.once('close', () => boundServers.delete(this));
+  return nativeListen.apply(this, args);
+};
+
+/**
+ * Every address this component is really listening on. Returns [] before the
+ * component has bound, which is a truthful "not yet", never a guess.
+ */
+function boundAddresses() {
+  const out = [];
+  const seen = new Set();
+  for (const s of boundServers) {
+    let a;
+    try { a = s.address?.(); } catch { a = null; }
+    if (!a || typeof a !== 'object' || !Number.isInteger(a.port)) continue;
+    const key = `${a.address}:${a.port}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ address: a.address, port: a.port, family: a.family ?? null });
+  }
+  // Stable order so the MAC is reproducible for the same set of addresses.
+  return out.sort((x, y) => (x.port - y.port) || String(x.address).localeCompare(String(y.address)));
 }
 
 const control = net.createServer((socket) => {
@@ -82,6 +132,29 @@ const control = net.createServer((socket) => {
     if (msg.op === 'identity') {
       socket.end(`${JSON.stringify({ name: NAME, instance_id: INSTANCE, pid: process.pid, nonce,
         mac: mac(TOKEN, 'identity', nonce, process.pid, INSTANCE) })}\n`);
+      return;
+    }
+    /*
+      Where is this component ACTUALLY listening?
+
+      Readiness used to require a matching LISTENING row from the OS TCP table,
+      owned by the launched pid. On this machine that table does not reliably
+      report loopback listeners even while a service is demonstrably serving
+      HTTP, so a healthy child could never be marked ready and `start` failed at
+      the first component whose row was missing.
+
+      The component itself knows the answer: `server.address()` is the kernel's
+      reply to its own bind. We already have an authenticated channel to it, so
+      we ask it here instead of asking the OS about it. The addresses are folded
+      into the MAC, so a process that does not hold the launch token can neither
+      answer nor alter the answer.
+    */
+    if (msg.op === 'bound') {
+      const addresses = boundAddresses();
+      socket.end(`${JSON.stringify({
+        name: NAME, instance_id: INSTANCE, pid: process.pid, nonce, addresses,
+        mac: mac(TOKEN, `bound|${JSON.stringify(addresses)}`, nonce, process.pid, INSTANCE),
+      })}\n`);
       return;
     }
     if (msg.op === 'shutdown') {

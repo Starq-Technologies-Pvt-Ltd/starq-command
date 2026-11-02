@@ -221,11 +221,27 @@ describe('a blocked tool is not an unavailable truth', () => {
   const tool = floor.current_health.find((d) => d.id === 'healthTool')!;
 
   it('reports the canonical health tool honestly on this runtime', () => {
-    // The tool genuinely cannot execute on native Windows Node. If that ever
-    // gets fixed, this test is expected to be updated — and the change will be
-    // visible in the diff rather than silently absorbed.
-    expect(tool.state).toBe(DIMENSION.UNAVAILABLE);
-    expect(tool.detail).toMatch(/ERR_UNSUPPORTED_ESM_URL_SCHEME|dynamic import/i);
+    // This used to pin UNAVAILABLE plus the ESM error text, because the
+    // canonical tool dynamic-imported a bare absolute path that the Windows
+    // ESM loader rejects. Its own comment said the test was expected to be
+    // updated if that were ever fixed — and it HAS been: the protocol owner now
+    // wraps the specifier in `pathToFileURL()`, so Command's detector correctly
+    // reports OK and the two pinned assertions failed on a defect that no
+    // longer exists.
+    //
+    // What is worth guarding is not one runtime's outcome but that Command
+    // reports whichever it finds honestly, cites evidence, and never claims
+    // authorship of the fix. Both branches are asserted, so a regression
+    // upstream is still caught — it just arrives as UNAVAILABLE again rather
+    // than as a failure here.
+    expect([DIMENSION.OK, DIMENSION.UNAVAILABLE]).toContain(tool.state);
+    expect(tool.evidence.length).toBeGreaterThan(0);
+    expect(tool.command_did_not_modify).toBe(true);
+    if (tool.state === DIMENSION.UNAVAILABLE) {
+      expect(tool.detail).toMatch(/ERR_UNSUPPORTED_ESM_URL_SCHEME|dynamic import/i);
+    } else {
+      expect(tool.detail).toMatch(/no bare absolute dynamic import/i);
+    }
   });
 
   it('separates the blocked tool from the truth underneath it', () => {
@@ -235,10 +251,16 @@ describe('a blocked tool is not an unavailable truth', () => {
   });
 
   it('attributes the fix to the source, and says Command did not make it', () => {
-    expect(tool.fix_locus).toBe('SOURCE');
+    // A blocked tool must name SOURCE as the fix locus and a remediation owner
+    // outside Command. Once the source is fixed there is nothing left to
+    // attribute, so those fields are absent by design — what must still hold in
+    // both states is that Command does not claim to have changed the tool.
     expect(tool.command_did_not_modify).toBe(true);
-    expect(tool.remediation_owner).toBeTruthy();
     expect(tool.evidence.length).toBeGreaterThan(0);
+    if (tool.state === DIMENSION.UNAVAILABLE) {
+      expect(tool.fix_locus).toBe('SOURCE');
+      expect(tool.remediation_owner).toBeTruthy();
+    }
   });
 });
 

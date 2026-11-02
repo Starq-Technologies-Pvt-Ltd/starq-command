@@ -22,16 +22,18 @@ import http from 'node:http';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE } from './config.mjs';
+import { loadConfig, findEnvOverrides, findObservationEnvHazards, topoOrder, componentEnv, standaloneHerdr, REQUIRED_COMPONENTS, OBSERVATION_PROFILE, COMMAND_LOCAL_PROFILE, COMMAND_LOCAL_REQUIRED } from './config.mjs';
 import { readState, writeState, archiveState, appendEvent, STATE_SCHEMA } from './state.mjs';
 import { inspectProcesses, inspectDeclaredInfrastructure, listListeners, osVerdict, sameExe, InspectionError, classifyInfrastructureProcess } from './inspect.mjs';
-import { proveInstance, requestShutdown } from './control.mjs';
+import { proveInstance, proveBoundAddress, boundOnPort, requestShutdown } from './control.mjs';
 import { checkHealth } from './health.mjs';
 import { buildHealthPreflight, buildRepositoryPreflight } from './preflight.mjs';
 import { acquireLock, releaseLock, readLock, LockedError } from './lock.mjs';
-import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate } from './gates.mjs';
+import { readGates, readObservationGates, readDevelopmentGates, readStandaloneHerdrGate, readCommandLocalGates } from './gates.mjs';
 import { importExternalComponent } from '../../server/external-components.mjs';
 import { evaluateHistoricalCloseoutHandoff, evaluateRecordedHistoricalCloseoutRecovery } from './historical-closeout-handoff.mjs';
+import { provablyGoneAcrossBoot } from './boot-closeout.mjs';
+import { APP_ROOT, localContainmentOptions, localNativeContainment, resolveRootPid } from './containment/local-gate.mjs';
 
 const [herdrStatusComponent, herdrLauncherComponent, herdrContainmentComponent] = await Promise.all([
   importExternalComponent('herdr-floor', 'src/herdr-status.mjs'),
@@ -87,8 +89,62 @@ function forceKillReal(pid) {
   });
 }
 
+/**
+ * Native containment, split by what the caller is about to do.
+ *
+ * `containmentOptions` runs, by default, a RUNTIME PROBE: it launches a
+ * disposable child, waits for its signed started receipt, and proves a Job
+ * Object really contains it. That is the right precondition before LAUNCHING a
+ * new child on a machine - "can we contain what we are about to start?"
+ *
+ * It is the wrong precondition for acting on a descriptor that was ALREADY
+ * issued. `stop`, `status`, the closeout proof and forced recovery only need the
+ * pinned guardian and the recorded descriptor; the kernel answers `owned`,
+ * `closed`, `active` and `root_gone` itself and the guardian reply is validated
+ * strictly. Re-running the probe there added nothing to ownership, yet made
+ * stopping running services depend on a brand new child spawning and writing a
+ * receipt inside a fixed 2.5 s window - so a service that was up could fail to be
+ * stopped through the supported path, with an error about a probe child rather
+ * than about the service. `waitGone` polls, so it paid that cost, about 0.8 s
+ * and a spawned process, on every iteration.
+ *
+ * `verifyRuntime: false` is the companion's own supported option. It skips only
+ * the throwaway-child experiment; the guardian binary pin, source pin, build
+ * schema and dependency-drift checks still run. Nothing about ownership is
+ * relaxed: instance proof over the control pipe, the HMAC receipt and the
+ * kernel's own `owned` verdict are untouched.
+ *
+ * The recorded-descriptor accessor deliberately exposes no `launch`, so the
+ * unprobed path cannot be used to start anything.
+ */
+export function createContainmentAccessors({ containmentOptions: options, nativeContainment: native, resolve }) {
+  const build = (verifyRuntime) => {
+    const { workspace, stateDir, tier } = resolve();
+    return native(options(workspace, stateDir, { tier, verifyRuntime }));
+  };
+  return {
+    forLaunch: () => build(true),
+    forRecorded: () => {
+      const { status, stop, receipt } = build(false);
+      return { status, stop, receipt };
+    },
+  };
+}
+
 export function createOwner({ configFile, runtimeDir, lockFile = path.join(runtimeDir, 'lifecycle.lock'), env = process.env, configOptions = {}, inspectionTools = null, deps = {}, tier = null }) {
-  const jobs = () => nativeContainment(containmentOptions(cfgOf().workspace_root, runtimeDir, { tier: effectiveTier() }));
+  // The standalone profile contains its children with Command's OWN package
+  // (runtime/containment) and Node runtime; only the full online profile still
+  // uses the Herdr Floor companion. Herdr Floor is not needed to start Command.
+  const isLocalProfile = () => { try { return cfgOf().profile?.name === COMMAND_LOCAL_PROFILE; } catch { return false; } };
+  const containment = createContainmentAccessors({
+    containmentOptions: deps.containmentOptions ?? ((ws, sd, o) => (isLocalProfile()
+      ? localContainmentOptions(APP_ROOT, sd, { ...o, nodePath: cfgOf().node })
+      : containmentOptions(ws, sd, o))),
+    nativeContainment: deps.nativeContainment ?? ((o) => (isLocalProfile() ? localNativeContainment(o) : nativeContainment(o))),
+    resolve: () => ({ workspace: cfgOf().workspace_root, stateDir: runtimeDir, tier: effectiveTier() }),
+  });
+  const jobs = containment.forLaunch;       // launch only: proves a new child can be contained
+  const recorded = containment.forRecorded; // everything else: acts on an already-issued descriptor
   const effectiveTier = () => tier ?? (cfgOf().profile?.tier ?? 'development');
   const inspectionOptions = inspectionTools ? { powershellExe: inspectionTools.powershell } : {};
   const listenerOptions = inspectionTools ? { netstatExe: inspectionTools.netstat } : {};
@@ -98,17 +154,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     listListeners: deps.listListeners ?? (() => listListeners(listenerOptions)),
     spawnChild: deps.spawnChild ?? (async (exe, args, opts, reserve) => {
       const child = jobs().launch({ argv: [exe, ...args], ...opts }, reserve);
-      if (!await resolvePid(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
+      if (!await (isLocalProfile() ? resolveRootPid : resolvePid)(child)) throw new Error('contained launch has no authenticated root receipt; reservation retained');
       return child;
     }),
     proveInstance: deps.proveInstance ?? ((child) => proveInstance(child)),
+    proveBoundAddress: deps.proveBoundAddress ?? ((child) => proveBoundAddress(child)),
     requestShutdown: deps.requestShutdown ?? ((child) => requestShutdown(child)),
     gracefulStopContained: deps.gracefulStopContained ?? ((child, graceMs) => child.containment
-      ? jobs().stop(child.containment, { force: false, graceMs })
+      ? recorded().stop(child.containment, { force: false, graceMs })
       : Promise.resolve({ outcome: 'UNKNOWN', detail: 'contained graceful stop requires the recorded job descriptor' })),
     historicalCloseoutHandoff: deps.historicalCloseoutHandoff ?? evaluateHistoricalCloseoutHandoff,
     recordedHistoricalCloseoutRecovery: deps.recordedHistoricalCloseoutRecovery ?? evaluateRecordedHistoricalCloseoutRecovery,
-    recoverOwnedJob: deps.recoverOwnedJob ?? ((containment, graceMs) => jobs().stop(containment, { force: true, graceMs })),
+    recoverOwnedJob: deps.recoverOwnedJob ?? ((descriptor, graceMs) => recorded().stop(descriptor, { force: true, graceMs })),
     checkHealth: deps.checkHealth ?? ((host, comp) => checkHealth(host, comp)),
     brokerRequest: deps.brokerRequest ?? brokerRequestReal,
     readFile: deps.readFile ?? ((f) => readFileSync(f, 'utf8')),
@@ -116,10 +173,28 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     sleep: deps.sleep ?? sleepReal,
     pollMs: deps.pollMs ?? 250,
     selfPid: deps.selfPid ?? process.pid,
-    treeClosed: deps.treeClosed ?? (async (child) => child.containment ? (await jobs().status(child.containment)).closed === true : false),
-    treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await jobs().status(child.containment)).owned === true : false),
+    treeClosed: deps.treeClosed ?? (async (child) => {
+      if (!child.containment) return false;
+      if ((await recorded().status(child.containment)).closed === true) return true;
+      // The guardian can only prove closeout from its `closed.json` receipt,
+      // which an unclean shutdown never writes — so its `closed:false` means
+      // "still open" OR "cannot tell", indistinguishably. Consult the reboot
+      // proof, which needs no receipt, and journal its basis either way so a
+      // settled child always says why it was settled.
+      const cfg = cfgOf();
+      const verdict = await provablyGoneAcrossBoot(child, {
+        expectedExe: cfg.node,
+        port: comp(cfg, child.name)?.port ?? null,
+        inspect: d.inspect,
+        listListeners: d.listListeners,
+      });
+      journal('closeout.boot_proof', { name: child.name, proven: verdict.proven, reason: verdict.reason, ...verdict.basis });
+      return verdict.proven;
+    }),
+    treeSignalSafe: deps.treeSignalSafe ?? (async (child) => child.containment ? (await recorded().status(child.containment)).owned === true : false),
     prerequisites: deps.prerequisites ?? ((cfg) => {
       if (cfg.profile?.name === OBSERVATION_PROFILE) return readObservationGates(cfg.workspace_root, cfg);
+      if (cfg.profile?.name === COMMAND_LOCAL_PROFILE) return readCommandLocalGates(cfg.workspace_root, cfg);
       if (effectiveTier() === 'development') return readDevelopmentGates(cfg.workspace_root, cfg);
       return readGates(cfg.workspace_root);
     }),
@@ -187,7 +262,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     if (child.containment && !deps.treeClosed) {
       const deadline = Date.now() + cfg.timeouts_ms.graceful_exit;
       for (;;) {
-        const proof = await jobs().status(child.containment);
+        const proof = await recorded().status(child.containment);
         if (proof.owned && proof.closed && proof.active === 0) return 'GONE';
         if (!proof.owned || Date.now() >= deadline) return proof.owned ? 'STILL_RUNNING' : 'UNKNOWN';
         await d.sleep(d.pollMs);
@@ -285,6 +360,8 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     return withLock('start', async () => {
       let cfg;
       try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
+      const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
+      const optionalNames = new Set(localProfile ? (cfg.profile?.optional_components ?? []) : []);
       if (cfg.profile?.name === OBSERVATION_PROFILE) {
         const hazards = findObservationEnvHazards(env);
         if (hazards.length) return refuse(`observer environment is contaminated: ${hazards.join(', ')}`, { code: 'OBSERVATION_ENV_UNSAFE', hazards });
@@ -302,7 +379,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         if (JSON.stringify(names) !== JSON.stringify(['data', 'building', 'ui'])) {
           return refuse('observation profile component graph changed after validation', { code: 'OBSERVATION_COMPOSITION' });
         }
-      } else {
+      } else if (!localProfile) {
         try {
           const man = JSON.parse(d.readFile(cfg.abs(comp(cfg, 'herdrBroker').manifest)));
           const auto = (man.agents ?? []).filter((a) => a.startup_policy === 'AUTO').map((a) => a.id);
@@ -323,7 +400,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
 
       let listeners;
       try { listeners = await d.listListeners(); } catch (err) { return refuse(`listener inspection failed: ${err.message}`, { code: 'INSPECTION_FAILED' }); }
-      const ports = new Set(cfg.components.map((c) => c.port));
+      // Required ports still fail closed on any pre-launch occupant. An occupied
+      // OPTIONAL port (local profile) is not a global blocker: that optional
+      // service is simply skipped at launch time.
+      const ports = new Set(cfg.components.filter((c) => !optionalNames.has(c.name)).map((c) => c.port));
       const busy = listeners.filter((l) => ports.has(l.port));
       if (busy.length) return refuse(`ports occupied: ${busy.map((b) => `${b.port}<-pid ${b.pid}`).join(', ')}`, { code: 'PORT_CONFLICT', busy });
 
@@ -343,6 +423,20 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         try {
           await launchOne(cfg, doc, c);
         } catch (err) {
+          if (optionalNames.has(c.name)) {
+            // Optional service: tolerate, but gracefully stop any half-started
+            // child of this launch so nothing is left running unproven, then
+            // continue. Local readiness never depends on an optional service.
+            const halfStarted = doc.children.find((x) => x.name === c.name && x.attempt_id === doc.attempt_id && x.status !== 'EXITED');
+            if (halfStarted) {
+              const r = await stopChild(cfg, doc, halfStarted);
+              appendEvent(doc, 'start.optional_unwound', { name: c.name, ...r }); save(doc);
+            }
+            (doc.optional_skipped ??= []).push({ name: c.name, reason: err.message });
+            appendEvent(doc, 'start.optional_skipped', { name: c.name, reason: err.message }); save(doc);
+            journal('start.optional_skipped', { name: c.name, reason: err.message });
+            continue;
+          }
           failure = { component: c.name, error: err.message };
           appendEvent(doc, 'start.component_failed', failure); save(doc);
           break;
@@ -440,20 +534,43 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     }
     if (!proof.ok) throw new Error(`${c.name}: instance not proven: ${proof.detail}`);
 
+    /*
+      READINESS: ask the component, not the OS.
+
+      This used to require a LISTENING row from the OS TCP table owned by the
+      launched pid. On this machine that table does not reliably report loopback
+      listeners even while the service is answering HTTP, so a healthy child
+      could never be marked ready and `start` failed at the first component
+      whose row was missing.
+
+      Ownership is now established the way it was always meant to be: the child
+      is proven over the MAC-authenticated control pipe (above), and that same
+      proven instance reports the addresses its own server objects are bound to.
+      Only a process holding the launch token can answer, so a port claimed this
+      way is claimed by OUR child by construction.
+
+      The OS table is still consulted, but only as a NEGATIVE signal: if it does
+      report a row on this port owned by someone else, that is a real conflict
+      and still refuses. Its silence is no longer treated as evidence.
+    */
     deadline = until(cfg.timeouts_ms.health);
     let health;
-    let rows = [];
+    let bound = { ok: false, supported: true, addresses: [], detail: 'not yet asked' };
     const summarizeListeners = (list) => list.map((r) => `${r.address ?? '?'}:${r.port}<-pid ${r.pid}`).join(', ') || 'none';
-    const ownedByLaunch = (list) => list.length > 0 && list.every((l) => l.pid === rec.pid);
-    const foreignOwner = (list) => list.some((l) => l.pid !== rec.pid);
+    const foreignOwner = (list) => list.some((l) => l.pid !== rec.pid && l.pid !== 0);
+    const confirmsPort = () => bound.ok && boundOnPort(bound.addresses, c.port);
     for (;;) {
       health = await d.checkHealth(cfg.host, c);
       if (health.ok) {
-        rows = (await d.listListeners()).filter((l) => l.port === c.port);
+        const rows = (await d.listListeners().catch(() => [])).filter((l) => l.port === c.port);
         if (foreignOwner(rows)) {
-          throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
+          throw new Error(`${c.name}: port ${c.port} listener is owned by another process (${summarizeListeners(rows)})`);
         }
-        if (ownedByLaunch(rows)) break;
+        bound = await d.proveBoundAddress(rec);
+        if (confirmsPort()) break;
+        // A child host that predates the bound op cannot answer; fall back to
+        // the health contract alone rather than refusing a working component.
+        if (!bound.supported) break;
       }
       if (Date.now() >= deadline) break;
       const still = osVerdict(rec, (await d.inspect([rec.pid])).get(rec.pid), cfg.node);
@@ -461,11 +578,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       await d.sleep(d.pollMs);
     }
     if (!health.ok) throw new Error(`${c.name}: health contract not met: ${health.detail}`);
-    if (!ownedByLaunch(rows)) {
-      throw new Error(`${c.name}: port ${c.port} listener is not owned by pid ${rec.pid} (${summarizeListeners(rows)})`);
+    if (bound.supported && !confirmsPort()) {
+      throw new Error(`${c.name}: the proven instance does not report itself bound to port ${c.port} (${bound.detail})`);
     }
     rec.status = 'READY';
-    doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), { name: c.name, port: c.port, ready: true, detail: health.detail }];
+    rec.bound_addresses = bound.ok ? bound.addresses : null;
+    doc.readiness = [...(doc.readiness ?? []).filter((r) => r.name !== c.name), {
+      name: c.name,
+      port: c.port,
+      ready: true,
+      detail: health.detail,
+      ownership: bound.ok ? 'control-pipe' : 'health-contract-only',
+    }];
     appendEvent(doc, 'child.ready', { name: c.name }); save(doc);
   }
 
@@ -586,6 +710,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       let cfg;
       try { cfg = cfgOf(); } catch (err) { return refuse(err.message, { code: 'CONFIG_INVALID' }); }
       if (cfg.profile?.name === OBSERVATION_PROFILE) return refuse('forced recovery is disabled for the observation-only profile', { code: 'OBSERVATION_NO_FORCE_RECOVERY' });
+      const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
       const st = readState(statePath);
       if (st.kind !== 'OK') return refuse(`state file ${st.kind}${st.reason ? `: ${st.reason}` : ''}; recovery needs a provable record`, { code: 'STATE_' + st.kind });
       const doc = st.state;
@@ -649,7 +774,9 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         } else {
           return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'broker ownership unavailable; no agent closeout proof' };
         }
-      } else if (!await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+      } else if (!localProfile && !await d.treeClosed({ name: 'herdrBroker', missing_record: true })) {
+        // The local profile has no broker/agents, so there is no agent closeout
+        // to prove; required services are recovered directly below.
         return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: 'missing broker record is not agent closeout proof' };
       }
       for (const name of topoOrder(cfg.components).map((c) => c.name).reverse()) {
@@ -712,8 +839,9 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       report.config = { valid: false, error: err.message }; report.overall = 'UNKNOWN'; report.problems.push('config invalid'); return report;
     }
     const observationOnly = cfg.profile?.name === OBSERVATION_PROFILE;
-    // The observation profile never probes standalone Herdr. Full-floor status
-    // keeps the pre-existing read-only standalone probe behavior.
+    const localProfile = cfg.profile?.name === COMMAND_LOCAL_PROFILE;
+    // The observation and command-local profiles never probe standalone Herdr.
+    // Full-floor status keeps the pre-existing read-only standalone probe.
     let shGate = { resolved: false, detail: 'not evaluated' };
     let shObserved = { state: 'NOT_PROBED', detail: 'not evaluated' };
     let shEntry = null;
@@ -721,7 +849,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       herdrExecutable: null,
       scriptsRoot: cfg.workspace_root ? path.join(cfg.workspace_root, 'agent-comms', 'scripts') : null,
     };
-    if (!observationOnly) {
+    if (!observationOnly && !localProfile) {
       shEntry = standaloneHerdr(cfg);
       infraPins.herdrExecutable = shEntry?.executable ?? null;
       try { shGate = await d.standaloneHerdrGate(cfg); } catch (err) { shGate = { resolved: false, detail: `G-PROFILE: ${err.message}` }; }
@@ -744,10 +872,18 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
         declared_external: ['standalone-herdr', 'starqbot-gateway', 'room-watcher'],
         note: 'Declared Starq infrastructure is not a Command child and is not an unowned Command blocker unless it holds a Command control-plane port.',
       };
-    } else {
+    } else if (observationOnly) {
       report.observation_profile = {
         name: cfg.profile.name, ready: false, services: cfg.components.map((c) => c.name),
         worker_admission: false, herdr_probe: 'NOT_PERFORMED',
+      };
+    } else {
+      // command-local/v1: no standalone-Herdr, no WSL, no infrastructure policy.
+      report.local_profile = {
+        name: cfg.profile.name, ready: false,
+        required: cfg.profile?.required_components ?? [],
+        optional: cfg.profile?.optional_components ?? [],
+        detail: 'ready requires the control plane RUNNING on the required services (data, pm, ui); optional services never gate readiness and standalone Herdr is not consulted',
       };
     }
     report.env_overrides = findEnvOverrides(env, cfg);
@@ -769,7 +905,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       try { listenerInfos = await d.inspect(listenerPids); }
       catch (err) { fail(`listener processes: ${err.message}`); }
     }
-    if (!observationOnly) {
+    if (!observationOnly && !localProfile) {
       try {
         const rows = await d.inspectInfrastructure(infraPins);
         report.live_infrastructure = (rows ?? []).map((info) => ({
@@ -786,21 +922,30 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     for (const [name, v] of verdicts) if (v.verdict === 'UNKNOWN') fail(`${name}: ${v.detail}`);
 
     report.components = [];
-    const componentNames = observationOnly ? cfg.components.map((c) => c.name) : REQUIRED_COMPONENTS;
+    const componentNames = (observationOnly || localProfile) ? cfg.components.map((c) => c.name) : REQUIRED_COMPONENTS;
     for (const name of componentNames) {
       const c = comp(cfg, name);
       const rec = children.find((x) => x.name === name);
       const entry = { name, port: c.port, recorded: Boolean(rec), pid: rec?.pid ?? null, declared_status: rec?.status ?? null };
       entry.ownership = !rec ? 'NOT_RECORDED' : rec.status === 'EXITED' ? (rec.tree_closeout_verified === true ? 'EXITED' : 'EXITED_UNVERIFIED') : verdicts.get(name)?.verdict ?? 'UNKNOWN';
       entry.ownership_detail = rec && rec.status !== 'EXITED' ? verdicts.get(name)?.detail ?? null : null;
+      let bound = null;
       if (entry.ownership === 'OWNED') {
         entry.health = await d.checkHealth(cfg.host, c);
+        // Authenticated proof of where this instance listens. The OS TCP table on
+        // some Windows machines reports live listeners under pid 0 (or not at all),
+        // so it cannot be what decides ownership; it only vetoes (see below).
+        bound = await d.proveBoundAddress(rec);
+        entry.bound = { ok: bound.ok, supported: bound.supported, addresses: bound.addresses, detail: bound.detail };
       }
       if (listeners) {
         const rows = listeners.filter((l) => l.port === c.port);
+        const confirmed = Boolean(bound?.ok && boundOnPort(bound.addresses, c.port));
+        const foreign = rows.some((l) => l.pid !== rec?.pid && l.pid !== 0);
+        const tableAgrees = rows.length > 0 && rows.every((l) => l.pid === rec?.pid);
         entry.listener = {
-          present: rows.length > 0,
-          owned: rows.length > 0 && entry.ownership === 'OWNED' && rows.every((l) => l.pid === rec.pid),
+          present: rows.length > 0 || confirmed,
+          owned: entry.ownership === 'OWNED' && !foreign && (confirmed || (bound?.supported === false && tableAgrees)),
           pids: rows.map((l) => l.pid),
           classifications: rows.map((l) => {
             const info = listenerInfos.get(l.pid);
@@ -817,7 +962,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
       report.components.push(entry);
     }
     if (doc) {
-      const missing = componentNames.filter((n) => !children.some((x) => x.name === n));
+      // In the local profile only the required services must be present for a
+      // valid READY; optional services that were skipped are not "missing".
+      const mustHave = localProfile ? componentNames.filter((n) => COMMAND_LOCAL_REQUIRED.includes(n)) : componentNames;
+      const missing = mustHave.filter((n) => !children.some((x) => x.name === n));
       if (doc.state === 'READY' && missing.length) report.problems.push(`READY state is missing components: ${missing.join(', ')}`);
     }
     const brokerEntry = report.components.find((x) => x.name === 'herdrBroker');
@@ -834,8 +982,10 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     }
 
     const all = report.components;
-    const componentsReady = all.every((x) => x.ownership === 'OWNED' && x.health?.ok && x.listener?.owned);
-    const running = doc?.state === 'READY' && componentsReady && (observationOnly || (report.broker.reachable && report.broker.admission === 'OPEN'));
+    // Local readiness is judged on the required services only; optional services never gate RUNNING.
+    const readinessSet = localProfile ? all.filter((x) => COMMAND_LOCAL_REQUIRED.includes(x.name)) : all;
+    const componentsReady = readinessSet.length > 0 && readinessSet.every((x) => x.ownership === 'OWNED' && x.health?.ok && x.listener?.owned);
+    const running = doc?.state === 'READY' && componentsReady && (observationOnly || localProfile || (report.broker.reachable && report.broker.admission === 'OPEN'));
     const nothingAlive = all.every((x) => ['NOT_RECORDED', 'EXITED', 'GONE', 'FOREIGN'].includes(x.ownership));
     const anyListener = all.some((x) => x.listener?.present);
     const stoppedDeclared = !doc || ['STOPPED', 'START_FAILED'].includes(doc.state);
@@ -845,6 +995,7 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
     else if (stoppedDeclared && nothingAlive && anyListener) { report.overall = 'CONFLICT'; report.problems.push('foreign listener on a control-plane port while stopped'); }
     else report.overall = 'DEGRADED';
     if (observationOnly) report.observation_profile.ready = report.overall === 'RUNNING';
+    else if (localProfile) report.local_profile.ready = report.overall === 'RUNNING';
     else report.normal_profile.ready = report.overall === 'RUNNING' && shGate.resolved === true && shObserved.state === 'AVAILABLE';
     for (const x of all) {
       if (x.ownership === 'OWNED' && x.health && !x.health.ok) report.problems.push(`${x.name} unhealthy: ${x.health.detail}`);

@@ -4,9 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
-import {computeRecordHash} from '../../../../agent-comms/protocol/v1/hashChain.mjs';
-import {computeEventId} from '../../../../agent-comms/protocol/v1/envelope.mjs';
+import {computeRecordHash} from '@workspace/agent-comms/protocol/v1/hashChain.mjs';
+import {computeEventId} from '@workspace/agent-comms/protocol/v1/envelope.mjs';
 import {readRoomVisibility} from '../server/room-work.mjs';
+import { workspacePath } from './support/workspace';
 
 const fixtures: string[] = [];
 afterEach(() => {
@@ -23,7 +24,10 @@ function fixture(events: any[]) {
   fs.mkdirSync(board, { recursive: true });
   fs.mkdirSync(path.join(root, 'agent-comms/protocol/v1'), { recursive: true });
   for (const name of ['ingest_room_activity.py', 'starq_paths.py']) {
-    fs.copyFileSync(path.resolve('../starqerp-control-board', name), path.join(board, name));
+    // Resolved from the workspace root. `path.resolve('../starqerp-control-board')`
+    // was relative to the CWD, so it only found the control board when the
+    // process ran from the canonical checkout directory.
+    fs.copyFileSync(workspacePath('00_STARQ_HQ/operations/starqerp-control-board', name), path.join(board, name));
   }
   fs.writeFileSync(path.join(board, 'contract.json'), '{}');
   fs.writeFileSync(path.join(root, 'agent-comms/protocol/v1/identities.json'), JSON.stringify({identities:[{canonicalHandle:'codex',status:'active'}]}));
@@ -86,7 +90,7 @@ describe('existing activity producer, isolated workspace only (#9538)', () => {
   });
   it('rehearses the actual current sources in an isolated copy and binds the checkpoint to output bytes', () => {
     const f=fixture([]);
-    const canonical=path.resolve('../../..');
+    const canonical=workspacePath();
     for (const relative of ['agent-comms/room.jsonl','agent-comms/protocol/v1/identities.json',
       '00_STARQ_HQ/operations/starqerp-control-board/contract.json',
       '00_STARQ_HQ/operations/starqerp-control-board/activity_state.json']) {
@@ -98,7 +102,7 @@ describe('existing activity producer, isolated workspace only (#9538)', () => {
     expect(fs.existsSync(path.join(f.board,'.activity-ingest.lock'))).toBe(false);
   });
   it('automatically hands a changed copied ledger through ingestion into the Work consumer, with a finite writer', async () => {
-    const f=fixture([]); const canonical=path.resolve('../../..');
+    const f=fixture([]); const canonical=workspacePath();
     for(const relative of ['agent-comms/room.jsonl','agent-comms/protocol/v1/identities.json','agent-comms/protocol/v1/projects.json',
       'agent-comms/protocol/v1/ledger-epoch.json','agent-comms/protocol/v1/ledger-epoch.mjs','agent-comms/protocol/v1/envelope.mjs','agent-comms/protocol/v1/hashChain.mjs',
       '00_STARQ_HQ/operations/starqerp-control-board/contract.json','00_STARQ_HQ/operations/starqerp-control-board/activity.json','00_STARQ_HQ/operations/starqerp-control-board/activity_state.json']){

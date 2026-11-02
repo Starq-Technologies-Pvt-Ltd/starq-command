@@ -5,12 +5,26 @@
 /**
  * The supported Command lifecycle pins PM at :5176. Disposable verification
  * instances can use :5190–:5199 and must always use a separate PM_DB_PATH.
+ *
+ * A scratch port, once seen in the hash, is kept for the life of the tab.
+ * The router rebuilds the hash on every navigation (`routeHash`) and drops the
+ * query, so reading the hash alone meant one click silently switched a
+ * "disposable" session back to the LIVE PM on :5176 — every later write would
+ * land in the real database. A new tab starts on :5176 again.
  */
+const SCRATCH_PORT_KEY = 'starq.command.pm_port';
+const isScratchPort = (v: string | null): v is string => Boolean(v && /^519\d$/.test(v));
+
 export function pmPort(): number {
   try {
     const q = window.location.hash.split('?')[1] ?? '';
     const v = new URLSearchParams(q).get('pm_port');
-    if (v && /^519\d$/.test(v)) return Number(v);
+    if (isScratchPort(v)) {
+      try { window.sessionStorage.setItem(SCRATCH_PORT_KEY, v); } catch { /* unpersisted, still scratch now */ }
+      return Number(v);
+    }
+    const kept = window.sessionStorage.getItem(SCRATCH_PORT_KEY);
+    if (isScratchPort(kept)) return Number(kept);
   } catch {
     /* default */
   }
@@ -184,6 +198,7 @@ export interface PmPortfolioProject {
   pending_room_sync: number;
   unassigned: number;
   done_historical?: number;
+  historical_total?: number;
   stages?: Record<string, number>;
   provenance?: { HISTORICAL_NEXUS: number; LIVE: number };
   provenance_counts?: { live: number; historical: number } | Record<string, number>;
@@ -252,8 +267,8 @@ async function call<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: un
       ok: false,
       state: res.status === 503 ? 'UNAVAILABLE' : 'REJECTED',
       status: res.status,
-      code: String(payload?.error ?? 'ERROR'),
-      message: String(payload?.message ?? `PM service returned ${res.status}`),
+      code: String(payload?.code ?? payload?.error ?? 'ERROR'),
+      message: String(payload?.message ?? payload?.error ?? `PM service returned ${res.status}`),
       errors: Array.isArray(payload?.errors) ? (payload?.errors as string[]) : undefined,
       current_updated_at: typeof payload?.current_updated_at === 'string' ? payload.current_updated_at : undefined,
     };
@@ -278,6 +293,7 @@ export interface PmOrgCompany {
   name: string;
   legal_name?: string | null;
   notes?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgUnit {
@@ -287,6 +303,7 @@ export interface PmOrgUnit {
   kind: PmUnitKind | string;
   name: string;
   description?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgPosition {
@@ -295,6 +312,7 @@ export interface PmOrgPosition {
   title: string;
   job_description?: string | null;
   reports_to_position_id?: string | null;
+  archived_at?: string | null;
 }
 
 export interface PmOrgPerson {
@@ -302,6 +320,14 @@ export interface PmOrgPerson {
   handle: string;
   display_name: string;
   kind: PmPersonKind | string;
+  role_note?: string | null;
+  harness?: string | null;
+  capabilities?: string[];
+  status?: 'active' | 'inactive' | string;
+  source?: string | null;
+  room_handle?: string | null;
+  archived_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface PmOrgAppointment {
@@ -312,12 +338,15 @@ export interface PmOrgAppointment {
 
 export interface PmOrg {
   company: PmOrgCompany | PmOrgCompany[] | null;
+  companies?: PmOrgCompany[];
   units: PmOrgUnit[];
   positions: PmOrgPosition[];
   people: PmOrgPerson[];
   appointments: PmOrgAppointment[];
+  ended_appointments?: PmOrgAppointment[];
   generated_at: string;
-  room_post: string;
+  room_post?: string;
+  state?: string;
 }
 
 export interface PmAttentionAction {
@@ -395,13 +424,16 @@ export interface PmLocalEvidenceBody {
 
 /** Normalize GET /api/pm/org `company` which may be one row or a list. */
 export function pmOrgCompanies(org: PmOrg | null | undefined): PmOrgCompany[] {
-  if (!org?.company) return [];
+  if (!org) return [];
+  if (Array.isArray(org.companies) && org.companies.length > 0) return org.companies;
+  if (!org.company) return [];
   return Array.isArray(org.company) ? org.company : [org.company];
 }
 
 export const pmHealth = () => call<PmHealth>('GET', '/api/pm/health');
 export const pmMeta = () => call<PmMeta>('GET', '/api/pm/meta');
-export const pmProjects = () => call<{ projects: PmProject[] }>('GET', '/api/pm/projects');
+export const pmProjects = (opts?: { includeArchived?: boolean }) =>
+  call<{ projects: PmProject[] }>('GET', `/api/pm/projects${opts?.includeArchived ? '?include=archived' : ''}`);
 export const pmTasks = (projectId: string) =>
   call<{ project_id: string; tasks: PmTask[] }>('GET', `/api/pm/tasks?project_id=${encodeURIComponent(projectId)}`);
 export const pmTask = (id: string) => call<PmTaskDetail>('GET', `/api/pm/tasks/${encodeURIComponent(id)}`);
@@ -409,7 +441,8 @@ export const pmNexusSources = (file?: string) => call<{ sources: PmNexusSource[]
   'GET', `/api/pm/nexus/sources${file ? `?file=${encodeURIComponent(file)}` : ''}`,
 );
 export const pmPortfolio = () => call<PmPortfolio>('GET', '/api/pm/portfolio');
-export const pmOrg = () => call<PmOrg>('GET', '/api/pm/org');
+export const pmOrg = (opts?: { includeArchived?: boolean }) =>
+  call<PmOrg>('GET', `/api/pm/org${opts?.includeArchived ? '?include=archived' : ''}`);
 export const pmAttention = () => call<PmAttention>('GET', '/api/pm/attention');
 export const pmCreateCompany = (body: PmCreateCompanyBody) =>
   call<PmOrgCompany>('POST', '/api/pm/org/companies', body);
@@ -542,3 +575,154 @@ export function pmTaskHref(projectId: string, taskId: string): string {
   if (pmIsScratch()) params.set('pm_port', String(pmPort()));
   return `${route}?${params.toString()}`;
 }
+
+export interface PmActorBody {
+  actor: string;
+  channel?: 'ui' | 'api' | 'automation';
+}
+
+export interface PmOrgHistoryEntry {
+  id: number;
+  entity: string;
+  entity_id: string;
+  action: string;
+  actor: string;
+  channel: string;
+  before?: unknown;
+  after?: unknown;
+  timestamp: string;
+}
+
+export interface PmMilestone {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string;
+  due_date?: string | null;
+  status: 'planned' | 'active' | 'done' | 'missed' | string;
+  ordinal?: number;
+  total_tasks?: number;
+  done_tasks?: number;
+  open_tasks?: number;
+  blocked_tasks?: number;
+  percent_complete?: number;
+  overdue?: boolean;
+  at_risk?: boolean;
+  updated_at?: string;
+}
+
+export interface PmDigestSummary {
+  date?: string;
+  generated_at?: string;
+  completed_last_24h?: Array<Record<string, unknown>>;
+  started_last_24h?: Array<Record<string, unknown>>;
+  blocked_tasks?: Array<Record<string, unknown>>;
+  unassigned_open_tasks?: Array<Record<string, unknown>>;
+  at_risk_milestones?: Array<Record<string, unknown>>;
+  person_load?: Array<Record<string, unknown>>;
+  counts?: Record<string, number>;
+}
+
+export interface PmDigest {
+  id: string;
+  generated_at: string;
+  trigger?: string;
+  summary?: PmDigestSummary;
+  delivery_state?: string;
+  delivery_detail?: string | null;
+}
+
+/**
+ * A follow-up episode from the ops-automation backend (pm_followups joined
+ * with its task). Served by GET /api/pm/followups.
+ */
+export interface PmFollowup {
+  id: string;
+  task_id: string;
+  kind?: string;
+  status: 'open' | 'acknowledged' | 'snoozed' | 'resolved';
+  stale_days?: number;
+  last_activity_at?: string;
+  snoozed_until?: string | null;
+  acknowledged_by?: string | null;
+  acknowledged_at?: string | null;
+  note?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  // Joined task context (LEFT JOIN pm_tasks).
+  task_title?: string | null;
+  project_id?: string | null;
+  owner?: string | null;
+  priority?: string | null;
+  stage?: string | null;
+  task_status?: string | null;
+}
+
+export interface PmWorkforceSummary {
+  state?: string;
+  person: PmOrgPerson;
+  appointments?: { active?: PmOrgAppointment[]; ended?: PmOrgAppointment[] };
+  tasks?: {
+    owned_open?: Array<Record<string, unknown>>;
+    verifying_open?: Array<Record<string, unknown>>;
+    blocked?: Array<Record<string, unknown>>;
+    counts?: Record<string, number>;
+  };
+  recent_activity?: Array<Record<string, unknown>>;
+}
+
+export const pmOrgHistory = (query?: { entity?: string; id?: string; limit?: number }) => {
+  const params = new URLSearchParams();
+  if (query?.entity) params.set('entity', query.entity);
+  if (query?.id) params.set('id', query.id);
+  if (query?.limit) params.set('limit', String(query.limit));
+  const q = params.toString();
+  return call<{ state?: string; count?: number; history: PmOrgHistoryEntry[] }>('GET', `/api/pm/org/history${q ? `?${q}` : ''}`);
+};
+
+export const pmPatchCompany = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ company: PmOrgCompany }>('PATCH', `/api/pm/org/companies/${encodeURIComponent(id)}`, body);
+export const pmPatchUnit = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ unit: PmOrgUnit }>('PATCH', `/api/pm/org/units/${encodeURIComponent(id)}`, body);
+export const pmPatchPosition = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ position: PmOrgPosition }>('PATCH', `/api/pm/org/positions/${encodeURIComponent(id)}`, body);
+export const pmPatchPerson = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ person: PmOrgPerson }>('PATCH', `/api/pm/org/people/${encodeURIComponent(id)}`, body);
+export const pmEndAppointment = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ ended_appointment: PmOrgAppointment; new_appointment?: PmOrgAppointment | null }>(
+    'POST',
+    `/api/pm/org/appointments/${encodeURIComponent(id)}/end`,
+    body,
+  );
+export const pmImportIdentities = (body: PmActorBody) =>
+  call<{ state: string; reason?: string; source?: string | null; created?: unknown[]; skipped?: unknown[]; conflicts?: unknown[] }>(
+    'POST',
+    '/api/pm/org/people/import-identities',
+    body,
+  );
+export const pmWorkforceSummary = (personId: string) =>
+  call<PmWorkforceSummary>('GET', `/api/pm/workforce/${encodeURIComponent(personId)}/summary`);
+export const pmMilestones = (projectId?: string) =>
+  call<{ milestones: PmMilestone[] }>('GET', `/api/pm/milestones${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ''}`);
+export const pmCreateMilestone = (body: PmActorBody & Record<string, unknown>) =>
+  call<{ milestone: PmMilestone }>('POST', '/api/pm/milestones', body);
+export const pmPatchMilestone = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ milestone: PmMilestone }>('PATCH', `/api/pm/milestones/${encodeURIComponent(id)}`, body);
+export const pmPatchProject = (id: string, body: PmActorBody & Record<string, unknown>) =>
+  call<{ project: PmProject }>('PATCH', `/api/pm/projects/${encodeURIComponent(id)}`, body);
+export const pmLatestDigest = () => call<{ digest: PmDigest | null }>('GET', '/api/pm/digests/latest');
+export const pmDigests = () => call<{ digests: PmDigest[] }>('GET', '/api/pm/digests');
+/** AG's organization import, when that route is present. A 404 means it is not available. */
+export function pmOrganizationImportStatus(): Promise<'available' | 'absent'> {
+  return fetch(`${pmBase()}/api/pm/import/organization`, { method: 'GET' })
+    .then((res) => (res.status === 404 ? 'absent' : 'available'))
+    .catch(() => 'absent');
+}
+
+export const pmFollowups = (opts?: { status?: string; includeSnoozed?: boolean }) => {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set('status', opts.status);
+  if (opts?.includeSnoozed) params.set('include_snoozed', '1');
+  const qs = params.toString();
+  return call<{ followups: PmFollowup[] }>('GET', `/api/pm/followups${qs ? `?${qs}` : ''}`);
+};

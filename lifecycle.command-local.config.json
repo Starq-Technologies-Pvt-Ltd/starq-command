@@ -1,0 +1,127 @@
+{
+  "schema": "starq.command.lifecycle.config/v1",
+  "note": "command-local/v1 — the Founder's standalone daily-driver profile (CV-C1c). PM, Data and UI are required and fail closed; Building is optional and started best-effort, never blocking readiness. Herdr Broker and Herdr are declared optional but are not in this graph (use lifecycle.config.json / the full starq-online profile when Herdr is wanted). No WSL, Room broker, standalone-Herdr ownership or Herdr Floor installation is required: the Node runtime (runtime/node, provisioned from an approved hash-pinned install) and the containment package (runtime/containment) ship with Command. Runtime port/URL env overrides are REJECTED, as in every profile.",
+  "workspace_root": "D:\\StarqTech",
+  "node": "runtime/node/node.exe",
+  "host": "127.0.0.1",
+  "timeouts_ms": {
+    "identity": 10000,
+    "health": 30000,
+    "graceful_exit": 10000,
+    "broker_request": 15000,
+    "agent_stop": 120000
+  },
+  "components": [
+    {
+      "name": "data",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\data-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5177,
+      "depends_on": [],
+      "health": {
+        "path": "/api/health",
+        "status": 200,
+        "status_in": [
+          200,
+          503
+        ],
+        "content_type": "application/json",
+        "json_has": [
+          "assembled_at",
+          "workspace",
+          "health",
+          "health.overall"
+        ],
+        "json_one_of": {
+          "health.overall": [
+            "OK",
+            "UNAVAILABLE",
+            "STALE",
+            "DRIFT",
+            "UNREADABLE"
+          ]
+        }
+      }
+    },
+    {
+      "name": "building",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\building-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5178,
+      "depends_on": [],
+      "health": {
+        "path": "/api/building/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "integrity": "SOURCE_READ"
+        },
+        "json_has": [
+          "generated_at",
+          "origin",
+          "integrity"
+        ]
+      }
+    },
+    {
+      "name": "pm",
+      "kind": "module",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\server\\pm-service.mjs",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5176,
+      "depends_on": [],
+      "health": {
+        "path": "/api/pm/health",
+        "status": 200,
+        "content_type": "application/json",
+        "json_equals": {
+          "state": "OK",
+          "scratch": false,
+          "room_post": "OFF"
+        }
+      }
+    },
+    {
+      "name": "ui",
+      "kind": "vite",
+      "entry": "00_STARQ_HQ\\operations\\starq-command\\node_modules\\vite\\dist\\node\\index.js",
+      "vite_config": "00_STARQ_HQ\\operations\\starq-command\\vite.config.ts",
+      "cwd": "00_STARQ_HQ\\operations\\starq-command",
+      "port": 5173,
+      "depends_on": [
+        "data",
+        "pm"
+      ],
+      "health": {
+        "path": "/",
+        "status": 200,
+        "content_type": "text/html",
+        "body_includes": [
+          "<title>STARQ // COMMAND</title>",
+          "<div id=\"root\"></div>"
+        ]
+      }
+    }
+  ],
+  "profile": {
+    "name": "command-local/v1",
+    "definition": "Standalone daily-driver operating profile. Required: data, pm, ui (fail closed). Optional: building (started best-effort, never blocks readiness). Herdr Broker and Herdr are optional and intentionally absent from this graph so normal local use needs no Herdr, Room, WSL or Hermes; the enterprise starq-online/v1 profile remains available for the full floor.",
+    "tier": "development",
+    "required_components": [
+      "data",
+      "pm",
+      "ui"
+    ],
+    "optional_components": [
+      "building",
+      "herdrBroker",
+      "herdr"
+    ],
+    "required_files": [
+      "STARQ.md",
+      "00_STARQ_HQ"
+    ]
+  }
+}

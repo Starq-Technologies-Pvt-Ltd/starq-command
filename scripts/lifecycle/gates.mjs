@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { importExternalComponent } from '../../server/external-components.mjs';
 import {
-  OBSERVATION_COMPONENTS, OBSERVATION_PROFILE, OBSERVATION_RUNTIME_DIRECTORY,
+  DEVELOPMENT_TIER, OBSERVATION_COMPONENTS, OBSERVATION_PROFILE, OBSERVATION_RUNTIME_DIRECTORY,
   OBSERVATION_SHARED_LOCK, validateConfig,
 } from './config.mjs';
+import { APP_ROOT, localDevelopmentGate, localReleaseGate } from './containment/local-gate.mjs';
 
 const [starqLifecycle, herdrFloor] = await Promise.all([
   importExternalComponent('starq-lifecycle', 'runtime-policy.mjs'),
@@ -238,6 +239,64 @@ export function readDevelopmentGates(workspace, cfg = null, {
   gates.push({ kind: 'G-PROFILE', ...readStandaloneHerdrGate(workspace, { read }) });
   gates.push({ kind: 'G-CONTAINMENT', ...checkContainment(workspace, { read }) });
   return gates;
+}
+
+/**
+ * Lean prerequisites for the command-local/v1 daily-driver profile. It verifies
+ * the canonical workspace markers and the required-service sources, and keeps
+ * native child containment (G-CONTAINMENT) so owned-process safety is unchanged.
+ * It deliberately omits G-WSL and G-PROFILE (standalone-Herdr owner): the local
+ * profile must start without WSL, the Room broker or standalone Herdr. Optional
+ * services carry no gate; when unavailable they are simply not started.
+ */
+export function evaluateCommandLocalWorkspace(workspace, cfg, { exists = existsSync } = {}) {
+  if (typeof workspace !== 'string' || !workspace || !path.isAbsolute(workspace)) {
+    return { resolved: false, detail: 'G-WORKSPACE-LOCAL: canonical workspace root required (absolute path)' };
+  }
+  const missing = ['STARQ.md', '00_STARQ_HQ'].filter((m) => !exists(path.join(workspace, m)));
+  const requiredNames = cfg?.profile?.required_components ?? [];
+  for (const c of cfg?.components ?? []) {
+    if (!requiredNames.includes(c?.name)) continue;
+    for (const rel of [c.entry, c.cwd].filter(Boolean)) {
+      if (!exists(path.join(workspace, rel))) missing.push(rel);
+    }
+  }
+  return missing.length
+    ? { resolved: false, detail: `G-WORKSPACE-LOCAL: missing canonical inputs: ${missing.join(', ')}` }
+    : { resolved: true, detail: 'G-WORKSPACE-LOCAL: canonical workspace markers and required-service sources present; no WSL/Room/standalone-Herdr dependency' };
+}
+
+/**
+ * Gates for the command-local/v1 daily-driver profile.
+ *
+ * G-CONTAINMENT follows the tier the profile DECLARES, exactly as the full
+ * profile does, because that is the tier its containment really runs at:
+ *
+ *   development  developmentContainmentGate - guardian binary and source pins,
+ *                dependency-drift checks, and a real runtime containment probe
+ *   anything else compatibilityGate - the RELEASE gate, which demands an
+ *                independent exact-build proof (windows-job-compatibility.json,
+ *                verifier != builder, full pass matrix). Unknown or missing tier
+ *                falls here, so a malformed config can only get STRICTER.
+ *
+ * This used to hard-wire compatibilityGate, so a development-tier profile was
+ * judged by a release artifact that does not exist yet: the Founder's one-click
+ * start was REFUSED ("exact-build independent compatibility proof required") on
+ * the real workspace, and every test passed because they inject a fake gate. The
+ * release gate is unchanged and still unsatisfied; nothing here forges or skips it.
+ */
+export function readCommandLocalGates(workspace, cfg, {
+  exists = existsSync,
+  checkContainment = null,
+  checkDevelopmentContainment = (_ws, c) => localDevelopmentGate(APP_ROOT, { nodePath: c?.node }),
+  checkReleaseContainment = () => localReleaseGate(APP_ROOT),
+} = {}) {
+  const containment = checkContainment
+    ?? (cfg?.profile?.tier === DEVELOPMENT_TIER ? checkDevelopmentContainment : checkReleaseContainment);
+  return [
+    { kind: 'G-WORKSPACE-LOCAL', ...evaluateCommandLocalWorkspace(workspace, cfg, { exists }) },
+    { kind: 'G-CONTAINMENT', ...containment(workspace, cfg) },
+  ];
 }
 
 export function readGates(workspace, { read = readFileSync, checkRule0 = checkWorkspaceRule0, containmentTier = 'release' } = {}) {

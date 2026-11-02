@@ -5,6 +5,12 @@ import { PmPortfolioSurface } from '@/surfaces/pm-portfolio';
 import { SevenNeedOverview } from '@/surfaces/seven-need-overview';
 import { LibrarySurface } from '@/surfaces/library';
 import { CortexSurface } from '@/surfaces/cortex';
+import { FounderHome } from '@/surfaces/founder-home';
+import { OrgOperateSurface } from '@/surfaces/org-operate';
+import { WorkforceDirectory } from '@/surfaces/workforce-directory';
+import { DailyActivity } from '@/surfaces/daily-activity';
+import { PmEmpty, PmLoading, PmUnavailable } from '@/components/pm-feedback';
+import { pmOrgHistory, type PmOrgHistoryEntry } from '@/lib/pm-client';
 import { parseBuildingRoute, routeHash, type BuildingRoute } from '@/lib/building-route';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import { Rail, RoomSwitcher, TopBar, type ViewId } from '@/components/shell';
@@ -63,6 +69,7 @@ export default function App() {
   );
   const view = route.view as ViewId;
   const pmFallbackRoute = pmRouteWithoutCoreProjection(route);
+  const founderNavView = isFounderNavView(route.view);
   const [railExpanded, setRailExpanded] = React.useState(() =>
     typeof window === 'undefined' ? true : window.innerWidth > 800,
   );
@@ -262,6 +269,19 @@ export default function App() {
           ref={mainRef}
           className="surface-grid flex-1 overflow-y-auto"
         >
+          {founderNavView ? (
+            <FounderOperatingFrame
+              status={status}
+              surface={surface}
+              error={error}
+              onRetry={() => void refresh()}
+              view={route.view}
+              buildingStatus={buildingStatus}
+              buildingStale={buildingStale}
+              buildingError={buildingError}
+            />
+          ) : (
+            <>
           {status === 'LOADING' && !surface ? <LoadingState /> : null}
 
           {status === 'UNAVAILABLE' && !surface ? (
@@ -322,7 +342,7 @@ export default function App() {
                 </div>
               </div>
               <div className={cn('mt-4 opacity-70')}>
-                {<BuildingSurface route={route} surface={surface} />}
+                <BuildingSurface route={route} surface={surface} />
               </div>
             </div>
           ) : null}
@@ -342,9 +362,11 @@ export default function App() {
                 stale={buildingStale}
                 error={buildingError}
               />
-              {<BuildingSurface route={route} surface={surface} />}
+              <BuildingSurface route={route} surface={surface} />
             </div>
           ) : null}
+            </>
+          )}
         </main>
 
         {/*
@@ -390,6 +412,155 @@ export default function App() {
         </footer>
       </div>
     </div>
+  );
+}
+
+/**
+ * One operating surface for every core-service status.
+ *
+ * Banners above it change when the 15-second core poll drops or recovers.
+ * The surface itself stays mounted, so unsaved organization and project
+ * input is not discarded while the separate PM service is still healthy.
+ */
+function FounderOperatingFrame({
+  status,
+  surface,
+  error,
+  onRetry,
+  view,
+  buildingStatus,
+  buildingStale,
+  buildingError,
+}: {
+  status: string;
+  surface: Parameters<typeof GlobalBanners>[0]['surface'] | null;
+  error: string | null;
+  onRetry: () => void;
+  view: string;
+  buildingStatus: string;
+  buildingStale: boolean;
+  buildingError: string | null;
+}) {
+  const coreDown = status === 'UNAVAILABLE';
+  return (
+    <div className={coreDown && surface ? 'p-4' : 'flex flex-col'}>
+      {status === 'LOADING' && !surface ? (
+        <span className="sr-only" data-founder-nav-while-core-loading="">
+          Operating surface stays mounted while the core projection loads.
+        </span>
+      ) : null}
+      {coreDown && !surface ? (
+        <UnavailableState
+          reason={
+            view === 'records'
+              ? 'The core data service is unavailable. The records view does not read that service and does not invent rows.'
+              : 'The core data service is unavailable. This PM surface uses its separate service.'
+          }
+          detail={error}
+          onRetry={onRetry}
+        />
+      ) : null}
+      {coreDown && surface ? (
+        <div className="flex items-start gap-3 rounded-md border border-truth-drift/40 bg-truth-drift-soft/60 px-3 py-2 text-xs">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-truth-drift" />
+          <div>
+            <p className="font-semibold uppercase tracking-wider text-truth-drift">
+              Data service unreachable
+            </p>
+            <p className="mt-0.5 text-foreground/90">
+              The core projection cannot be refreshed. This view stays on its own surface.{' '}
+              {error}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {status === 'READY' && surface ? (
+        <>
+          <GlobalBanners surface={surface} />
+          <BuildingOriginBanner status={buildingStatus} stale={buildingStale} error={buildingError} />
+        </>
+      ) : null}
+      <div
+        className={coreDown && surface ? 'mt-4' : status === 'READY' && surface ? undefined : 'px-4 pb-4'}
+        data-founder-nav-while-core-loading={status === 'LOADING' && !surface ? '' : undefined}
+        data-founder-nav-without-core-projection={coreDown ? '' : undefined}
+      >
+        <FounderNavSurface view={view} />
+      </div>
+    </div>
+  );
+}
+
+const FOUNDER_NAV_VIEWS = ['home', 'organization', 'workforce', 'projects', 'activity', 'records'] as const;
+
+function isFounderNavView(view: string): boolean {
+  return (FOUNDER_NAV_VIEWS as readonly string[]).includes(view);
+}
+
+/**
+ * The six operating views. Records reads org history from the PM service
+ * and shows UNAVAILABLE when that route is missing. It does not invent rows.
+ *
+ * An empty hash becomes home only because parseBuildingRoute says so. This
+ * component does not rewrite window.location.hash on load.
+ */
+function FounderNavSurface({ view }: { view: string }) {
+  switch (view) {
+    case 'home':
+      return <FounderHome />;
+    case 'organization':
+      return <OrgOperateSurface />;
+    case 'workforce':
+      return <WorkforceDirectory />;
+    case 'projects':
+      return <PmPortfolioSurface />;
+    case 'activity':
+      return <DailyActivity />;
+    case 'records':
+      return <RecordsView />;
+    default:
+      return null;
+  }
+}
+
+function RecordsView() {
+  const [rows, setRows] = React.useState<PmOrgHistoryEntry[] | null>(null);
+  const [problem, setProblem] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    pmOrgHistory({ limit: 50 }).then((res) => {
+      if (cancelled) return;
+      if (!res.ok) {
+        setProblem(`${res.code}: ${res.message}`);
+        setRows([]);
+        return;
+      }
+      setProblem(null);
+      setRows(Array.isArray(res.data.history) ? res.data.history : []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="command-stack" data-records-view="" aria-label="Records">
+      <h2 className="text-sm font-medium">Records</h2>
+      <p>Organization audit from the PM service. Task timelines stay on each task.</p>
+      {rows === null ? <PmLoading label="Loading org history" /> : null}
+      {problem ? <PmUnavailable reason={problem} /> : null}
+      {rows && rows.length === 0 && !problem ? <PmEmpty label="No org history." /> : null}
+      {rows && rows.length > 0 ? (
+        <ul>
+          {rows.map((row) => (
+            <li key={row.id}>
+              {row.timestamp} · {row.actor} · {row.action} · {row.entity} {row.entity_id}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 

@@ -1,0 +1,53 @@
+# Final integration checkpoint - 2 Nov 2026
+
+Base: PR #18 head `fcd9b50` (contains Cursor's PR #16 `1770261` and AG's PR #17 `9be6733` work; my lifecycle fixes `db9d620`, `7ddccf8` are ancestors).
+Engineering SHA at the time of these results: `0b6a641` (this document is committed after it; code is unchanged).
+
+## What was found and fixed on the real Windows path
+
+| Defect | Evidence | Fix |
+|---|---|---|
+| Stop never completed for PM (`STOP_INCOMPLETE`) | PM log: "no supported server shutdown adapter"; PM exports no server | child host closes the servers the component bound (`72f7860`) |
+| `local-status` never RUNNING / next start refused "5177<-pid 0" | OS TCP table lists live listeners as pid 0 and keeps LISTENING rows for dead sockets; bind() succeeds | status uses the child's authenticated bound proof, table is a veto only; pid-0 rows dropped (`fa71249`) |
+| Local profile refused by release gate; data 503 in a non-Starq workspace | earlier in the session | tier-based gate, data health contract (`28cca3e`, `e159f89`) |
+| Stop depended on the runtime probe | earlier | containment accessors split (`4831cda`) |
+
+Each product fix has a test that fails when the fix is reverted.
+
+## Acceptance (reproducible: `node scripts/acceptance/windows-lifecycle-acceptance.mjs full --ws <dir under _scratch> --seed <backup>`)
+
+Run k at `0b6a641`: 64/64 checks. One-click `Start-Command.bat` -> RUNNING; data, pm, ui each proven bound by their own control pipe; UI HTTP 200; PM serves the disposable DB; stop leaves no owned process and frees ports; restart; PM killed by exact PID -> status not RUNNING -> supported stop settles -> clean restart -> final stop; no process names the workspace afterwards; project/task/history counts unchanged; startup appended no provenance rows (CV-C6 effective on the startup path the app uses); the Founder's live database byte-identical before and after.
+
+## Suites on `0b6a641`, STARQ_WORKSPACE unset
+
+typecheck 0; build 0; vitest 1211/1211; node 142 pass / 0 fail / 1 skip; lifecycle 167 pass / 0 fail / 4 skip (child-host tests need `STARQ_AUTHORIZED_LIVE_TESTS=1`, run separately: pass); functional acceptance 13/13.
+
+## Incident disclosure
+
+An earlier harness run (`33e13fa`) started a disposable stack whose workspace_root was the real workspace, so PM opened the Founder's live `pm-operating.db`. Nothing was lost: integrity ok, FK clean, every business table's original columns identical to the 1 Nov backup, CV-C6 refused to seed or import. Changed: `imported_at` re-stamped on 4 `pm_source_records` and 19 `pm_import_sources` rows; additive `legacy-seeded` marker, 4 tables, 22 columns; WAL checkpoint. Cause and fix: isolation is decided by `workspace_root` (the owner passes it as `STARQ_WORKSPACE`); harness fixed in `6447fa9` and verified (live hash `d9cafbefe6d95658...` unchanged across all later runs). Fresh restore point: `D:\StarqTech\Archives\starq-command\preservation-20261101\backups-after-live-open-20261102\`.
+
+## Not claimed
+
+- Independent acceptance: Copilot's retest of `1770261` (Room #17423) and final acceptance are outstanding. Builder does not self-accept.
+- The daily driver runs at the development containment tier until an independent exact-build release proof exists.
+- A real-browser walkthrough of the disposable stack was not repeated in this pass; HTTP checks only.
+- Orphan PM pid 29812 (:5191, command-qa scratch DB) belongs to another session; untouched.
+
+## Addendum - Copilot verdict #17430 (CHANGES_REQUIRED, two blockers)
+
+Tested code: `ebd7c29` (later commits are documentation only).
+
+**Blocker 1 - Herdr Floor was a mandatory dependency of the one-click path.** Fixed in `9d6d80d`, `8f7ed08`, `609d09f`.
+- `runtime/containment/` ships the pinned JobGuardian binary, source and build record (byte-identical to the already-accepted development-tier build) and `node-pins.json`, an allowlist of approved Node builds.
+- `scripts/lifecycle/containment/` is Command's own Job Object adapter and gates. Kept, not relaxed: guardian binary/source pins, approved-Node hash, a REAL runtime probe (authenticated pre-execution receipt, kernel-job activity, forced recovery to a verified-empty job), HMAC receipts, exclusive descriptor directories, strict kernel reports. The release tier still needs an independent exact-build proof and stays unresolved.
+- The local profile names `runtime/node/node.exe` relative to the install (never climbing out). The launcher provisions it on first run only from an installed Node whose SHA-256 is allowlisted; the gate re-checks it on every start. Not carried over: terminal (ConPTY) launch and retired-guardian recovery, which only Herdr uses. The full online profile is unchanged.
+- Found while proving it: the probe's 2.5 s receipt window was shorter than the first launch of a freshly provisioned node.exe (measured 4.5 s, OS scan); now 30 s, receipt requirements unchanged. And Windows PowerShell started from pwsh could not run `Get-FileHash`; the launcher now hashes with .NET.
+- Proof: the harness workspace contains NO Herdr Floor, NO lifecycle package, NO pre-provisioned runtime, and no Herdr environment hint; the one-click start provisions the runtime, passes the real containment gate and reaches RUNNING. Unit tests run the gates in a fresh process with those components absent and refuse an unapproved Node, tampered guardian, failed probe and relative/climbing paths. Mutation-checked.
+
+**Blocker 2 - stray-process false positive.** The scan now exempts the acceptance runner by identity (its pid and the chain of processes that started it) plus the scan's own probe, never by image name; a surviving Command `node.exe` or a sibling `pwsh.exe` naming the workspace is still reported (unit-tested). Reproduced Copilot's invocation shape (harness launched by an invoking `pwsh -Command`): 67/67.
+
+**Test cleanup race.** `production-entrypoints` waited a fixed 80 ms after `kill()` before deleting the directory; it now awaits each child's exit (5 s bound). Default parallel Vitest: 1211/1211.
+
+**Results at `ebd7c29`, STARQ_WORKSPACE unset:** typecheck 0; build 0; vitest (default parallel) 1211/1211; node 142/0 fail (1 skip: needs the operating DB); lifecycle 186 pass/0 fail (4 child-host tests gated, run separately with explicit authorization: 4/4); functional 13/13; disposable lifecycle harness 67/67 (no residual owned processes; counts unchanged; startup appended no provenance rows; live database byte-identical, `d9cafbefe6d95658...`).
+
+Still not claimed: independent acceptance of these changes, release-tier certification, or a physical-browser walkthrough (Founder).

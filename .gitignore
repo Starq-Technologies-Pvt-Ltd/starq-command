@@ -35,6 +35,12 @@ dist-observation-hardening-*/
 # Command runtime observation state (sibling of .command-runtime/)
 .command-runtime-observation/
 
+# Command runtime state for the command-local/v1 daily-driver profile (CV-C1c)
+.command-runtime-local/
+
+# Local backup-on-start snapshots of the operating database (CV-C1c)
+data/backups/
+
 # Nested agent-comms placeholder — the canonical comms root is D:\StarqTech\agent-comms,
 # not a copy inside this product directory.
 /agent-comms/
@@ -70,3 +76,9 @@ scripts/.command-runtime-test/
 # server/nexus-cortex.mjs (graph.json), so the tree must stay in place on disk.
 # It is source-copy evidence, not source code: preserved, never staged.
 /recovered/
+
+# Hermes Kanban isolated worktrees are local execution workspaces, not repo source.
+.worktrees/
+
+# Command-owned Node runtime, provisioned on first start from an approved, hash-pinned install (see runtime/containment/node-pins.json).
+runtime/node/

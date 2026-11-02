@@ -21,14 +21,22 @@ import {
   type StuckTaskItem,
   type RoomEventItem,
 } from '@/lib/command-client';
-import { pmRetryRoomSync } from '@/lib/pm-client';
+import { pmRetryRoomSync, pmTask, pmTaskHref } from '@/lib/pm-client';
 
 export function SoftwareFactorySurface() {
+  const loadAllSeq = React.useRef(0);
+  const mounted = React.useRef(true);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [loading, setLoading] = React.useState(true);
   const [unavailableReason, setUnavailableReason] = React.useState<string | null>(null);
   const [tasks, setTasks] = React.useState<CommandTaskItem[]>([]);
   const [preview, setPreview] = React.useState<DispatchPreviewData | null>(null);
   const [workforce, setWorkforce] = React.useState<WorkforceData | null>(null);
+  const [workforceUnavailable, setWorkforceUnavailable] = React.useState(false);
+  const [taskProjectMap, setTaskProjectMap] = React.useState<Record<string, { projectId: string | null; owner: string | null; verifier: string | null } | null | undefined>>({});
   const [capacity, setCapacity] = React.useState<CapacityData | null>(null);
   const [stuck, setStuck] = React.useState<StuckTaskItem[]>([]);
   const [events, setEvents] = React.useState<RoomEventItem[]>([]);
@@ -40,6 +48,7 @@ export function SoftwareFactorySurface() {
   const [tab, setTab] = React.useState<'DISPATCH' | 'EXECUTIONS' | 'WORKFORCE' | 'CAPACITY' | 'STUCK' | 'EVENTS'>('DISPATCH');
 
   const loadAll = React.useCallback(async () => {
+    const requestId = ++loadAllSeq.current;
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -51,6 +60,8 @@ export function SoftwareFactorySurface() {
         commandStuck(),
         commandRoomEvents(),
       ]);
+      if (requestId !== loadAllSeq.current) return;
+      if (!mounted.current) return;
 
       if (!pRes.ok && pRes.status === 503) {
         setUnavailableReason(pRes.error || 'PM execution bridge is not initialized.');
@@ -60,14 +71,45 @@ export function SoftwareFactorySurface() {
 
       if (tRes.ok && tRes.data) setTasks(tRes.data.tasks || []);
       if (pRes.ok && pRes.data) setPreview(pRes.data);
-      if (wRes.ok && wRes.data) setWorkforce(wRes.data);
+      if (wRes.ok && wRes.data) {
+        setWorkforceUnavailable(false);
+        setTaskProjectMap({});
+        setWorkforce(wRes.data);
+        // Resolve actual workload.task_ids via pmTask(id); do not infer identities.
+        const ids = new Set<string>();
+        (wRes.data.seats || []).forEach((s) => (s.workload?.task_ids || []).forEach((id) => ids.add(id)));
+        const entries = await Promise.all(Array.from(ids).map(async (id) => {
+          try {
+            const r = await pmTask(id);
+            if (!r.ok) return [id, undefined] as const; // failed lookup
+            return [id, { projectId: r.data.task.project_id ?? null, owner: r.data.task.owner ?? null, verifier: r.data.task.verifier ?? null }] as const;
+          } catch {
+            return [id, null] as const; // rejected lookup -> unavailable
+          }
+        }));
+        if (requestId !== loadAllSeq.current) return;
+        if (!mounted.current) return;
+        const next: Record<string, { projectId: string | null; owner: string | null; verifier: string | null } | null | undefined> = {};
+        for (const [id, pid] of entries) next[id] = pid;
+        setTaskProjectMap(next);
+      } else {
+        // Do not retain stale task/project links when workforce is unavailable or changes.
+        setWorkforce(null);
+        setWorkforceUnavailable(true);
+        if (requestId === loadAllSeq.current && mounted.current) setTaskProjectMap({});
+      }
       if (cRes.ok && cRes.data) setCapacity(cRes.data);
       if (sRes.ok && sRes.data) setStuck(sRes.data.stuckTasks || []);
       if (eRes.ok && eRes.data) setEvents(eRes.data.events || []);
     } catch (err: any) {
+      if (requestId !== loadAllSeq.current) return;
+      if (!mounted.current) return;
+      setWorkforce(null);
+      setWorkforceUnavailable(true);
+      setTaskProjectMap({});
       setUnavailableReason(err.message || 'Service unreachable');
     } finally {
-      setLoading(false);
+      if (requestId === loadAllSeq.current && mounted.current) setLoading(false);
     }
   }, []);
 
@@ -286,7 +328,7 @@ export function SoftwareFactorySurface() {
             className={`font-mono px-2 py-0.5 rounded ${tab === 'WORKFORCE' ? 'bg-primary text-primary-foreground font-semibold' : 'text-muted-foreground hover:text-foreground'}`}
             onClick={() => setTab('WORKFORCE')}
           >
-            Workforce ({workforce?.seats.length ?? 0})
+            Workforce ({workforce?.seats.length ?? 0}) {workforce?.state ?? ''}
           </button>
           <button
             type="button"
@@ -506,10 +548,13 @@ export function SoftwareFactorySurface() {
                   <thead>
                     <tr className="border-b border-border text-muted-foreground">
                       <th className="p-1.5">Seat</th>
+                      <th className="p-1.5">Task / Owner / Verifier</th>
                       <th className="p-1.5">Provider / Client</th>
                       <th className="p-1.5">Class</th>
-                      <th className="p-1.5">Role</th>
+                      <th className="p-1.5">Role / Function</th>
+                      <th className="p-1.5">Runtime Session</th>
                       <th className="p-1.5">Availability</th>
+                      <th className="p-1.5">Runtime source / observation time</th>
                       <th className="p-1.5">Capabilities</th>
                       <th className="p-1.5">Dispatch</th>
                     </tr>
@@ -518,14 +563,32 @@ export function SoftwareFactorySurface() {
                     {workforce.seats.map((seat) => (
                       <tr key={seat.handle} className="border-b border-border/40 hover:bg-card/40">
                         <td className="p-1.5 font-semibold text-foreground">{seat.handle}</td>
+                        <td className="p-1.5 text-muted-foreground">
+                          {seat.workload?.task_ids?.length ? (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {Array.from(new Set(seat.workload.task_ids)).map((tid) => {
+                                const task = taskProjectMap[tid];
+                                if (!Object.prototype.hasOwnProperty.call(taskProjectMap, tid)) return <span key={tid}>{tid} (lookup pending)</span>;
+                                if (task === undefined) return <span key={tid} className="text-truth-drift">{tid} (lookup failed)</span>;
+                                if (task === null) return <span key={tid} className="text-truth-drift">{tid} (unavailable)</span>;
+                                return <span key={tid}>{task.projectId ? <a href={pmTaskHref(task.projectId, tid)} className="text-[hsl(var(--room))] underline">{tid}</a> : <span>{tid} (project UNKNOWN)</span>} · Owner: {task.owner || 'UNKNOWN'} · Verifier: {task.verifier || 'UNKNOWN'} (PM declared labels; identity links unavailable)</span>;
+                              })}
+                            </div>
+                          ) : 'UNKNOWN'}
+                        </td>
                         <td className="p-1.5 text-muted-foreground">{seat.provider_owner} · {seat.product_client}</td>
                         <td className="p-1.5">{seat.capacity_class}</td>
-                        <td className="p-1.5">{seat.role_family}</td>
+                        <td className="p-1.5">{seat.workforce_function || seat.role_family || 'UNKNOWN'}</td>
+                        <td className="p-1.5">{seat.runtime?.session_id || 'UNKNOWN'} {seat.runtime?.session_match === 'CONFLICT' || seat.pane_binding?.state === 'CONFLICT' ? 'CONFLICT' : ''}</td>
                         <td className="p-1.5">
                           <Chip
-                            value={seat.availability}
+                            value={seat.availability || 'UNKNOWN'}
                             tone={seat.availability === 'AVAILABLE' ? 'room' : seat.availability === 'OFFLINE' ? 'muted' : 'stale'}
                           />
+                          <span> Source: UNKNOWN · Time: UNKNOWN</span>
+                        </td>
+                        <td className="p-1.5 text-muted-foreground">
+                          {seat.runtime?.observed ? 'Herdr' : 'UNKNOWN'} · {seat.runtime?.observed_at || 'UNKNOWN'}
                         </td>
                         <td className="p-1.5">
                           {seat.capabilities.values.length ? (
@@ -548,7 +611,7 @@ export function SoftwareFactorySurface() {
                 </table>
               </div>
             ) : (
-              <p className="text-2xs text-muted-foreground">Reading workforce capability registry…</p>
+              <p className="text-2xs text-muted-foreground">{workforceUnavailable ? 'Workforce data unavailable.' : 'Reading workforce capability registry…'}</p>
             )}
           </div>
         ) : null}

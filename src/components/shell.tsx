@@ -4,12 +4,17 @@ import {
   AlertOctagon,
   Boxes,
   Building2,
+  Contact,
   FileSearch,
   Fingerprint,
+  FolderKanban,
   Gauge,
+  House,
+  Landmark,
   Library,
   LayoutDashboard,
   Network,
+  ScrollText,
   Settings2,
   Users,
   MessageSquare,
@@ -21,6 +26,12 @@ import { SlimStatus, KV } from './console';
 import type { Health } from '@/lib/contracts';
 
 export type ViewId =
+  | 'home'
+  | 'organization'
+  | 'workforce'
+  | 'projects'
+  | 'activity'
+  | 'records'
   | 'building'
   | 'company'
   | 'library'
@@ -53,11 +64,55 @@ export interface NavItem {
  * of which phase authorised a surface lives in the implementation record and
  * the Room, not in the navigation.
  *
- * ORDER IS OPERATOR ORDER, deliberately: Overview, Building, Dev Studio, then
- * the cross-room surfaces Founder Attention, Evidence and System. It is not
- * phase order and must not be sorted by phase.
+ * ORDER IS OPERATOR ORDER, deliberately: Home, Organization, Workforce,
+ * Projects, Activity and Records first, all live. The governance surfaces keep
+ * their previous relative order after that: Overview, Company, Building,
+ * Library, Cortex, Comms, Dev Studio, Founder Attention, Evidence, System.
+ * It is not phase order and must not be sorted by phase.
  */
 export const NAV: NavItem[] = [
+  {
+    id: 'home',
+    label: 'Home',
+    hint: 'Founder home',
+    icon: House,
+    live: true,
+  },
+  {
+    id: 'organization',
+    label: 'Organization',
+    hint: 'Operating organization',
+    icon: Landmark,
+    live: true,
+  },
+  {
+    id: 'workforce',
+    label: 'Workforce',
+    hint: 'People and appointments',
+    icon: Contact,
+    live: true,
+  },
+  {
+    id: 'projects',
+    label: 'Projects',
+    hint: 'PM portfolio',
+    icon: FolderKanban,
+    live: true,
+  },
+  {
+    id: 'activity',
+    label: 'Activity',
+    hint: 'Attention, digest, and follow-ups',
+    icon: Activity,
+    live: true,
+  },
+  {
+    id: 'records',
+    label: 'Records',
+    hint: 'Source records',
+    icon: ScrollText,
+    live: true,
+  },
   {
     id: 'overview',
     label: 'Overview',
