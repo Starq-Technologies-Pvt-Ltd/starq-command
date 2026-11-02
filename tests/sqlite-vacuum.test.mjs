@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { vacuumIntoDistinct } from '../scripts/sqlite-vacuum.mjs';
+import { publishSeam, vacuumIntoDistinct } from '../scripts/sqlite-vacuum.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -157,7 +157,7 @@ test('a destination created immediately before publication is not replaced', (t)
   const sourceBefore = fingerprint(source);
   const competitor = Buffer.from('competitor-kept-bytes');
   const competitorHash = createHash('sha256').update(competitor).digest('hex');
-  const realLink = fs.linkSync;
+  const realPlace = publishSeam.placeExclusive;
   const realRename = fs.renameSync;
   let renameCalls = 0;
   let publishedHash = null;
@@ -165,13 +165,13 @@ test('a destination created immediately before publication is not replaced', (t)
     renameCalls += 1;
     return realRename(...args);
   };
-  fs.linkSync = (existing, neu) => {
+  publishSeam.placeExclusive = (existing, neu) => {
     fs.writeFileSync(neu, competitor);
     publishedHash = createHash('sha256').update(fs.readFileSync(neu)).digest('hex');
-    return realLink(existing, neu);
+    return realPlace(existing, neu);
   };
   t.after(() => {
-    fs.linkSync = realLink;
+    publishSeam.placeExclusive = realPlace;
     fs.renameSync = realRename;
   });
 
@@ -189,17 +189,17 @@ test('a destination created immediately before publication is not replaced', (t)
     assert.equal(renameCalls, 0);
     assert.deepEqual(ownedTemps(root), []);
   } finally {
-    fs.linkSync = realLink;
+    publishSeam.placeExclusive = realPlace;
     fs.renameSync = realRename;
   }
 });
 
 test('an unavailable exclusive link fails closed without renaming', (t) => {
   const root = tempDir(t, 'starq-vac-noclobber-');
-  const realLink = fs.linkSync;
+  const realPlace = publishSeam.placeExclusive;
   const realRename = fs.renameSync;
   t.after(() => {
-    fs.linkSync = realLink;
+    publishSeam.placeExclusive = realPlace;
     fs.renameSync = realRename;
   });
 
@@ -216,7 +216,7 @@ test('an unavailable exclusive link fails closed without renaming', (t) => {
       renameCalls += 1;
       throw new Error('rename fallback is forbidden');
     };
-    fs.linkSync = () => {
+    publishSeam.placeExclusive = () => {
       const error = new Error(`simulated ${code}`);
       error.code = code;
       throw error;
@@ -233,15 +233,51 @@ test('an unavailable exclusive link fails closed without renaming', (t) => {
     assert.deepEqual(fingerprint(source), sourceBefore);
     assert.deepEqual(fingerprint(kept), keptBefore);
     assert.deepEqual(ownedTemps(path.join(root, code)), []);
-    fs.linkSync = realLink;
+    publishSeam.placeExclusive = realPlace;
     fs.renameSync = realRename;
   }
 });
 
-test('publication uses an exclusive hard link and has no rename fallback', () => {
+test('a staging database replaced after verification is not published', (t) => {
+  const root = tempDir(t, 'starq-vac-swap-');
+  const source = path.join(root, 'source.db');
+  const destination = path.join(root, 'board.db');
+  const witness = path.join(root, 'witness.db');
+  makeDb(source, [{ id: 'SRC', title: 'verified row' }]);
+  makeDb(witness, [{ id: 'KEEP', title: 'pre-existing' }]);
+  const sourceBefore = fingerprint(source);
+  const witnessBefore = fingerprint(witness);
+  const realBefore = publishSeam.beforeExclusivePublish;
+  let substitutePath = null;
+  let substituteHash = null;
+  publishSeam.beforeExclusivePublish = (temp) => {
+    fs.renameSync(temp, `${temp}.verified-aside`);
+    makeDb(temp, [{ id: 'SUB', title: 'substitute row' }]);
+    substitutePath = temp;
+    substituteHash = createHash('sha256').update(fs.readFileSync(temp)).digest('hex');
+  };
+  t.after(() => { publishSeam.beforeExclusivePublish = realBefore; });
+  try {
+    assert.throws(() => vacuumIntoDistinct(source, destination), (error) => {
+      assert.equal(error.code, 'BACKUP_STAGING_SUBSTITUTED');
+      return true;
+    });
+    assert.equal(fs.existsSync(destination), false);
+    assert.equal(createHash('sha256').update(fs.readFileSync(substitutePath)).digest('hex'), substituteHash);
+    assert.deepEqual(fingerprint(substitutePath).rows, [{ id: 'SUB', title: 'substitute row' }]);
+    assert.deepEqual(fingerprint(source), sourceBefore);
+    assert.deepEqual(fingerprint(witness), witnessBefore);
+  } finally {
+    publishSeam.beforeExclusivePublish = realBefore;
+  }
+});
+
+test('publication binds the verified descriptor and has no rename fallback', () => {
   const helper = fs.readFileSync(path.join(ROOT, 'scripts', 'sqlite-vacuum.mjs'), 'utf8');
-  assert.match(helper, /fs\.linkSync\(temp, destination\)/);
+  assert.match(helper, /spawnSync\('ln', \['-L'/);
+  assert.match(helper, /\/proc\/\$\{process\.pid\}\/fd\/\$\{fd\}/);
   assert.doesNotMatch(helper, /\brenameSync\b/);
+  assert.doesNotMatch(helper, /fs\.linkSync\(temp/);
 });
 
 test('the Windows acceptance seed calls the shared helper instead of interpolating a path', () => {

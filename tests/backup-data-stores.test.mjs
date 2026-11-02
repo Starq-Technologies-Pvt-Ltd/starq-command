@@ -190,17 +190,29 @@ test('new publication links the backup into place and leaves no temp', (t) => {
   assert.deepEqual(backupResidue(out), []);
 });
 
-test('retire-and-replace of an existing backup preserves data and clears the retired copy', (t) => {
-  const root = tempDir(t, 'command-backup-retire-');
+test('an occupied backup name is preserved and the new bytes go to a sibling', (t) => {
+  const root = tempDir(t, 'command-backup-occupied-');
   const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'new backup' }]);
   fs.mkdirSync(out, { recursive: true });
-  makeDb(path.join(out, 'pm.db'), [{ id: 'OLD', title: 'prior backup' }]);
+  const dest = path.join(out, 'pm.db');
+  makeDb(dest, [{ id: 'OLD', title: 'prior backup' }]);
+  const occupied = fs.statSync(dest, { bigint: true });
+  const prior = fingerprint(dest);
   const sourceBefore = fingerprint(dbPath);
-  const manifest = backupDataStores(src, out);
-  assert.equal(manifest.files['pm.db'].backup_integrity_check, 'ok');
+  let sibling = null;
+  assert.throws(() => backupDataStores(src, out), (error) => {
+    assert.equal(error.code, 'BACKUP_NAME_OCCUPIED');
+    assert.equal(path.resolve(error.preserved), path.resolve(dest));
+    sibling = error.sibling;
+    return true;
+  });
+  const after = fs.statSync(dest, { bigint: true });
+  assert.equal(after.ino, occupied.ino);
+  assert.deepEqual(fingerprint(dest), prior);
+  assert.ok(sibling && fs.existsSync(sibling));
+  assert.deepEqual(fingerprint(sibling).rows, [{ id: 'T-1', title: 'new backup' }]);
   assert.deepEqual(fingerprint(dbPath), sourceBefore);
-  assert.deepEqual(fingerprint(path.join(out, 'pm.db')).rows, [{ id: 'T-1', title: 'new backup' }]);
-  assert.deepEqual(fs.readdirSync(out).filter((n) => n.startsWith('.partial-') || n.includes('.replaced-')), []);
+  assert.equal(fs.existsSync(path.join(out, 'backup-manifest.json')), false);
 });
 
 test('a destination created during fresh publication is not overwritten', (t) => {
@@ -211,92 +223,90 @@ test('a destination created during fresh publication is not overwritten', (t) =>
   const competitorHash = createHash('sha256').update(competitor).digest('hex');
   const realLink = fs.linkSync;
   fs.linkSync = (existing, neu) => {
-    fs.writeFileSync(neu, competitor);   // a competitor wins the name just before our link
-    return realLink(existing, neu);      // the real link now fails EEXIST
+    if (path.basename(neu) === 'pm.db') fs.writeFileSync(neu, competitor);
+    return realLink(existing, neu);
   };
   t.after(() => { fs.linkSync = realLink; });
   try {
+    let sibling = null;
     assert.throws(() => backupDataStores(src, out), (error) => {
-      assert.equal(error.code, 'BACKUP_DESTINATION_UNSAFE');
-      assert.match(error.message, /not overwritten/);
+      assert.equal(error.code, 'BACKUP_NAME_OCCUPIED');
+      assert.equal(error.preserved, path.join(out, 'pm.db'));
+      sibling = error.sibling;
       return true;
     });
     assert.equal(createHash('sha256').update(fs.readFileSync(path.join(out, 'pm.db'))).digest('hex'), competitorHash);
-    assert.deepEqual(fingerprint(dbPath), sourceBefore);
-    assert.deepEqual(backupResidue(out), []);
-  } finally {
-    fs.linkSync = realLink;
-  }
-});
-
-test('a competitor during retire-and-replace preserves the prior backup and reports incomplete', (t) => {
-  const root = tempDir(t, 'command-backup-retire-race-');
-  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'ours' }]);
-  fs.mkdirSync(out, { recursive: true });
-  makeDb(path.join(out, 'pm.db'), [{ id: 'OLD', title: 'prior backup' }]);
-  const sourceBefore = fingerprint(dbPath);
-  const competitor = Buffer.from('competitor-during-replace');
-  const competitorHash = createHash('sha256').update(competitor).digest('hex');
-  const realLink = fs.linkSync;
-  fs.linkSync = (existing, neu) => {
-    fs.writeFileSync(neu, competitor);   // competitor takes the freed name after retire
-    return realLink(existing, neu);      // EEXIST
-  };
-  t.after(() => { fs.linkSync = realLink; });
-  try {
-    let retiredPath = null;
-    assert.throws(() => backupDataStores(src, out), (error) => {
-      assert.equal(error.code, 'BACKUP_PUBLISH_INCOMPLETE');
-      assert.match(error.message, /prior backup preserved at/);
-      retiredPath = error.retired;
-      return true;
-    });
-    assert.equal(createHash('sha256').update(fs.readFileSync(path.join(out, 'pm.db'))).digest('hex'), competitorHash);
-    assert.ok(retiredPath && fs.existsSync(retiredPath));
-    assert.deepEqual(fingerprint(retiredPath).rows, [{ id: 'OLD', title: 'prior backup' }]);
-    assert.deepEqual(fingerprint(dbPath), sourceBefore);
-    assert.deepEqual(backupResidue(out), []);
-  } finally {
-    fs.linkSync = realLink;
-  }
-});
-
-test('a competitor that replaces the destination immediately before retirement is preserved, not deleted', (t) => {
-  const root = tempDir(t, 'command-backup-retire-swap-');
-  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'ours' }]);
-  fs.mkdirSync(out, { recursive: true });
-  const destPath = path.join(out, 'pm.db');
-  makeDb(destPath, [{ id: 'OLD', title: 'prior backup' }]);   // our prior backup
-  const sourceBefore = fingerprint(dbPath);
-  const competitor = Buffer.from('competitor-replaced-dest-before-retire');
-  const competitorHash = createHash('sha256').update(competitor).digest('hex');
-  const realRename = fs.renameSync;
-  let swapped = false;
-  fs.renameSync = (from, to) => {
-    if (!swapped && path.resolve(from) === path.resolve(destPath)) {
-      swapped = true;
-      fs.rmSync(from);                     // our prior backup is removed...
-      fs.writeFileSync(from, competitor);  // ...and a different file (new inode) now holds the name
-    }
-    return realRename(from, to);
-  };
-  t.after(() => { fs.renameSync = realRename; });
-  try {
-    let preserved = null;
-    assert.throws(() => backupDataStores(src, out), (error) => {
-      assert.equal(error.code, 'BACKUP_RETIRE_CONFLICT');
-      assert.match(error.message, /not completed/);
-      preserved = error.preserved;
-      return true;
-    });
-    // the competitor's bytes survive under a recoverable name and are never deleted
-    assert.ok(preserved && fs.existsSync(preserved));
-    assert.equal(createHash('sha256').update(fs.readFileSync(preserved)).digest('hex'), competitorHash);
-    // source database untouched; no manifest falsely claiming success; our temp cleaned
+    assert.ok(sibling && fs.existsSync(sibling));
+    assert.deepEqual(fingerprint(sibling).rows, [{ id: 'T-1', title: 'ours' }]);
     assert.deepEqual(fingerprint(dbPath), sourceBefore);
     assert.equal(fs.existsSync(path.join(out, 'backup-manifest.json')), false);
-    assert.deepEqual(fs.readdirSync(out).filter((n) => n.startsWith('.partial-')), []);
+    assert.deepEqual(backupResidue(out), []);
   } finally {
+    fs.linkSync = realLink;
+  }
+});
+
+test('an in-place rewrite with the same inode, size, and restored mtime is not deleted', (t) => {
+  const root = tempDir(t, 'command-backup-mtime-');
+  const { src, out, dbPath } = makeFileDb(root, [{ id: 'T-1', title: 'new backup' }]);
+  fs.mkdirSync(out, { recursive: true });
+  const dest = path.join(out, 'pm.db');
+  makeDb(dest, [{ id: 'OLD', title: 'prior backup' }]);
+  const stamp = new Date('2026-11-02T12:00:00.000Z');
+  fs.utimesSync(dest, stamp, stamp);
+  const before = fs.statSync(dest, { bigint: true });
+  const original = fs.readFileSync(dest);
+  const mutated = Buffer.from(original);
+  mutated[mutated.length - 1] ^= 0xff;
+  const handle = fs.openSync(dest, 'r+');
+  try { fs.writeSync(handle, mutated, 0, mutated.length, 0); }
+  finally { fs.closeSync(handle); }
+  fs.utimesSync(dest, stamp, stamp);
+  const rewritten = fs.statSync(dest, { bigint: true });
+  const rewrittenHash = createHash('sha256').update(fs.readFileSync(dest)).digest('hex');
+  assert.equal(rewritten.dev, before.dev);
+  assert.equal(rewritten.ino, before.ino);
+  assert.equal(rewritten.size, before.size);
+  assert.equal(rewritten.mtimeNs, before.mtimeNs);
+  assert.notEqual(rewrittenHash, createHash('sha256').update(original).digest('hex'));
+  const sourceBefore = fingerprint(dbPath);
+  const realUnlink = fs.unlinkSync;
+  const realRm = fs.rmSync;
+  const realRename = fs.renameSync;
+  const refuseOccupied = (file) => {
+    if (path.resolve(String(file)) === path.resolve(dest)) throw new Error(`occupied path was removed: ${file}`);
+    try {
+      const st = fs.statSync(file, { bigint: true });
+      if (st.dev === before.dev && st.ino === before.ino) throw new Error(`occupied inode was removed: ${file}`);
+    } catch (error) {
+      if (String(error.message).includes('occupied')) throw error;
+    }
+  };
+  fs.unlinkSync = (file, ...rest) => { refuseOccupied(file); return realUnlink(file, ...rest); };
+  fs.rmSync = (file, ...rest) => { refuseOccupied(file); return realRm(file, ...rest); };
+  fs.renameSync = (from, to, ...rest) => { refuseOccupied(from); return realRename(from, to, ...rest); };
+  t.after(() => { fs.unlinkSync = realUnlink; fs.rmSync = realRm; fs.renameSync = realRename; });
+  try {
+    let sibling = null;
+    assert.throws(() => backupDataStores(src, out), (error) => {
+      assert.equal(error.code, 'BACKUP_NAME_OCCUPIED');
+      assert.equal(path.resolve(error.preserved), path.resolve(dest));
+      sibling = error.sibling;
+      return true;
+    });
+    const after = fs.statSync(dest, { bigint: true });
+    assert.equal(after.dev, before.dev);
+    assert.equal(after.ino, before.ino);
+    assert.equal(after.nlink >= 1n, true);
+    assert.equal(createHash('sha256').update(fs.readFileSync(dest)).digest('hex'), rewrittenHash);
+    assert.ok(sibling && fs.existsSync(sibling));
+    assert.deepEqual(fingerprint(sibling).rows, [{ id: 'T-1', title: 'new backup' }]);
+    assert.deepEqual(fingerprint(dbPath), sourceBefore);
+    assert.equal(fs.existsSync(path.join(out, 'backup-manifest.json')), false);
+  } finally {
+    fs.unlinkSync = realUnlink;
+    fs.rmSync = realRm;
     fs.renameSync = realRename;
   }
 });
+
