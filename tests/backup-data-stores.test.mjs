@@ -46,9 +46,16 @@ function fingerprint(file) {
 }
 
 test('sqlitePathLiteral keeps apostrophes inside the VACUUM INTO string', () => {
-  const literal = sqlitePathLiteral("D:\\keep\\o'brien\\file.db");
-  assert.equal(literal, "'D:/keep/o''brien/file.db'");
-  assert.throws(() => sqlitePathLiteral('D:\\keep\\bad\npath\\file.db'), /control character/);
+  // The literal normalizes the host's own separator to '/', so the expected
+  // string is platform-specific. Assert each OS with its native path shape and
+  // an exact (not sqlitePathLiteral-derived) expected literal.
+  if (process.platform === 'win32') {
+    assert.equal(sqlitePathLiteral("D:\\keep\\o'brien\\file.db"), "'D:/keep/o''brien/file.db'");
+  } else {
+    assert.equal(sqlitePathLiteral("/keep/o'brien/file.db"), "'/keep/o''brien/file.db'");
+  }
+  // Control-character rejection is platform-independent (the \n is the hazard).
+  assert.throws(() => sqlitePathLiteral(`${path.sep}keep${path.sep}bad\npath${path.sep}file.db`), /control character/);
 });
 
 test('same directory, case alias, and parent alias are refused without deleting the source', (t) => {
