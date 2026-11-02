@@ -119,11 +119,13 @@ command, the runtime requirements, and the live-operation prerequisites, is in
 [`docs/QUICKSTART.md`](docs/QUICKSTART.md).
 
 > **Three distinct modes, not two.** *Verified isolated* operation runs the app's
-> self-test against a scratch database on an isolated port and never touches any
-> canonical store. *Ordinary development* runs the services directly — and when a
-> Starq workspace is present, those services resolve to canonical sources, so it
-> is **not** inherently isolated. *Live* operation drives the real control plane
-> and is **not yet independently accepted.** Know which one you are in.
+> daily-driver self-test against a scratch database on an isolated port: its
+> **writes** go only to the scratch DB, though it may still **read** canonical
+> workspace inputs read-only when a Starq workspace is present. *Ordinary
+> development* runs the services directly — and when a Starq workspace is present,
+> those services resolve to canonical sources, so it is **not** inherently
+> isolated. *Live* operation drives the real control plane and is **not yet
+> independently accepted.** Know which one you are in.
 
 > **Runtime.** The `package.json` `engines` field is permissive (`node >=20`),
 > but it understates the real requirement: the PM service uses `node:sqlite`
@@ -131,17 +133,20 @@ command, the runtime requirements, and the live-operation prerequisites, is in
 > runtime is **Node 24.15.0 on Windows**. Treat the permissive engines field as a
 > floor for the pure UI build, not as verified operating support.
 
-### Verified isolated operation (safe anywhere)
+### Verified isolated operation (scratch-DB write isolation)
 
-This is the only procedure that is guaranteed not to touch a canonical database.
-It drives the real PM service against an **isolated scratch instance** — its own
-`PM_DB_PATH` database and an unused `5190–5199` port — and exercises the full
-Founder cycle: create an org, a project, a task, transition it, restart, recover,
-then back up, mutate, restore, and verify.
+This is the only procedure that confines all **writes** to a scratch database.
+It drives the real PM service against an **isolated scratch instance** — it sets
+both a scratch `PM_DB_PATH` and an in-range `PM_PORT`, so it binds an unused
+`5190–5199` port and writes only to the scratch DB — and exercises the full
+Founder daily-driver cycle: create an org, a project, a task, transition it,
+restart, recover, then back up, mutate, restore, and verify. It may still read
+canonical workspace inputs read-only if a workspace is present; it never writes
+to a canonical store.
 
 ```bash
 npm install
-npm run verify:local  # scratch PM server, isolated DB and port; no canonical access
+npm run verify:local  # scratch PM server: writes only to the scratch DB
 ```
 
 ### Ordinary development (not inherently isolated)
@@ -154,9 +159,11 @@ npm run pm:start      # writable PM service (:5176)
 Open **http://localhost:5173**. Be aware of the isolation boundary:
 
 - `npm run pm:start` **without** `PM_DB_PATH` resolves to the **canonical**
-  operating database (`data/pm-board.db`) whenever a Starq workspace resolves. It
-  is isolated only when you set a scratch `PM_DB_PATH` (which is what
-  `verify:local` does). Do not treat plain `pm:start` as disposable.
+  operating database (`data/pm-operating.db`) whenever a Starq workspace
+  resolves. Its writes are isolated only when you set a scratch `PM_DB_PATH`
+  **and** an in-range `PM_PORT` (5190–5199) — setting `PM_DB_PATH` alone still
+  binds the production port 5176. `verify:local` sets both. Do not treat plain
+  `pm:start` as disposable.
 - The read-only data service may **read** canonical sources when a workspace is
   present. It never writes, but it is not reading from nothing.
 
@@ -193,8 +200,10 @@ below.
 Command's offline and disposable behavior is exercised by the committed test
 suites. Its **live Windows operation** is owned and accepted separately:
 
-- The most recent full **disposable smoke** reported by the Windows operating
-  owner passed **66 / 66** checks.
+- The Windows operating owner's most recent full **contained Windows lifecycle
+  smoke** passed **66 / 66** checks. This is the operating-acceptance smoke over
+  the real multi-service control plane — distinct from, and much larger than, the
+  `verify:local` daily-driver functional test described in the quick start.
 - **Four lifecycle cases and live backup/restore acceptance remain open.**
 - The core Founder operating journey (org, workforce, projects/tasks, attention,
   persistence, backup/restore) has been exercised with all optional companion

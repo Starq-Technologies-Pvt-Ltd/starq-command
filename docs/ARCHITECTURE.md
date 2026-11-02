@@ -48,12 +48,15 @@ and room-sync state are **owned** by Command and written through the PM service
   a position with active appointments, is refused with HTTP 409
   `HAS_DEPENDENTS`),
 - a write-client header and origin pinning so only the intended UI can write,
-- isolation controls: a scratch mode (set `PM_DB_PATH` to an absolute `*.db`
-  path that is not a protected store) binds only an unused `5190–5199` port and a
-  separate database. **Without** `PM_DB_PATH`, the service resolves to the
-  **canonical** operating database (`data/pm-board.db`) whenever a Starq
-  workspace resolves — so plain `npm run pm:start` is not isolated; only a
-  scratch `PM_DB_PATH` (what `verify:local` uses) is.
+- isolation controls: scratch mode (set `PM_DB_PATH` to an absolute `*.db` path
+  that is not a protected store) writes to a separate database; to also move off
+  the production port you must set an in-range `PM_PORT` (5190–5199) — `PM_DB_PATH`
+  alone still binds `5176`, and an explicit out-of-range `PM_PORT` is rejected.
+  **Without** `PM_DB_PATH`, the service resolves to the **canonical** operating
+  database (`data/pm-operating.db`, i.e. `CANONICAL.pmBoardDb`; `data/pm-board.db`
+  is the legacy `pmBoardLegacyDb`) whenever a Starq workspace resolves — so plain
+  `npm run pm:start` is not isolated. `verify:local` sets both `PM_DB_PATH` and an
+  in-range `PM_PORT`.
 
 Representative routes: `/api/pm/org/{companies,units,positions,people,appointments}`,
 `/api/pm/projects`, `/api/pm/tasks`, `/api/pm/milestones`,

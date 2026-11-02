@@ -4,19 +4,23 @@ This guide separates the ways Command can be run, because they carry very
 different risk. There are three distinct modes, not two:
 
 - **Verified isolated operation** (`verify:local`) drives the real PM service
-  against a scratch database (`PM_DB_PATH`) on an isolated `5190–5199` port. It is
-  the only procedure guaranteed never to touch a canonical store. Safe anywhere.
+  against a scratch database (`PM_DB_PATH`) on an in-range scratch `PM_PORT`
+  (5190–5199). All **writes** go to the scratch DB only; it may still **read**
+  canonical workspace inputs read-only when a workspace is present, and it never
+  writes to a canonical store.
 - **Ordinary development** (`npm run dev` + `npm run pm:start`) runs the services
   directly. It is **not inherently isolated**: when a Starq workspace resolves,
   `pm:start` writes to the canonical operating database and the data service reads
-  canonical sources. Isolate it by setting a scratch `PM_DB_PATH`.
+  canonical sources. Isolate its writes by setting **both** a scratch `PM_DB_PATH`
+  and an in-range `PM_PORT`.
 - **Live operation** drives the real, multi-service control plane against a
   separately managed canonical workspace. Its independent acceptance is still
   open, and it must not be run without explicit Founder authorization.
 
-If you are evaluating or reviewing Command and do not intend to touch canonical
-data, use verified isolated operation, or set a scratch `PM_DB_PATH` before any
-write.
+If you are reviewing Command and do not intend to **write** to canonical data,
+use verified isolated operation, or set both a scratch `PM_DB_PATH` and an
+in-range `PM_PORT` before any write. Be aware the projection surfaces may still
+read canonical inputs read-only when a workspace is present.
 
 ---
 
@@ -38,9 +42,11 @@ write.
 
 ---
 
-## Verified isolated operation (safe anywhere)
+## Verified isolated operation (scratch-DB write isolation)
 
-This is the only run procedure guaranteed not to touch a canonical database.
+This is the only run procedure that confines all PM **writes** to a scratch
+database. It may still read canonical workspace inputs read-only when a workspace
+is present; it never writes to a canonical store.
 
 ### 1. Install
 
@@ -51,19 +57,29 @@ npm install
 ### 2. Exercise the full operating cycle, isolated
 
 `verify:local` drives the real PM service against an **isolated scratch
-instance** — its own `PM_DB_PATH` database and an unused port in `5190–5199` —
-and proves the Founder cycle end to end: start, read org/projects, create a
-project and task, update status, persist and read back, restart, recover, then
-back up, mutate, restore, and verify. Because it sets a scratch `PM_DB_PATH`, it
-never touches the canonical operating database.
+instance** — it sets both its own scratch `PM_DB_PATH` database and an in-range
+`PM_PORT` (an unused `5190–5199`) — and proves the Founder daily-driver cycle end
+to end: start, read org/projects, create a project and task, update status,
+persist and read back, restart, recover, then back up, mutate, restore, and
+verify. Its writes go only to the scratch DB; it never writes to the canonical
+operating database.
 
 ```bash
 npm run verify:local
 ```
 
-Add `--keep` to leave the scratch instance running for inspection, or
-`--port 519X` to choose the port. This procedure needs the verified operating
-runtime (Node 24.15.0) because it starts the `node:sqlite`-backed PM service.
+Forward script flags through npm with `--`:
+
+```bash
+npm run verify:local -- --keep        # preserve the scratch files after the run
+npm run verify:local -- --port 5193   # choose the scratch port (5190–5199)
+```
+
+`--keep` preserves the scratch directory for inspection; it does **not** leave
+the service running — the script always stops the service on completion
+(`stopService()`), then skips deleting the scratch files. This procedure needs
+the verified operating runtime (Node 24.15.0) because it starts the
+`node:sqlite`-backed PM service.
 
 ---
 
@@ -87,12 +103,14 @@ npm run pm:start      # writable PM service on :5176
 
 > **Isolation boundary — read before running `pm:start`.** With **no**
 > `PM_DB_PATH` set, `pm:start` resolves to the **canonical** operating database
-> (`data/pm-board.db`) whenever a Starq workspace resolves, and writes to it. It
-> is isolated only when you set a scratch `PM_DB_PATH` (an absolute `*.db` path
-> that is not a protected store) — which is exactly what `verify:local` does.
-> Plain `pm:start` is **not** disposable. Likewise, the data service reads
-> canonical sources when a workspace is present; it never writes, but it is not
-> reading from nothing.
+> (`data/pm-operating.db`) whenever a Starq workspace resolves, and writes to it.
+> Its writes are isolated only when you set **both** a scratch `PM_DB_PATH` (an
+> absolute `*.db` path that is not a protected store) **and** an in-range
+> `PM_PORT` (5190–5199). Setting `PM_DB_PATH` alone does **not** move the service
+> off the production port 5176 — the scratch `5190–5199` binding requires the
+> in-range `PM_PORT` too. `verify:local` sets both. Plain `pm:start` is **not**
+> disposable. Likewise, the data service reads canonical sources when a workspace
+> is present; it never writes, but it is not reading from nothing.
 
 Run ordinary development against the canonical workspace only with authorization.
 
@@ -137,8 +155,11 @@ real control plane.
 
 ### Acceptance state
 
-- The Windows operating owner's most recent full **disposable smoke** reported
-  **66 / 66** checks passing.
+- The Windows operating owner's most recent full **contained Windows lifecycle
+  smoke** reported **66 / 66** checks passing. This is the operating-acceptance
+  smoke over the real multi-service control plane — a much larger and different
+  test from the `verify:local` daily-driver functional check in the sections
+  above. Do not equate the two.
 - **Four lifecycle cases and live backup/restore acceptance remain open.**
 - These are reported figures from the operating owner, not an independent
   acceptance by this documentation work.
@@ -154,8 +175,10 @@ unaccepted. Execution is not acceptance.
   `strictPort` and will fail rather than silently move. Free the port or stop
   the other process.
 - **Writes are refused.** The PM service enforces origin pinning and a
-  write-client header; writes must originate from the proxied UI. Scratch mode
-  additionally refuses any port outside `5190–5199`.
+  write-client header; writes must originate from the proxied UI. In scratch mode
+  (`PM_DB_PATH` set), an **explicit** `PM_PORT` outside `5190–5199` is rejected
+  (the service exits); with no `PM_PORT`, scratch still binds the production port
+  5176, so set an in-range `PM_PORT` to get a scratch port.
 - **Projection surfaces show `UNAVAILABLE` / `STALE` / `UNKNOWN`.** That is
   working as designed when the canonical workspace is not present. Disposable
   operation does not require it; the honesty state is telling you the truth about

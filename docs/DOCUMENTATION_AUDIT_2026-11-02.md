@@ -139,9 +139,10 @@ lifecycle logic, data files, settings, or historical evidence changed):
 
 - **Isolation.** The quick start no longer calls `npm run dev` + `pm:start`
   safely isolated. `pm:start` without `PM_DB_PATH` resolves to the canonical
-  `data/pm-board.db`; only a scratch `PM_DB_PATH` (what `verify:local` uses) is
-  isolated. The data service may read canonical sources. Three run modes are now
-  distinguished: verified isolated, ordinary development, and live.
+  operating database; only a scratch `PM_DB_PATH` with an in-range `PM_PORT`
+  (what `verify:local` uses) isolates writes. The data service may read canonical
+  sources. Three run modes are now distinguished: verified isolated, ordinary
+  development, and live.
 - **Backup architecture.** `scripts/lifecycle/backup.mjs` (operational startup
   backup/restore with retention/pruning) and `scripts/backup-data-stores.mjs`
   (immutable versioned architecture) are now described as the distinct mechanisms
@@ -158,6 +159,27 @@ lifecycle logic, data files, settings, or historical evidence changed):
   while acknowledging the current canonical projections and operating profiles
   carry Starq-specific workspace integration, and that general third-party
   installation is not accepted.
+
+### Final operating-documentation pass (after second Founder QA)
+
+- **Canonical DB name.** Corrected references to the current canonical operating
+  database from `data/pm-board.db` to **`data/pm-operating.db`** (verified against
+  `CANONICAL.pmBoardDb` in `server/paths.mjs`). `data/pm-board.db` is the legacy
+  name (`pmBoardLegacyDb`).
+- **`verify:local --keep`.** Corrected: the script always calls `stopService()`
+  on completion, so `--keep` preserves the scratch **files**, it does not leave
+  the service running. npm flag forwarding shown accurately as
+  `npm run verify:local -- --keep` / `-- --port 519X`.
+- **Scratch port gating.** Clarified that a `5190–5199` scratch binding requires
+  **both** `PM_DB_PATH` and an in-range `PM_PORT`; `PM_DB_PATH` alone still binds
+  the production port `5176` (an explicit out-of-range `PM_PORT` is rejected).
+- **Absolute isolation claims.** Replaced "safe anywhere" / "never touches any
+  canonical store" with precise claims: scratch mode isolates PM **writes** to the
+  scratch DB, while **read-only** access to canonical workspace inputs can still
+  occur when a workspace is present.
+- **Smoke tests distinguished.** Codex's **66/66 contained Windows lifecycle
+  smoke** (operating acceptance over the real control plane) is now clearly
+  distinguished from the smaller `verify:local` daily-driver functional test.
 
 ## What was deliberately not done
 
