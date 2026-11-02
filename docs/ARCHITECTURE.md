@@ -5,10 +5,11 @@ is grounded in the actual services, routes, and surfaces, not in a roadmap.
 
 ## Shape
 
-Starq Command is a desktop-first React single-page application in front of a set
-of small, single-purpose Node.js services. There is no monolith: each service
-owns one concern and one narrow boundary, and the UI reaches all of them through
-one proxied `/api/*` namespace.
+Starq Command is a desktop-first React single-page application backed by several
+Node.js services. Vite exposes the `/api/*` proxy routes shown below. The PM
+browser client is an exception: `src/lib/pm-client.ts` calls the loopback PM
+service directly, using port 5176 by default or a scratch port selected via the
+URL hash's `pm_port` parameter and retained in tab session storage.
 
 ```
 Browser ── Vite UI (:5173)
