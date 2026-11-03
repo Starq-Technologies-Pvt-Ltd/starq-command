@@ -903,15 +903,16 @@ describe('Phase 3 — legacy floor invariants remain intact after surface expans
   });
 });
 
-describe('Phase 3 — GUARD: the ERP hold is untouched', () => {
-  it('does not imply the ERP is running anywhere in the floor', () => {
-    expect(floor.excluded.erp_implementation).toMatch(/ON HOLD under DEC-100/);
+describe('Phase 3 — ERP status is separated from Dev Studio floor execution', () => {
+  it('reports the current decision without asserting task execution', () => {
+    expect(floor.excluded.erp_implementation).toMatch(/RESTART_AUTHORIZED under DEC-109/);
+    expect(floor.excluded.erp_implementation).toMatch(/task execution must be established from ERP work records/);
     expect(floorSrc).not.toMatch(/implementation (is )?(starting|resuming|resumed)/i);
   });
 
-  it('keeps the hold authority in the assembled surface', () => {
-    expect(surface.process_truth.hold_state?.authority).toBe('DEC-100');
-    expect(surface.process_truth.hold_state?.implementation).toMatch(/HOLD/i);
+  it('keeps the current implementation authority in the assembled surface', () => {
+    expect(surface.process_truth.hold_state?.authority).toBe('DEC-109');
+    expect(surface.process_truth.hold_state?.implementation).toBe('RESTART_AUTHORIZED');
   });
 
   it('declares no ERP repo path as a Phase 3 source and opens none for writing', () => {

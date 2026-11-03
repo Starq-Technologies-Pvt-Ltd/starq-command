@@ -176,4 +176,39 @@ describe('Command project boards', () => {
     expect(host.textContent).not.toContain('Recorded blocker');
     expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/pm/tasks/PM-CMD-001'))).toBe(false);
   });
+
+  it('shows a separate attributed Room report without rewriting historical PM provenance', async () => {
+    const erp = project('erp', 'starqERP', 'SERP');
+    const historical = { ...blockedTask, id: 'SERP-354', project_id: 'erp', title: 'Capture, refund and settlement commands into canonical structures', status: 'IN_PROGRESS', prior_status: null, owner: 'antigravity', provenance: 'HISTORICAL_NEXUS', stage: 'IN_PROGRESS' };
+    const report = { task_id: 'SERP-354', project_id: 'erp', status: 'IN_PROGRESS', action: 'started', from: 'cursor', sender_identity_id: 'cursor-id', sequence: 17520, event_id: 'event-17520', record_hash: 'hash-17520', at: '2026-11-03T14:08:00.000Z', received_at: '2026-11-03T14:08:01.000Z', subject: 'SERP-354 current increment' };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/pm/meta')) return { ok: true, json: async () => ({ statuses, priorities: ['P0', 'P1', 'P2', 'P3'], handles: ['cursor', 'antigravity'] }) };
+      if (url.endsWith('/api/pm/projects')) return { ok: true, json: async () => ({ projects: [{ id: erp.id, name: erp.name, prefix: erp.prefix, description: '', source_gap: null, hold: erp.hold }] }) };
+      if (url.includes('/api/pm/tasks?project_id=erp')) return { ok: true, json: async () => ({ project_id: 'erp', tasks: [historical] }) };
+      if (url.endsWith('/api/pm/org')) return { ok: true, json: async () => ({ people: [] }) };
+      if (url.includes('/api/pm/milestones')) return { ok: true, json: async () => ({ milestones: [] }) };
+      if (url.includes('/api/command/tasks?project=erp')) return { ok: true, json: async () => ({ tasks: [] }) };
+      if (url.includes('/api/comms/task-activity?project_id=erp')) return { ok: true, json: async () => ({ state: 'OK', project_id: 'erp', reports: [report] }) };
+      return { ok: false, status: 404, json: async () => ({ message: `unexpected route: ${url}` }) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', { url: 'http://localhost/#studio/erp/tasks' });
+    vi.stubGlobal('window', dom.window);
+    vi.stubGlobal('document', dom.window.document);
+    vi.stubGlobal('navigator', dom.window.navigator);
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const host = dom.window.document.getElementById('root')!;
+    root = createRoot(host);
+    await act(async () => {
+      root?.render(<PmBoardSurface projectId="erp" />);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    const card = host.querySelector('[data-room-report="started"]');
+    expect(card?.textContent).toContain('LAST ROOM REPORT · IN PROGRESS');
+    expect(card?.textContent).toContain('@cursor · #17520');
+    expect(host.textContent).toContain('antigravity');
+    expect(host.textContent).toContain('HISTORICAL');
+    expect(host.textContent).toContain('NO EXECUTION RECORD');
+  });
 });

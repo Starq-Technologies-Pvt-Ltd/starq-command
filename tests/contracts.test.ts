@@ -50,9 +50,9 @@ describe('process truth is consumed, not computed', () => {
     expect(absent.length).toBeGreaterThan(0);
   });
 
-  it('forwards the hold state from canonical source', () => {
-    expect(surface.process_truth.hold_state?.implementation).toBe('ON_HOLD');
-    expect(surface.process_truth.hold_state?.authority).toBe('DEC-100');
+  it('forwards the current implementation decision from canonical source', () => {
+    expect(surface.process_truth.hold_state?.implementation).toBe('RESTART_AUTHORIZED');
+    expect(surface.process_truth.hold_state?.authority).toBe('DEC-109');
     expect(surface.process_truth.hold_state?.convergence_not_rewrite).toBe(true);
   });
 
@@ -84,8 +84,8 @@ describe('work truth forwards the authoritative scores', () => {
     expect(l1?.note).toMatch(/never the ERP percentage/i);
   });
 
-  it('carries the global blocker rather than restating the hold', () => {
-    expect(surface.work_truth.global_blocker?.authority).toBe('DEC-100');
+  it('does not carry a superseded global implementation blocker', () => {
+    expect(surface.work_truth.global_blocker).toBeNull();
   });
 });
 

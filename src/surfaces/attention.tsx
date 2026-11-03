@@ -102,11 +102,11 @@ const GROUP_ORDER = [
 const GROUP_SLOT: Record<string, string> = {
   'Founder decisions required': GROUP_ORDER[0],
   'Decision source': GROUP_ORDER[0],
-  'Canonical hold record': GROUP_ORDER[1],
+  'Implementation decision': GROUP_ORDER[1],
   'Hold source': GROUP_ORDER[1],
   'Global blocker': GROUP_ORDER[1],
   'Global blocker source': GROUP_ORDER[1],
-  'Restart wave (declared order, recorded before authorisation)': GROUP_ORDER[1],
+  'Restart wave (declared order)': GROUP_ORDER[1],
   'Family critical blocker': GROUP_ORDER[2],
   'Stage blocker': GROUP_ORDER[2],
   'Declared corrective task': GROUP_ORDER[2],
@@ -239,12 +239,12 @@ function TruthHealthBlock({ surface, historicalEvidence = false }: { surface: Co
         {(historicalEvidence ? [
           'History displays ingested canonical communication records and their evidence text. It does not reconstruct previous attention state or accepted closure.',
           'Recorded reports and current execution are separate. Missing independent verification remains UNKNOWN.',
-          'ERP implementation remains ON HOLD under DEC-100. Nothing on this surface authorises a restart.',
+          'DEC-100 preserves the historical implementation hold. Current process truth records RESTART_AUTHORIZED under DEC-109; this history does not prove task execution.',
         ] : [
           'This surface shows only what canonical source has already declared to be a Founder decision, a hold, a blocker or a conflict. It does not judge what deserves attention.',
           'A post that merely mentions the Founder is not a decision request. Message text is never read here.',
           'Nothing below is ranked, scored or ordered by importance. Groups appear in a fixed declaration order.',
-          'ERP implementation remains ON HOLD under DEC-100. Nothing on this surface authorises, implies or schedules a restart.',
+          'Current process truth records the ERP restart as RESTART_AUTHORIZED under DEC-109. That decision does not establish which task is executing.',
           'Every item on this surface links to a canonical field it names, and that field is shown beside it. There is no drill-down behind an item: the Room ledger is 17 MB against an 8 MB read cap, and this phase built no evidence route.',
         ]).map((line) => (
           <li key={line} className="flex gap-2 text-2xs text-muted-foreground">
@@ -457,13 +457,13 @@ const PEERS: Record<string, { question: string; source: string; groups: string[]
     ],
   },
   Holds: {
-    question: 'What does canonical source declare as held, and on whose authority?',
+    question: 'What does canonical source declare about implementation hold and restart authorization?',
     source: 'hold_state · global_blocker · restart_wave_after_authorization',
     groups: [
-      'Canonical hold record',
+      'Implementation decision',
       'Global blocker',
       'Hold source',
-      'Restart wave (declared order, recorded before authorisation)',
+      'Restart wave (declared order)',
     ],
   },
   History: {
@@ -780,6 +780,16 @@ const PEERS: Record<string, { question: string; source: string; groups: string[]
     */
     const holdPresent = pt.hold_state_present !== false;
     const hold = pt.hold_state ?? null;
+    const restartAuthorization = hold?.implementation === 'RESTART_AUTHORIZED'
+      ? 'RESTART_AUTHORIZED'
+      : hold?.implementation === 'ON_HOLD'
+        ? 'NOT AUTHORISED'
+        : 'AUTHORIZATION UNKNOWN';
+    const restartAuthorizationTone: AttentionRecord['tone'] = hold?.implementation === 'RESTART_AUTHORIZED'
+      ? 'founder'
+      : hold?.implementation === 'ON_HOLD'
+        ? 'hold'
+        : 'unknown';
     const absence: AttentionRecord[] = !holdPresent
       ? [
           record('hold:absent', 'Hold source', 'SOURCE MISSING', 'unknown', [
@@ -798,8 +808,9 @@ const PEERS: Record<string, { question: string; source: string; groups: string[]
 
     const holdRecord: AttentionRecord[] = hold
       ? [
-          record('hold:record', 'Canonical hold record', `ERP implementation ${hold.implementation ?? 'UNKNOWN'}`, 'hold', [
+          record('hold:record', 'Implementation decision', `ERP implementation ${hold.implementation ?? 'UNKNOWN'}`, restartAuthorizationTone, [
             ['Implementation', hold.implementation ?? 'UNKNOWN'],
+            ['Authorization', restartAuthorization],
             /*
               Authority, Effective and Restart requires are NOT listed here.
               `HoldBanner` is the single owner of the canonical hold record
@@ -815,11 +826,12 @@ const PEERS: Record<string, { question: string; source: string; groups: string[]
             */
             ['Convergence, not rewrite', hold.convergence_not_rewrite === true ? 'DECLARED' : 'NOT DECLARED'],
             ['Reason', hold.reason ?? 'UNKNOWN'],
-            ['Restart gate conditions', (hold.restart_gate_conditions ?? []).join(' · ') || 'UNKNOWN'],
+            ['Restart sequence basis', (hold.restart_gate_conditions ?? []).join(' · ') || 'UNKNOWN'],
             ['Canonical source', 'hold_state'],
           ], [
             val(hold.implementation),
             val(hold.reason),
+            restartAuthorization,
             /*
               The ordered restart gate CONDITIONS are rendered beside the record,
               not only inside the detail pane. They are the actionable content of
@@ -866,18 +878,18 @@ const PEERS: Record<string, { question: string; source: string; groups: string[]
     const wave: AttentionRecord[] = (pt.restart_wave_after_authorization ?? []).map((w, i) =>
       record(
         `hold:wave:${i}`,
-        'Restart wave (declared order, recorded before authorisation)',
+        'Restart wave (declared order)',
         `${w.order ?? i + 1}. ${w.task ?? 'UNKNOWN'}`,
-        'stale',
+        restartAuthorizationTone,
         [
           ['Order', String(w.order ?? 'UNKNOWN')],
           ['Task', String(w.task ?? 'UNKNOWN')],
           ['Title', String(w.title ?? 'UNKNOWN')],
           ['Nature', String(w.nature ?? 'UNKNOWN')],
-          ['Authorisation', 'NOT AUTHORISED'],
+          ['Authorization', restartAuthorization],
           ['Canonical source', 'restart_wave_after_authorization'],
         ],
-        [String(w.title ?? 'UNKNOWN'), String(w.nature ?? 'UNKNOWN'), 'NOT AUTHORISED'],
+        [String(w.title ?? 'UNKNOWN'), String(w.nature ?? 'UNKNOWN'), restartAuthorization],
         /*
           NO `data-attention-wave-row` MARKER HERE, DELIBERATELY.
 
@@ -1168,8 +1180,8 @@ function AttentionQueue({
           declaration order. Nothing here is ranked, scored, sorted or timed: there is no age, no clock
           and no day boundary, because no canonical open-decision record carries a wait-start timestamp
           and an age would be arithmetic against an invented baseline. A post that merely mentions the
-          Founder is not a decision request. ERP implementation remains ON HOLD under DEC-100, and
-          nothing on this surface authorises, implies or schedules a restart. Command does not
+          Founder is not a decision request. Current process truth records the ERP restart as
+          RESTART_AUTHORIZED under DEC-109; this does not assert task execution or schedule. Command does not
           re-ingest the Room ledger, so every execution-derived value is true as of the projection
           timestamp shown in the qualifier row and not now.
         </p>
@@ -1192,35 +1204,44 @@ function AttentionQueue({
  * queue, and every row still appears in the queue as a selectable record. It is
  * not hidden; it is the one place where the sequence is the content.
  *
- * The NOT AUTHORISED stamp is rendered once, on the panel, and every wave row
-  * repeats it in its detail. The failure this prevents is a bare
-  * authorisation claim appearing without its negation in front of it —
-  * because the word appears inside the negated form too, and a substring
-  * check cannot tell the two apart.
+ * Authorization is derived from the current canonical implementation state.
+ * RESTART_AUTHORIZED permits this sequence to proceed; it does not assert that
+ * any task is currently executing.
   */
 function RestartWaveTable({ surface }: { surface: CommandSurface }) {
   const wave = surface.process_truth.restart_wave_after_authorization ?? [];
   if (!wave.length) return null;
+  const hold = surface.process_truth.hold_state;
+  const authorized = hold?.implementation === 'RESTART_AUTHORIZED';
+  const onHold = hold?.implementation === 'ON_HOLD';
+  const authorizationState = authorized ? 'authorized' : onHold ? 'not-authorized' : 'unknown';
+  const authorizationLabel = authorized
+    ? 'RESTART_AUTHORIZED'
+    : onHold ? 'NOT AUTHORISED' : 'AUTHORIZATION UNKNOWN';
+  const scopeNote = authorized
+    ? 'Canonical source authorizes this sequence. Order is not a schedule, and it does not prove that any task is executing.'
+    : onHold
+      ? 'Canonical source records an implementation hold. This sequence is NOT AUTHORISED to proceed.'
+      : 'Canonical source does not establish whether this sequence is authorized.';
   return (
-    <Panel title="Restart wave" count={`${wave.length} declared · declared order, recorded before authorisation`}>
+    <Panel title="Restart wave" count={`${wave.length} declared · canonical order`}>
       <div className="body">
         <div className="mb-2 flex items-center gap-2">
           <span
             className="chip"
-            data-tone="stale"
-            data-attention-restart-wave="not-authorised"
+            data-tone={authorized ? 'founder' : onHold ? 'hold' : 'unknown'}
+            data-attention-restart-wave={authorizationState}
           >
-            NOT AUTHORISED
+            {authorizationLabel}
           </span>
           <span className="text-2xs text-muted-foreground">
-            This is the order canonical source declares it would happen in. It is a plan recorded
-            before authorisation, not a schedule, and no authorisation for it exists in this surface.
+            {scopeNote}
           </span>
         </div>
         <div className="command-table-wrap short">
           <table>
             <caption>
-              Restart wave · declared order before authorisation · NOT AUTHORISED
+              Restart wave · declared order · {authorizationLabel}
             </caption>
             <thead>
               <tr>
@@ -1248,18 +1269,19 @@ function RestartWaveTable({ surface }: { surface: CommandSurface }) {
 }
 
 /**
- * The restart gate conditions, on the peer that owns them.
+ * The restart authorization basis, on the peer that owns it.
  *
  * They are an ORDERED LIST and `HoldBanner` is a one-line rail with nowhere to
  * put one. This is therefore not duplication of the banner — it is the
- * actionable content of a hold, and removing it would delete information rather
- * than correct it. The Phase 7 guard asserts this survives.
+ * source-recorded reason and ordered sequence basis remain visible after the
+ * implementation hold is lifted. The Phase 7 guard asserts this survives.
  */
 function HoldDetailNote({ surface }: { surface: CommandSurface }) {
   const gates = surface.process_truth.hold_state?.restart_gate_conditions ?? [];
   if (!gates.length) return null;
+  const authorized = surface.process_truth.hold_state?.implementation === 'RESTART_AUTHORIZED';
   return (
-    <Panel title="Restart gate conditions" count={`${gates.length} declared`}>
+    <Panel title="Restart authorization basis" count={`${gates.length} declared`}>
       <div className="body">
         <ol className="space-y-1">
           {gates.map((g) => (
@@ -1270,8 +1292,9 @@ function HoldDetailNote({ surface }: { surface: CommandSurface }) {
           ))}
         </ol>
         <p className="mt-2 text-2xs text-muted-foreground">
-          Declared order, recorded before authorisation. This is a plan, not a schedule, and no
-          authorisation for it exists in this surface.
+          {authorized
+            ? 'DEC-109 authorizes the implementation sequence. This basis is not a schedule and does not prove any task is executing.'
+            : 'This is the source-recorded sequence basis, not a schedule. Authorization is shown from the current canonical implementation state.'}
         </p>
       </div>
     </Panel>

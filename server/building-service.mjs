@@ -41,9 +41,10 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { resolveWorkspace } from './paths.mjs';
-import { buildBuilding, BUILDING_SOURCES, readBuildingSource } from './building.mjs';
+import { buildBuilding, BUILDING_SOURCES, NEXUS_TASK_SOURCES, isPathContained, readBuildingSource, resolveNexusTaskSourcePath } from './building.mjs';
 import { HISTORICAL_NEXUS_WORKSPACE_ROOT } from './historical-pm-snapshot.mjs';
 import { readNexusLibraryDocument, searchNexusLibrary } from './nexus-library.mjs';
 import { nexusCortexNeighborhood, nexusCortexStats, searchNexusCortex } from './nexus-cortex.mjs';
@@ -74,35 +75,71 @@ async function erpHoldState() {
 
 // -- BUILDING PROJECTION CACHE ----------------------------------------------
 /**
- * Same contract as the data service's cache: keyed on (size, mtime) of every
- * declared source plus the ERP surface's own assembly time, re-checked after
- * assembly so a torn read is served but never stored. generated_at keeps the
- * real derivation time; a projection_cache block declares HIT or MISS.
+ * Keyed on resolved source paths and file metadata plus the ERP surface's own
+ * assembly time, re-checked after assembly so a torn read is served but never
+ * stored. generated_at keeps the real derivation time; a projection_cache
+ * block declares HIT or MISS.
  */
 let buildingCache = null;
 
-function buildingFingerprint(workspaceRoot) {
+export function buildingFingerprint(workspaceRoot, surface = null) {
   const parts = [];
   for (const rel of BUILDING_SOURCES) {
     let p = 'ABSENT';
-    try {
-      const st = fs.statSync(path.join(workspaceRoot ?? '.', rel));
-      p = st.size + ':' + Math.trunc(st.mtimeMs);
-    } catch {
+    if (NEXUS_TASK_SOURCES.includes(rel)) {
+      if (!workspaceRoot) {
+        p = 'UNAVAILABLE';
+      } else {
+        try {
+          const selected = resolveNexusTaskSourcePath(workspaceRoot, rel);
+          const selectedRoot = fs.realpathSync(selected.source_root);
+          const real = fs.realpathSync(selected.path);
+          if (!isPathContained(real, selectedRoot)) {
+            p = `${selected.source_role}:UNREADABLE:REFUSED_ESCAPE`;
+          } else {
+            const st = fs.statSync(real);
+            const contentHash = st.isFile() && st.size <= 8 * 1024 * 1024
+              ? crypto.createHash('sha256').update(fs.readFileSync(real)).digest('hex')
+              : null;
+            if (!st.isFile() || st.size > 8 * 1024 * 1024) {
+              p = `${selected.source_role}:UNREADABLE:OUTSIDE_READ_BOUND`;
+            } else {
+              p = `${selected.source_role}:${real}:${st.size}:${Math.trunc(st.mtimeMs)}:${Math.trunc(st.ctimeMs)}:${contentHash}`;
+            }
+          }
+        } catch (error) {
+          const state = error?.code === 'ENOENT' ? 'UNAVAILABLE' : 'UNREADABLE';
+          const reason = /refused|outside|escapes|escape|link|safely/i.test(error?.message ?? '')
+            ? 'REFUSED'
+            : error?.code ?? 'READ_ERROR';
+          p = `${state}:${reason}`;
+        }
+      }
+    } else {
       try {
-        const st = fs.statSync(rel);
+        const st = fs.statSync(path.join(workspaceRoot ?? '.', rel));
         p = st.size + ':' + Math.trunc(st.mtimeMs);
-      } catch { /* ABSENT */ }
+      } catch {
+        try {
+          const st = fs.statSync(rel);
+          p = st.size + ':' + Math.trunc(st.mtimeMs);
+        } catch { /* ABSENT */ }
+      }
     }
     parts.push(rel + '=' + p);
   }
+  // The ERP status is projected from the data service's decision contract, not
+  // from a Building source file. Include the consumed value in this cache key
+  // so a DEC-109 update invalidates an already assembled Building projection.
+  parts.push(`erp-hold-state=${JSON.stringify(surface?.process_truth?.hold_state ?? null)}`);
   return parts.join('|');
 }
 
 export async function buildBuildingProjectionCached() {
   const resolved = resolveWorkspace();
   const workspaceRoot = typeof resolved === 'string' ? resolved : resolved?.root ?? null;
-  const before = buildingFingerprint(workspaceRoot);
+  const surface = await erpHoldState();
+  const before = buildingFingerprint(workspaceRoot, surface);
 
   if (buildingCache && buildingCache.key === before) {
     buildingCache.hits += 1;
@@ -119,9 +156,10 @@ export async function buildBuildingProjectionCached() {
   }
 
   const startedAt = Date.now();
-  const projection = await buildBuildingProjection();
+  const projection = await buildBuildingProjection(surface);
   const buildMs = Date.now() - startedAt;
-  const after = buildingFingerprint(workspaceRoot);
+  const afterSurface = await erpHoldState();
+  const after = buildingFingerprint(workspaceRoot, afterSurface);
 
   if (after !== before) {
     return {
@@ -137,14 +175,14 @@ export async function buildBuildingProjectionCached() {
   };
 }
 
-export async function buildBuildingProjection() {
+export async function buildBuildingProjection(surfaceOverride = null) {
   // `resolveWorkspace()` returns { root, source, attempted? } — the read guard
   // needs the resolved path string, not the descriptor. Passing the descriptor
   // makes every source read fail with a TypeError, which the projection
   // correctly reports as UNREADABLE rather than as a healthy empty board.
   const resolved = resolveWorkspace();
   const workspaceRoot = typeof resolved === 'string' ? resolved : resolved?.root ?? null;
-  const surface = await erpHoldState();
+  const surface = surfaceOverride ?? await erpHoldState();
   const building = buildBuilding(workspaceRoot, surface, {
     historicalWorkspaceRoot: HISTORICAL_NEXUS_WORKSPACE_ROOT,
   });

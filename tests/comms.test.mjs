@@ -9,6 +9,7 @@ import {
   channelMessages,
   listChannels,
   peopleDirectory,
+  roomTaskActivity,
   searchMessages,
   threadMessages,
   toMessage,
@@ -20,13 +21,13 @@ function rec(seq, over = {}) {
     brokerSequence: seq,
     receivedAt: `2026-10-28T00:0${seq}:00.000Z`,
     eventId: over.eventId ?? `ev${seq}`,
-    recordHash: `hash${seq}`,
+    recordHash: over.recordHash ?? `hash${seq}`,
     evaluatedDeliveryType: over.delivery ?? 'CC_CONTEXT',
-    authorityDecision: { senderAuthorityLevel: over.authority ?? 'CORE_AGENT' },
+    authorityDecision: { senderAuthorityLevel: over.authority ?? 'CORE_AGENT', allowed: over.allowed ?? true },
     event: {
       createdAt: `2026-10-28T00:0${seq}:00.000Z`,
       senderHandle: over.from ?? 'codex',
-      senderIdentityId: 'ident_x',
+      senderIdentityId: over.identityId ?? 'ident_x',
       type: over.type ?? 'MESSAGE',
       body: over.body ?? `message ${seq}`,
       mentions: over.mentions ?? [],
@@ -39,6 +40,9 @@ function rec(seq, over = {}) {
         actionRequired: over.actionRequired ?? 'NONE',
         references: [],
         project: over.project ?? 'general',
+        task: over.metadataTask,
+        action: over.action,
+        dec072: over.dec072,
       },
     },
   };
@@ -157,4 +161,30 @@ test('compose maps a project channel to a tag and a reply to --reply-to', () => 
 test('compose refuses an empty sender or body', () => {
   assert.throws(() => buildSendArgs({ from: '', body: 'x' }));
   assert.throws(() => buildSendArgs({ from: 'claude', body: '  ' }));
+});
+
+test('Room task projection uses only the latest fully attributed structured report', () => {
+  const identities = { identities: [{ identityId: 'cursor-id', canonicalHandle: 'cursor', status: 'active' }] };
+  const taskRec = (seq, over) => rec(seq, { ...over, eventId: seq.toString(16).padStart(64, '0'), recordHash: seq.toString(16).padStart(64, '0') });
+  const start = taskRec(10, { from: 'cursor', identityId: 'cursor-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'starq-erp', action: 'started' });
+  const blocked = taskRec(11, { from: 'cursor', identityId: 'cursor-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'erp', action: 'blocked' });
+  const invalid = taskRec(12, { from: 'cursor', identityId: 'cursor-id', taskId: '17517', metadataTask: '17517', project: 'erp', action: 'started', body: 'mentions SERP-354' });
+  const mismatch = taskRec(13, { from: 'cursor', identityId: 'cursor-id', taskId: 'SERP-354', metadataTask: '17517', project: 'erp', action: 'started' });
+  const unauthorized = taskRec(14, { from: 'cursor', identityId: 'cursor-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'erp', action: 'started', allowed: false });
+  const impostor = taskRec(15, { from: 'cursor', identityId: 'other-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'erp', action: 'started' });
+  const unverifiedAccept = taskRec(16, { from: 'cursor', identityId: 'cursor-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'erp', action: 'accepted' });
+  const reports = roomTaskActivity([start, blocked, invalid, mismatch, unauthorized, impostor, unverifiedAccept], identities);
+  const report = reports.find((r) => r.task_id === 'SERP-354');
+  assert.ok(report);
+  assert.equal(report.status, 'BLOCKED');
+  assert.equal(report.from, 'cursor');
+  assert.equal(report.sequence, 11);
+  assert.equal(reports.some((r) => r.task_id === 'SERP-354' && r.sequence >= 12), false, 'mismatched, unauthorized, unregistered and unattested reports do not advance SERP-354');
+});
+
+test('Room task accepted status requires a DEC-072 independent verifier record', () => {
+  const identities = { identities: [{ identityId: 'reviewer-id', canonicalHandle: 'reviewer', status: 'active' }] };
+  const accepted = rec(20, { eventId: '2'.repeat(64), recordHash: '3'.repeat(64), from: 'reviewer', identityId: 'reviewer-id', taskId: 'SERP-354', metadataTask: 'SERP-354', project: 'erp', action: 'accepted', dec072: { builder: 'cursor', reviewer: 'reviewer', decision: 'ACCEPTED' } });
+  const reports = roomTaskActivity([accepted], identities);
+  assert.equal(reports[0].status, 'ACCEPTED');
 });

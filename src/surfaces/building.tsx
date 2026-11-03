@@ -1618,10 +1618,8 @@ export function BuildingSurface({
 /**
  * ROOM STATE BAND — identity, state, and the qualifiers a room must never lose.
  *
- * One band, every tab, both rooms. It carries the ERP ON_HOLD chip and the
- * Hoadha PREPARED / NOT STARTED chip with the live/proposed separation stated,
- * because those are the two states the product contract forbids being routed
- * around.
+ * One band, every tab, both rooms. It carries the current ERP decision and the
+ * Hoadha PREPARED / NOT STARTED chip with the live/proposed separation stated.
  *
  * It does NOT carry the canonical hold record — authority, effective date,
  * restart requirement. That belongs to `HoldBanner` above and is not restated
@@ -1658,9 +1656,12 @@ function RoomStateBand({
   return (
     <div className="room-state-band" data-room-state-band="erp">
       <span className="label-micro">starqERP</span>
-      <Chip value={state} tone={state === 'ON_HOLD' ? 'hold' : 'room'} />
+      <Chip
+        value={state}
+        tone={state === 'ON_HOLD' ? 'hold' : state === 'RESTART_AUTHORIZED' ? 'founder' : undefined}
+      />
       <span className="text-2xs text-muted-foreground">
-        {hold ? 'hold declared in the banner above' : 'hold state unreadable from source'} ·
+        {hold ? hold.implementation ?? 'UNKNOWN' : 'decision state unreadable from source'} ·
         process closure governs maturity
       </span>
       <span className="spacer" />

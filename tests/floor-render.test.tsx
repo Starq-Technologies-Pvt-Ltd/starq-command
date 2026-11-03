@@ -288,11 +288,11 @@ describe('the Dev Studio Floor renders from the real surface', () => {
     expect(html).not.toContain('D:/');
   });
 
-  it('carries the hold authority onto the floor surface', () => {
-    // The floor is an execution surface, but the ERP hold banner is rendered
-    // above every surface by App.tsx, and the floor must not contradict it.
-    expect(surface.process_truth.hold_state?.authority).toBe('DEC-100');
-    expect(text).toMatch(/ON HOLD under DEC-100/);
+  it('carries the current ERP decision without claiming task execution', () => {
+    expect(surface.process_truth.hold_state?.authority).toBe('DEC-109');
+    expect(surface.process_truth.hold_state?.implementation).toBe('RESTART_AUTHORIZED');
+    expect(text).toMatch(/RESTART_AUTHORIZED under DEC-109/);
+    expect(text).toMatch(/task execution must be established from ERP work records/i);
   });
 
   it('renders every dimension state the Phase 2 floor defines as a distinct word', () => {

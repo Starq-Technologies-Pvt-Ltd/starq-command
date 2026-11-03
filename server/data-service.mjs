@@ -40,6 +40,7 @@ import { readRoomVisibility } from './room-work.mjs';
 import { readRoomSnapshot, readRoomBoundSnapshot } from './room-snapshot.mjs';
 import {
   channelMessages,
+  roomTaskActivity,
   listChannels,
   peopleDirectory,
   searchMessages,
@@ -1268,6 +1269,23 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { state: 'OK', tail_sequence: c.tail_sequence, assembled_at: c.assembled_at, ...page });
   }
 
+  if (url.pathname === '/api/comms/task-activity') {
+    const c = commsRecords();
+    const projectId = url.searchParams.get('project_id') || 'erp';
+    if (!c.ok) {
+      return sendJson(res, 503, { state: c.state || STATE.UNAVAILABLE, error: c.reason, project_id: projectId, reports: [] });
+    }
+    const identities = loadSource(CANONICAL.identities, resolveWorkspace().root);
+    if (identities.state !== STATE.OK || !identities.data) {
+      return sendJson(res, 503, { state: identities.state || STATE.UNAVAILABLE, error: identities.reason || 'identity registry unavailable', project_id: projectId, reports: [] });
+    }
+    return sendJson(res, 200, {
+      state: 'OK', project_id: projectId, tail_sequence: c.tail_sequence,
+      assembled_at: c.assembled_at,
+      reports: roomTaskActivity(c.records, identities.data, projectId),
+    });
+  }
+
   if (url.pathname === '/api/comms/search') {
     const c = commsRecords();
     const q = url.searchParams.get('q') || '';
@@ -1429,5 +1447,5 @@ export { server, PORT, HOST };
 // future route until it is reviewed for observation-only safety.
 export const OBSERVATION_READ_ROUTES = new Set([
   '/api/health', '/api/surface', '/api/work-packages',
-  '/api/comms/channels', '/api/comms/messages', '/api/comms/search', '/api/comms/people',
+  '/api/comms/channels', '/api/comms/messages', '/api/comms/task-activity', '/api/comms/search', '/api/comms/people',
 ]);

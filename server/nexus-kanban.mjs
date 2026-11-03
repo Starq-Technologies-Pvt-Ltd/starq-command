@@ -71,7 +71,7 @@ export const NEXUS_BOARDS = Object.freeze([
   { id: 'command', name: 'Starq Command', prefix: 'CMD', file: null, group: 'Operating', description: 'Command itself — current operating work.' },
   { id: 'studio', name: 'Starq Studio', prefix: 'STU', file: 'starq-studio-tasks.json', group: 'Studio', description: 'AI-native coding studio capability.' },
   { id: 'web', name: 'Starq Web', prefix: 'SQW', file: 'starq-web-tasks.json', group: 'Public web', description: 'Enterprise website and commercial launch.' },
-  { id: 'erp', name: 'starqERP', prefix: 'SERP', file: 'starq-erp-tasks.json', group: 'Products', description: 'AI-native multi-tenant SME ERP. Implementation remains on hold (DEC-100); the board is still the working record.' },
+  { id: 'erp', name: 'starqERP', prefix: 'SERP', file: 'starq-erp-tasks.json', group: 'Products', description: 'Founder-authorized ERP implementation (DEC-109). Imported task statuses remain historical source evidence until individually revalidated.' },
   { id: 'hoadha', name: 'Hoadha', prefix: 'DHIV', file: 'hoadha-tasks.json', group: 'Products', description: 'Hoadha core marketplace board.' },
   { id: 'hoadha-social', name: 'Hoadha Social', prefix: 'HSOC', file: 'hoadha-social-tasks.json', group: 'Products', description: 'Hoadha commercial social standard.' },
   { id: 'hoadha-concierge', name: 'Hoadha HIE', prefix: 'HIE', file: 'hoadha-concierge-tasks.json', group: 'Products', description: 'Hoadha intelligence engine / concierge.' },
@@ -163,9 +163,13 @@ function readBoardFile(file, dataRoot = NEXUS_DATA_ROOT) {
   return { file, full, tasks: parsed.tasks, project: parsed.project ?? file };
 }
 
-export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_ROOT }) {
+export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_ROOT, boardIds = null }) {
   const ts = nowIso();
   const summary = { imported: 0, preserved: 0, skipped: 0, boards: [], errors: [] };
+  const selectedBoards = boardIds == null ? NEXUS_BOARDS : NEXUS_BOARDS.filter((board) => boardIds.includes(board.id));
+  if (boardIds != null && (selectedBoards.length !== new Set(boardIds).size || new Set(boardIds).size !== boardIds.length)) {
+    throw new Error(`Unknown or duplicate Nexus board id in filter: ${boardIds.join(', ')}`);
+  }
   const getProject = handle.prepare('SELECT * FROM pm_projects WHERE id = ?');
   const insProject = handle.prepare(
     'INSERT INTO pm_projects (id, name, prefix, description, hold_state, source_gap, next_seq, created_at) VALUES (?, ?, ?, ?, NULL, ?, 1, ?)',
@@ -216,9 +220,9 @@ export function importNexusBoards(handle, { nowIso, json, dataRoot = NEXUS_DATA_
     `INSERT INTO pm_status_log (task_id, event_type, from_status, to_status, actor, detail, timestamp, room_sync)
      VALUES (?, 'IMPORTED', NULL, ?, 'nexus-import', ?, ?, 'NOT_REQUIRED')`,
   );
-  const sourceNote = 'Writable Command board seeded from Nexus JSON. Original ids and column status preserved. StarqNexus files were not modified.';
+  const sourceNote = 'Historical Nexus snapshot imported read-only as HISTORICAL_NEXUS source evidence. Original ids and source statuses are preserved; they do not establish current execution. StarqNexus files were not modified.';
 
-  for (const board of NEXUS_BOARDS) {
+  for (const board of selectedBoards) {
     const existing = getProject.get(board.id);
     if (!existing) {
       insProject.run(board.id, board.name, board.prefix, board.description, board.file ? sourceNote : null, ts);

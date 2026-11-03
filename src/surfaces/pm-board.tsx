@@ -28,12 +28,14 @@ import {
   type PmMilestone,
   type PmOrgPerson,
   type PmPriority,
+  type PmStatus,
   type PmProject,
   type PmResult,
   type PmTask,
   type PmTaskDetail,
 } from '@/lib/pm-client';
 import { refusalFix } from '@/lib/stage-refusal';
+import { useAdaptiveKanban, CollapsedColumnStrip } from '@/components/adaptive-kanban';
 
 function requestedTaskId(): string | null {
   if (typeof window === 'undefined') return null;
@@ -212,6 +214,226 @@ function PersonSelect({
   );
 }
 
+type ExecutionRecord = {
+  state?: string;
+  builderSeat?: string;
+  verifierSeat?: string;
+  herdrSessionId?: string;
+  verifierSessionId?: string;
+  workspacePath?: string;
+  verifierWorkspacePath?: string;
+  leaseId?: string;
+  candidateSha?: string;
+  branch?: string;
+};
+
+type RoomTaskReport = {
+  task_id: string;
+  project_id: string;
+  status: string;
+  action: string;
+  from: string;
+  sender_identity_id: string;
+  sequence: number;
+  event_id: string;
+  record_hash: string;
+  at: string;
+  received_at: string;
+  subject: string | null;
+};
+
+interface PmBoardGridProps {
+  projectId: string;
+  tasks: PmTask[];
+  visible: PmTask[];
+  selectedId: string | null;
+  select: (id: string) => void;
+  move: (task: PmTask, status: PmStatus) => void;
+  executionByTask: Record<string, ExecutionRecord>;
+  roomReportByTask: Record<string, RoomTaskReport>;
+}
+
+function PmBoardGrid({
+  projectId,
+  tasks,
+  visible,
+  selectedId,
+  select,
+  move,
+  executionByTask,
+  roomReportByTask,
+}: PmBoardGridProps) {
+  const countsByStatus = React.useMemo(() => {
+    const map: Record<PmStatus, number> = {
+      TODO: 0,
+      NEXT: 0,
+      IN_PROGRESS: 0,
+      BLOCKED: 0,
+      DONE: 0,
+    };
+    for (const t of visible) {
+      if (map[t.status] !== undefined) {
+        map[t.status] += 1;
+      }
+    }
+    return map;
+  }, [visible]);
+
+  const {
+    isColumnCollapsed,
+    toggleColumn,
+    desktopGridTemplateColumns,
+  } = useAdaptiveKanban(PM_STATUSES, countsByStatus, {
+    isDataReady: true,
+    navigationKey: projectId,
+  });
+
+  return (
+    <div
+      className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3 xl:grid-cols-5 overflow-x-auto min-w-full"
+      style={{ gridTemplateColumns: desktopGridTemplateColumns }}
+      data-testid="kanban-grid"
+    >
+      {PM_STATUSES.map((s) => {
+        const col = visible.filter((t) => t.status === s);
+        const collapsed = isColumnCollapsed(s);
+
+        if (collapsed) {
+          return (
+            <CollapsedColumnStrip
+              key={s}
+              id={s}
+              title={PM_STATUS_LABELS[s]}
+              count={col.length}
+              onToggle={() => toggleColumn(s)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const id = e.dataTransfer.getData('text/plain');
+                const task = tasks.find((row) => row.id === id);
+                if (task && task.status !== s) void move(task, s);
+              }}
+            />
+          );
+        }
+
+        return (
+          <section
+            key={s}
+            className="min-w-0 rounded border border-border bg-background/40"
+            aria-label={`${PM_STATUS_LABELS[s]} lane`}
+            data-lane={s}
+            data-collapsed="false"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const id = e.dataTransfer.getData('text/plain');
+              const task = tasks.find((row) => row.id === id);
+              if (task && task.status !== s) void move(task, s);
+            }}
+          >
+            <header
+              className="flex items-center justify-between border-b border-border bg-card px-2.5 py-2 cursor-pointer select-none"
+              onClick={() => toggleColumn(s)}
+              title={`Click to collapse ${PM_STATUS_LABELS[s]} lane`}
+            >
+              <h3 className="font-mono text-[10px] font-semibold tracking-wide">{PM_STATUS_LABELS[s]}</h3>
+              <span className="chip" data-tone="muted">{col.length}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleColumn(s); }}
+                aria-expanded="true"
+                aria-label={`Collapse ${PM_STATUS_LABELS[s]} lane`}
+                title="Collapse column"
+                className="text-muted-foreground hover:text-foreground text-[10px] px-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
+              >
+                ⇥
+              </button>
+            </header>
+            <ul className="grid max-h-96 content-start gap-1.5 overflow-y-auto p-1.5">
+              {col.length === 0 ? (
+                <li className="py-8 text-center text-2xs text-muted-foreground/60 italic select-none">
+                  No cards in this lane
+                </li>
+              ) : null}
+              {col.map((t) => {
+                const priorityTone: Tone =
+                  t.priority === 'P0' ? 'drift' :
+                  t.priority === 'P1' ? 'stale' : 'muted';
+                const priorityDisplay = t.priority_raw && t.priority_raw !== t.priority
+                  ? `${t.priority} (${t.priority_raw})`
+                  : t.priority;
+                const isLive = t.provenance === 'LIVE';
+                const cardExecution = executionByTask[t.id];
+                const roomReport = roomReportByTask[t.id];
+                return (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      aria-pressed={selectedId === t.id}
+                      onClick={() => void select(t.id)}
+                      className={`w-full rounded border p-2 text-left transition-colors ${
+                        selectedId === t.id
+                          ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]'
+                          : 'border-border bg-card hover:border-border-hover'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1">
+                        <span className="font-mono text-[10px] font-semibold text-[hsl(var(--room))]">{t.id}</span>
+                        <div className="flex items-center gap-1">
+                          <Chip value={priorityDisplay} tone={priorityTone} />
+                          <span className="chip" data-tone={isLive ? 'room' : 'muted'}>
+                            {isLive ? 'LIVE' : 'HISTORICAL'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
+                      {(t.epic || t.milestone) ? (
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {t.epic ? <span className="chip" data-tone="room">Epic: {t.epic}</span> : null}
+                          {t.milestone ? <span className="chip" data-tone="muted">M: {t.milestone}</span> : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {(t.workers && t.workers.length > 1 ? t.workers : [t.owner]).map((w) => (
+                            <span key={w} className="rounded border border-border/70 bg-surface-0/60 px-1 py-0.2 font-mono text-[9px] text-muted-foreground">
+                              {w}
+                            </span>
+                          ))}
+                        </div>
+                        <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          [{t.stage ?? t.status}]
+                        </span>
+                      </div>
+                      {cardExecution ? (
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state={cardExecution.state}>
+                          <Chip value={`EXEC ${cardExecution.state}`} tone={cardExecution.state === 'BLOCKED' ? 'drift' : 'room'} />
+                          <span className="text-[10px] text-muted-foreground">{cardExecution.builderSeat ?? 'NO BUILDER'} · {cardExecution.branch ?? 'NO WORKTREE'}</span>
+                        </span>
+                      ) : t.status === 'IN_PROGRESS' ? (
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state="NONE">
+                          <Chip value="NO EXECUTION RECORD" tone="stale" />
+                        </span>
+                      ) : null}
+                      {roomReport ? (
+                        <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-room-report={roomReport.action} title={`Room event ${roomReport.event_id} · ${roomReport.record_hash}`}>
+                          <Chip value={`LAST ROOM REPORT · ${roomReport.status.replaceAll('_', ' ')}`} tone={roomReport.status === 'BLOCKED' ? 'drift' : 'room'} />
+                          <span className="text-[10px] text-muted-foreground">@{roomReport.from} · #{roomReport.sequence} · {new Date(roomReport.at).toLocaleString()}</span>
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [project, setProject] = React.useState<PmProject | null>(null);
   const [tasks, setTasks] = React.useState<PmTask[] | null>(null);
@@ -261,6 +483,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
   const [sortBy, setSortBy] = React.useState<'DEFAULT' | 'PRIORITY' | 'ID' | 'UPDATED'>('DEFAULT');
 
   const [executionByTask, setExecutionByTask] = React.useState<Record<string, { state?: string; builderSeat?: string; verifierSeat?: string; herdrSessionId?: string; verifierSessionId?: string; workspacePath?: string; verifierWorkspacePath?: string; leaseId?: string; candidateSha?: string; branch?: string }>>({});
+  const [roomReportByTask, setRoomReportByTask] = React.useState<Record<string, RoomTaskReport>>({});
 
   const setActor = (value: string) => { setActorState(value); storeClaimedActor(value); };
   const who = actor;
@@ -285,6 +508,19 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
       }
       setExecutionByTask(next);
     } catch { /* PM remains usable when the execution surface is unavailable. */ }
+  }, [projectId]);
+
+  const loadRoomReports = React.useCallback(async () => {
+    try {
+      const response = await fetch(`/api/comms/task-activity?project_id=${encodeURIComponent(projectId)}`);
+      if (!response.ok) return;
+      const body = await response.json();
+      const next: Record<string, RoomTaskReport> = {};
+      for (const report of body.reports ?? []) {
+        if (report.task_id && report.project_id === projectId) next[report.task_id] = report;
+      }
+      setRoomReportByTask(next);
+    } catch { /* A Room outage must not alter PM task state. */ }
   }, [projectId]);
 
   const load = React.useCallback(async (keepSelected?: string | null) => {
@@ -368,9 +604,10 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
 
   React.useEffect(() => {
     void loadExecution();
-    const timer = window.setInterval(() => void loadExecution(), 10000);
+    void loadRoomReports();
+    const timer = window.setInterval(() => { void loadExecution(); void loadRoomReports(); }, 10000);
     return () => window.clearInterval(timer);
-  }, [loadExecution]);
+  }, [loadExecution, loadRoomReports]);
 
   const applyRead = (data: PmTaskDetail, replaceEdits: boolean) => {
     setDetail(data);
@@ -669,7 +906,7 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
           <PmNav current={projectId} />
           {project.id === 'erp' ? (
             <p className="mx-3 mb-2 text-2xs text-muted-foreground">
-              General DEC-100 ERP implementation freeze was lifted per Founder Room #14394. CP2 HOLD #12690 remains active for payment-command/payment-dispatch scope.
+              DEC-100's administrative implementation hold was lifted by DEC-109 on 29 October 2026; its business-process completion doctrine remains in force. CP2 HOLD #12690 remains scoped to payment-command/payment-dispatch work.
             </p>
           ) : null}
 
@@ -779,89 +1016,16 @@ export function PmBoardSurface({ projectId }: { projectId: string }) {
           {tasks.length === 0 ? <PmEmpty label="No tasks on this board." /> : null}
           {tasks.length > 0 && visible.length === 0 ? <PmEmpty label="No cards match these filters." /> : null}
 
-          <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-3 xl:grid-cols-5">
-            {PM_STATUSES.map((s) => {
-              const col = visible.filter((t) => t.status === s);
-              return (
-                <section
-                  key={s}
-                  className="min-w-0 rounded border border-border bg-background/40"
-                  aria-label={`${PM_STATUS_LABELS[s]} lane`}
-                  data-lane={s}
-                >
-                  <header className="flex items-center justify-between border-b border-border bg-card px-2.5 py-2">
-                    <h3 className="font-mono text-[10px] font-semibold tracking-wide">{PM_STATUS_LABELS[s]}</h3>
-                    <span className="chip" data-tone="muted">{col.length}</span>
-                  </header>
-                  <ul className="grid max-h-96 content-start gap-1.5 overflow-y-auto p-1.5">
-                    {col.map((t) => {
-                      const priorityTone: Tone =
-                        t.priority === 'P0' ? 'drift' :
-                        t.priority === 'P1' ? 'stale' : 'muted';
-                      const priorityDisplay = t.priority_raw && t.priority_raw !== t.priority
-                        ? `${t.priority} (${t.priority_raw})`
-                        : t.priority;
-                      const isLive = t.provenance === 'LIVE';
-                      const cardExecution = executionByTask[t.id];
-                      return (
-                        <li key={t.id}>
-                          <button
-                            type="button"
-                            aria-pressed={selectedId === t.id}
-                            onClick={() => void select(t.id)}
-                            className={`w-full rounded border p-2 text-left transition-colors ${
-                              selectedId === t.id
-                                ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]'
-                                : 'border-border bg-card hover:border-border-hover'
-                            }`}
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-1">
-                              <span className="font-mono text-[10px] font-semibold text-[hsl(var(--room))]">{t.id}</span>
-                              <div className="flex items-center gap-1">
-                                <Chip value={priorityDisplay} tone={priorityTone} />
-                                <span className="chip" data-tone={isLive ? 'room' : 'muted'}>
-                                  {isLive ? 'LIVE' : 'HISTORICAL'}
-                                </span>
-                              </div>
-                            </div>
-                            <span className="mt-1 block text-xs font-medium leading-5">{t.title}</span>
-                            {(t.epic || t.milestone) ? (
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {t.epic ? <span className="chip" data-tone="room">Epic: {t.epic}</span> : null}
-                                {t.milestone ? <span className="chip" data-tone="muted">M: {t.milestone}</span> : null}
-                              </div>
-                            ) : null}
-                            <div className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1 text-[10px] text-muted-foreground">
-                              <div className="flex flex-wrap items-center gap-1">
-                                {(t.workers && t.workers.length > 1 ? t.workers : [t.owner]).map((w) => (
-                                  <span key={w} className="rounded border border-border/70 bg-surface-0/60 px-1 py-0.2 font-mono text-[9px] text-muted-foreground">
-                                    {w}
-                                  </span>
-                                ))}
-                              </div>
-                              <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                [{t.stage ?? t.status}]
-                              </span>
-                            </div>
-                            {cardExecution ? (
-                              <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state={cardExecution.state}>
-                                <Chip value={`EXEC ${cardExecution.state}`} tone={cardExecution.state === 'BLOCKED' ? 'drift' : 'room'} />
-                                <span className="text-[10px] text-muted-foreground">{cardExecution.builderSeat ?? 'NO BUILDER'} · {cardExecution.branch ?? 'NO WORKTREE'}</span>
-                              </span>
-                            ) : t.status === 'IN_PROGRESS' ? (
-                              <span className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-border pt-1" data-execution-state="NONE">
-                                <Chip value="NO EXECUTION RECORD" tone="stale" />
-                              </span>
-                            ) : null}
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </section>
-              );
-            })}
-          </div>
+          <PmBoardGrid
+            projectId={projectId}
+            tasks={tasks}
+            visible={visible}
+            selectedId={selectedId}
+            select={select}
+            move={move}
+            executionByTask={executionByTask}
+            roomReportByTask={roomReportByTask}
+          />
         </Panel>
       </section>
 
