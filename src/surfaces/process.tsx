@@ -226,10 +226,17 @@ function FamilyCard({ family }: { family: ProcessFamily }) {
 function ConstraintsRail({
   evidenceStages,
   invariantState,
+  implementation,
 }: {
   evidenceStages: number;
   invariantState: string | null;
+  implementation: string;
 }) {
+  const implementationNote = implementation === 'RESTART_AUTHORIZED'
+    ? 'The current canonical decision authorizes StarqERP implementation. Active task execution and acceptance are sourced separately.'
+    : implementation === 'ON_HOLD'
+      ? 'StarqERP implementation is on hold in the current canonical decision. This surface does not schedule work.'
+      : 'Current StarqERP implementation authorization is UNKNOWN. This surface does not infer it.';
   const constraints: { icon: typeof Scale; text: string }[] = [
     {
       icon: Scale,
@@ -255,7 +262,7 @@ function ConstraintsRail({
     },
     {
       icon: Lock,
-      text: 'ERP implementation remains on hold under the Founder course correction. This surface reports canonical process truth; it does not authorise, imply or schedule any restart.',
+      text: implementationNote,
     },
   ];
 
@@ -317,42 +324,52 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
   const pt = surface.process_truth;
   const hold = pt.hold_state ?? null;
   const wave = pt.restart_wave_after_authorization ?? [];
+  const authorized = hold?.implementation === 'RESTART_AUTHORIZED';
+  const onHold = hold?.implementation === 'ON_HOLD';
+  const authorizationLabel = hold?.implementation ?? 'UNKNOWN';
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle className="flex items-center gap-2 text-sm">
-            <Lock className="h-4 w-4 text-truth-hold" />
+            {onHold ? <Lock className="h-4 w-4 text-truth-hold" /> : null}
             ERP implementation state
           </CardTitle>
           <Badge
             variant="outline"
-            className="border-truth-hold/40 bg-truth-hold-soft text-truth-hold"
+            className={authorized
+              ? 'border-truth-founder/40 bg-truth-founder-soft text-truth-founder'
+              : onHold
+                ? 'border-truth-hold/40 bg-truth-hold-soft text-truth-hold'
+                : 'border-truth-unknown/40 bg-truth-unknown-soft text-truth-unknown'}
           >
-            {(hold?.implementation ?? 'UNKNOWN').toString().toUpperCase()}
+            {authorizationLabel}
           </Badge>
         </div>
         <CardDescription>
-          Rendered exactly as canonical source declares it. Nothing on this
-          surface infers permission to restart.
+          {authorized
+            ? 'Canonical source authorizes the implementation sequence. This does not prove task execution, acceptance or a schedule.'
+            : onHold
+              ? 'Canonical source records ON_HOLD. This surface does not schedule work.'
+              : 'Current implementation authorization is UNKNOWN; no status is inferred.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {!hold ? (
           <UnknownValue
-            reason="canonical contract carries no hold_state; the ERP hold cannot be confirmed from source"
+            reason="canonical contract carries no implementation authorization state"
           />
         ) : (
           /*
-            R4. Authority, Effective and Restart requires are the canonical hold
+            R4. Authority, Effective and restart requirement are the canonical implementation decision
             record, and HoldBanner renders all three above this card on every
             ERP tab. They are removed here rather than restated.
 
             What stays is genuinely local to this surface and cannot be carried
             by a one-line banner:
               · hold.reason        — the narrative rationale, per-surface detail
-              · the GATE CONDITIONS — an ordered list, which a banner cannot hold
+              · the restart sequence basis — an ordered list, which a banner cannot hold
             The gate-conditions heading is also promoted to .label-sec: it is a
             group heading introducing several rows, which is exactly the middle
             rung of the h2 -> label-sec -> label-micro ladder (R5).
@@ -361,7 +378,7 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
             <p className="text-2xs text-muted-foreground">{hold.reason}</p>
             {hold.restart_gate_conditions?.length ? (
               <div>
-                <p className="label-sec mb-1">Restart gate conditions</p>
+                <p className="label-sec mb-1">Restart authorization basis</p>
                 <ul className="space-y-1">
                   {hold.restart_gate_conditions.map((g) => (
                     <li key={g} className="flex gap-2 text-2xs text-muted-foreground">
@@ -373,9 +390,9 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
               </div>
             ) : (
               <p className="text-2xs text-muted-foreground">
-                Authority, effective date and the restart requirement are declared in
-                the hold banner above. No restart gate conditions are recorded in
-                canonical source.
+                {authorized
+                  ? 'DEC-109 authorizes the implementation sequence; task execution remains separately sourced.'
+                  : 'No restart authorization basis is recorded in canonical source.'}
               </p>
             )}
           </>
@@ -385,9 +402,13 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
 
         <div>
           <div className="mb-1 flex items-center gap-2">
-            <p className="label-sec">First wave after authorisation (declared order)</p>
-            <Badge variant="outline" className="border-truth-stale/30 bg-truth-stale-soft text-truth-stale">
-              NOT AUTHORISED
+            <p className="label-sec">Implementation sequence (declared order)</p>
+            <Badge variant="outline" className={authorized
+              ? 'border-truth-founder/40 bg-truth-founder-soft text-truth-founder'
+              : onHold
+                ? 'border-truth-hold/40 bg-truth-hold-soft text-truth-hold'
+                : 'border-truth-unknown/40 bg-truth-unknown-soft text-truth-unknown'}>
+              {authorizationLabel}
             </Badge>
           </div>
           {!wave.length ? (
@@ -407,7 +428,7 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
                   <TableRow key={`${w.order}-${w.task}`}>
                     <TableCell className="tnum font-mono text-2xs text-muted-foreground">
                       {String(w.order ?? '?')}
-                    </TableCell>
+                  </TableCell>
                     <TableCell className="font-mono text-2xs text-truth-founder">
                       {String(w.task ?? 'UNKNOWN')}
                     </TableCell>
@@ -421,9 +442,12 @@ function RestartCard({ surface }: { surface: CommandSurface }) {
             </Table>
           )}
           <p className="mt-2 text-2xs text-muted-foreground/80">
-            This is the order canonical source declares it would happen in. It is
-            a plan recorded before authorisation, not a schedule, and no
-            authorisation for it exists in this surface.
+            {authorized
+              ? 'Canonical source authorizes this sequence. Its order is not a schedule, and it does not prove that any task is executing.'
+              : onHold
+                ? 'Canonical source records ON_HOLD. This sequence is NOT AUTHORISED to proceed.'
+                : 'Canonical source does not establish whether this sequence is authorized.'}
+            {' This surface does not authorise, imply or schedule any restart.'}
           </p>
         </div>
       </CardContent>
@@ -526,6 +550,7 @@ export function ProcessSurface({ surface }: { surface: CommandSurface }) {
         invariantState={
           (pt.reconciliation_invariants_pending?.state as string | undefined) ?? null
         }
+        implementation={pt.hold_state?.implementation ?? 'UNKNOWN'}
       />
 
       <ClassificationLegend key_={pt.stage_classification_key ?? {}} />

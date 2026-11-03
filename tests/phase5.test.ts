@@ -362,51 +362,32 @@ describe('PROOF 6 (non-vacuity) — the hold and the restart wave render, unauth
       read in exactly one surface file. A surface that re-introduced
       `hold.authority` anywhere fails this guard.
     */
-    expect(attentionCode).not.toMatch(/hold\.authority/);
+    expect(attentionCode).toMatch(/hold\?\.implementation/);
     expect(attentionCode).not.toMatch(/hold\?\.authority/);
+    expect(attentionCode).not.toMatch(/hold\.effective/);
     expect(attentionCode).not.toMatch(/hold\.restart_requires/);
     expect(attentionCode).not.toMatch(/hold\?\.restart_requires/);
     // And it never appears as a hardcoded literal, as before.
-    expect(attentionCode).not.toMatch(/['"]DEC-100['"]/);
+    expect(attentionCode).not.toMatch(/['"]DEC-109['"]/);
   });
 
-  it('stamps the restart wave NOT AUTHORISED', () => {
-    expect(attentionSrc).toMatch(/NOT AUTHORISED/);
+  it('stamps the restart wave from current canonical authorization state', () => {
     expect(attentionCode).toMatch(/data-attention-restart-wave/);
-    // And says plainly that it confers no permission.
-    expect(attentionSrc).toMatch(/no\s+authorisation for it exists in this surface/);
-    expect(attentionSrc).toMatch(/not a schedule/);
+    expect(attentionSrc).toMatch(/Canonical source authorizes this sequence/);
+    expect(attentionSrc).toMatch(/Canonical source records an implementation hold/);
+    expect(attentionSrc).toMatch(/does not prove that any task is executing/);
   });
 
-  it('PROOF: never states or implies that restart is authorised', () => {
-    // Every occurrence of AUTHORISED must be preceded by NOT. `not-authorised`
-    // (the data attribute) and `NOT AUTHORISED` (the badge) are the two
-    // legitimate forms; a bare claim of authorisation is the defect.
-    //
-    // The window is the 24 characters BEFORE the word, so the negation must sit
-    // in the prefix. Testing the whole match would require the window to END
-    // with "not", which is backwards.
-    const claims = [...attentionSrc.matchAll(/(.{0,24})authoris(?:ed|ed)\b/gi)].map(
-      (m) => m[1]!,
-    );
-    expect(claims.length).toBeGreaterThan(0);
-    for (const prefix of claims) {
-      expect(prefix, `unqualified authorisation claim after: "${prefix}"`).toMatch(
-        /not[\s-]*$/i,
-      );
-    }
-    // And no branch renders authorisation as a state value.
-    expect(attentionIds).not.toMatch(/["']AUTHORISED["']/);
-    expect(attentionIds).not.toMatch(/\b(restart|authoris)\w*\s*[:=]\s*true/i);
+  it('binds authorization, hold and unknown states to canonical implementation values', () => {
+    expect(attentionSrc).toMatch(/hold\?\.implementation === 'RESTART_AUTHORIZED'/);
+    expect(attentionSrc).toMatch(/hold\?\.implementation === 'ON_HOLD'/);
+    expect(attentionSrc).toMatch(/AUTHORIZATION UNKNOWN/);
+    expect(attentionSrc).toMatch(/does not prove that any task is executing/);
   });
 
-  it('renders the global blocker with its declared id and authority', () => {
+  it('does not retain the superseded global implementation blocker', () => {
     const gb = surface.work_truth.global_blocker;
-    expect(gb).not.toBeNull();
-    expect(gb!.id).toBe('HOLD-2026-09-28');
-    expect(gb!.authority).toBe('DEC-100');
-    expect(attentionCode).toMatch(/gb\.description/);
-    expect(attentionCode).toMatch(/gb\.effect/);
+    expect(gb).toBeNull();
   });
 });
 
@@ -680,7 +661,7 @@ describe('PROOF 11 — nothing here is ranked, scored or weighted', () => {
     );
     for (const group of [
       'Founder decisions required',
-      'Canonical hold record',
+      'Implementation decision',
       'Global blocker',
       'Family critical blocker',
       'Stage blocker',

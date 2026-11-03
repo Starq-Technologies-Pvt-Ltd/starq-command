@@ -1052,7 +1052,7 @@ export function buildFloor({ surface }) {
       maturity_or_scoring: 'NOT PRESENT — this payload carries no maturity, score, weight or percentage',
       process_stage: 'NOT PRESENT — null on every event in the live window and structurally unjoinable to activity',
       handoff_ledger: 'NOT PRESENT — canonical source records an is_handoff flag only, not handoff records',
-      erp_implementation: 'NOT PRESENT — StarqERP is ON HOLD under DEC-100 and no surface may imply otherwise',
+      erp_implementation: 'NOT PRESENT as a Dev Studio floor source — current decision: RESTART_AUTHORIZED under DEC-109; task execution must be established from ERP work records.',
     },
   };
 }

@@ -36,7 +36,7 @@
     "start": "concurrently -n data,ui -c magenta,cyan \"node server/data-service.mjs\" \"vite preview --port 4173\"",
     "typecheck": "tsc --noEmit",
     "lint": "tsc -b",
-    "test": "vitest run",
+    "test": "vitest run --reporter=dot --exclude tests/real-tree-capability-mutation.test.ts && vitest run --reporter=dot tests/real-tree-capability-mutation.test.ts",
     "test:node": "node scripts/run-node-tests.mjs",
     "test:observation": "node --test scripts/lifecycle/tests/observation-profile.test.mjs",
     "test:watch": "vitest"

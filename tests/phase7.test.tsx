@@ -91,10 +91,13 @@ describe('Phase 7 projection and navigation', () => {
       );
       expect(buildBuilding(root, base).hoadha.boards[0].state).toBe('DRIFT');
     }));
-  it('missing or malformed boards stay unavailable rather than healthy empty', () =>
+  it('uses the declared historical fallback for a missing local board and rejects malformed local data', () =>
     withRoot((root) => {
       fs.unlinkSync(path.join(root, 'starqNexus/data/hoadha-tasks.json'));
-      expect(buildBuilding(root, base).hoadha.live_count).toBeNull();
+      const fallback = buildBuilding(root, base);
+      expect(fallback.hoadha.live_count).toBe(326);
+      expect(fallback.sources.find((s) => s.source === 'starqNexus/data/hoadha-tasks.json')?.source_role)
+        .toBe('HISTORICAL_FALLBACK');
       fs.writeFileSync(path.join(root, 'starqNexus/data/hoadha-tasks.json'), '{');
       expect(buildBuilding(root, base).hoadha.boards[0].state).toBe('UNREADABLE');
     }));
@@ -107,7 +110,7 @@ describe('Phase 7 projection and navigation', () => {
       expect(html).toContain('Starq Technologies');
       expect(html).toContain('#studio/erp/overview');
       expect(html).toContain('#studio/hoadha/overview');
-      expect(html).toContain('ON_HOLD');
+      expect(html).toContain('RESTART_AUTHORIZED');
       const room = renderToStaticMarkup(
         <BuildingSurface route={parseBuildingRoute('#studio/hoadha/overview')} surface={surface} />,
       );

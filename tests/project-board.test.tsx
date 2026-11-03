@@ -69,6 +69,29 @@ describe('read-only project board', () => {
     expect(blocked).toContain('Waiting for evidence');
   });
 
+  it('shows ERP source root, freshness, hash, and recorded-status limit', () => {
+    const building = {
+      sources: [{
+        source: 'starqNexus/data/starq-erp-tasks.json',
+        state: 'AVAILABLE',
+        source_role: 'WORKSPACE_PROJECT_CHECKOUT',
+        source_root: 'D:\\StarqTech\\Projects\\StarqNexus\\data',
+        modified_at: '2026-09-28T13:27:43.061Z',
+        sha256: 'a'.repeat(64),
+      }],
+    } as any;
+    const html = renderToStaticMarkup(
+      <ProjectBoard records={records} building={building} projectId="erp" label="Task records" projectLabel="starqERP" />,
+    );
+    expect(html).toContain('WORKSPACE PROJECT CHECKOUT');
+    expect(html).toContain('D:\\StarqTech\\Projects\\StarqNexus\\data');
+    expect(html).toContain('2026-09-28T13:27:43.061Z');
+    expect(html).toContain('a'.repeat(64));
+    expect(html).toContain('recorded values, not independently verified live execution');
+    expect(html).toContain('Git commit and cleanliness are not verified by this projection');
+    expect(html).not.toContain('HISTORICAL_SNAPSHOT');
+  });
+
   it('preserves unavailable and empty source distinctions', () => {
     const unavailable = renderToStaticMarkup(<ProjectBoard records={null} label="ERP board" projectLabel="starqERP" />);
     expect(unavailable).toContain('ERP board unavailable.');

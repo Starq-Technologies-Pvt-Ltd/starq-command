@@ -194,7 +194,9 @@ test('WP-0: Full Portfolio & Source Convergence (18 Nexus boards, 1,349 tasks, f
   assert.ok(port.projects.some((p) => p.id === 'buzzlab'));
 
   const erpP = port.projects.find((p) => p.id === 'erp');
-  assert.equal(erpP.execution_qualifier, 'ON_HOLD');
+  // DEC-109 lifted the general implementation hold; the remaining CP2 hold
+  // applies only to payment-command/payment-dispatch scope.
+  assert.equal(erpP.execution_qualifier, 'CP2_HOLD');
   assert.ok('done_historical' in erpP);
   assert.ok('stages' in erpP);
   assert.ok('provenance' in erpP);

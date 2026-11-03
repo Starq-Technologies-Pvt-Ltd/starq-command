@@ -165,7 +165,7 @@ describe('the ERP Process Floor renders from the real surface', () => {
     expect(text).toMatch(/Evidence drill-down is unavailable in this phase/);
     expect(text).toMatch(/Per-stage reconciliation is unavailable in this phase/);
     expect(text).toMatch(/Process state is independent of execution activity/);
-    expect(text).toMatch(/remains on hold under the Founder course correction/);
+    expect(text).toContain(surface.process_truth.hold_state?.reason);
   });
 
   it('states the measured evidence coverage rather than implying full coverage', () => {

@@ -1341,6 +1341,7 @@ export interface BuildingProjection {
   sources: {
     source: string; state: string; sha256?: string; modified_at?: string; reason?: string;
     source_kind?: 'NEXUS_COMPANY_BOARD' | 'HOADHA_COMPANY_DOCUMENT'; source_root?: string;
+    source_role?: 'WORKSPACE_PROJECT_CHECKOUT' | 'WORKSPACE_LOCAL' | 'CONFIGURED_EXTERNAL' | 'HISTORICAL_FALLBACK';
   }[];
   erp_tasks: BuildingRecord[] | null; note: string;
   historical_pm: HistoricalPmProjection;

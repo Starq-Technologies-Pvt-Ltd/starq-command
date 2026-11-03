@@ -154,32 +154,56 @@ export class RoomEventAdapter {
       payload: { ...(params.payload || {}), ...(params.recipient ? { recipient: params.recipient } : {}) },
     };
 
-    // 1. Append to typed events JSONL — never the canonical Room ledger.
-    assertEventsLedgerIsNotCanonicalRoom(this.eventsLedgerPath);
-    fs.appendFileSync(
-      this.eventsLedgerPath,
-      JSON.stringify(envelope) + '\n',
-      'utf8'
-    );
-
-    // 2. Broadcast to live Room if requested
+    // 1. Validate required Room configuration before recording local activity.
+    if (params.requiredRoomDelivery && !params.broadcastToRoom) {
+      throw new Error('Required Room delivery must enable broadcastToRoom.');
+    }
     if (params.broadcastToRoom && params.requiredRoomDelivery && !fs.existsSync(this.commsScriptPath)) {
       throw new Error(`Required Room delivery script is missing: ${this.commsScriptPath}`);
     }
-    if (params.broadcastToRoom && fs.existsSync(this.commsScriptPath)) {
-      if (params.requiredRoomDelivery && !this.instanceId) {
-        throw new Error('Required Room delivery needs an explicit stable Room writer instance id.');
-      }
+    if (params.broadcastToRoom && params.requiredRoomDelivery && !this.instanceId) {
+      throw new Error('Required Room delivery needs an explicit stable Room writer instance id.');
+    }
+
+    // 2. Broadcast before persisting the typed side-ledger. Required activity
+    // is not represented locally as recorded unless Room confirms a sequence.
+    if (params.broadcastToRoom && !this.instanceId) {
+      envelope.room_ref = { status: 'UNCONFIRMED', reason: 'No stable Room writer instance is configured.' };
+    } else if (params.broadcastToRoom && !fs.existsSync(this.commsScriptPath)) {
+      envelope.room_ref = { status: 'UNCONFIRMED', reason: 'Room delivery script is missing.' };
+    } else if (params.broadcastToRoom) {
       const roomBody = this.formatRoomBody(envelope, params.recipient, params.actionRequired);
       const result = await this.postViaSendScript(params.sender, roomBody, params.taskId, {
         subject: params.subject ?? `[${type}] ${params.summary}`,
         actionRequired: params.actionRequired ?? 'NONE',
-        instanceId: this.instanceId ?? `${params.sender}-control-plane`,
+        instanceId: this.instanceId!,
         required: params.requiredRoomDelivery === true,
       });
       envelope.room_ref = result.sequence
         ? { sequence: result.sequence, status: 'POSTED' }
         : { status: 'UNCONFIRMED', reason: result.stdout || 'send.mjs did not report a Room sequence.' };
+      if (params.requiredRoomDelivery && !result.sequence) {
+        throw new Error('Required Room delivery was not confirmed: send.mjs did not report a Room sequence.');
+      }
+    }
+
+    // 3. Persist the final envelope, including the confirmed Room reference.
+    // The side-ledger remains distinct from canonical Room and is never a
+    // substitute for a required Room delivery.
+    assertEventsLedgerIsNotCanonicalRoom(this.eventsLedgerPath);
+    try {
+      fs.appendFileSync(
+        this.eventsLedgerPath,
+        JSON.stringify(envelope) + '\n',
+        'utf8'
+      );
+    } catch (error) {
+      if (envelope.room_ref?.status === 'POSTED') {
+        throw new Error(
+          `Room record #${envelope.room_ref.sequence} was confirmed, but typed side-ledger persistence failed: ${(error as Error).message}`,
+        );
+      }
+      throw error;
     }
 
     return envelope;
@@ -227,15 +251,18 @@ export class RoomEventAdapter {
       }
 
       execFile('node', args, { timeout: 15000 }, (error, stdout = '') => {
+        const sequence = /Room Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1]
+          ?? /Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1];
         if (error) {
           console.warn(`[RoomEventAdapter] Room broadcast warning: ${error.message}`);
-          if (options.required) {
+          // A confirmed sequence proves the append completed even if send.mjs
+          // later failed while writing its local receipt. Preserve that proof
+          // so a caller does not blindly repeat an already-posted event.
+          if (options.required && !sequence) {
             reject(new Error(`Required Room delivery failed: ${error.message}`));
             return;
           }
         }
-        const sequence = /Room Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1]
-          ?? /Record\s+#(\d+)\s+posted/i.exec(stdout)?.[1];
         resolve({ stdout, sequence: sequence ? Number(sequence) : null });
       });
     });

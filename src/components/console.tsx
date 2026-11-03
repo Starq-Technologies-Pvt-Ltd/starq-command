@@ -61,6 +61,9 @@ const STATE_TONE: Record<string, Tone> = {
   // Explicitly held by the Founder.
   ON_HOLD: 'hold',
   HELD: 'hold',
+  // A Founder decision has lifted the administrative hold; this does not
+  // claim that any particular task is executing.
+  RESTART_AUTHORIZED: 'ok',
   // Decided by the Founder, carried forward.
   CARRIED: 'founder',
   // Could not be established.

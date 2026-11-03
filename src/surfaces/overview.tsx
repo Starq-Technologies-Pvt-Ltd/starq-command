@@ -26,7 +26,7 @@ import type { CommandSurface } from '@/lib/contracts';
  *
  * THE RECOMPOSITION, in the order the product contract requires:
  *
- *   1. compact ON_HOLD identity — the room's defining state, stated first
+ *   1. compact Founder decision state — the room's current status, stated first
  *   2. THE FIVE PROCESS FAMILIES as the hero work area, with per-family stage
  *      state and declared blocker
  *   3. critical blockers, with the family each belongs to
@@ -43,13 +43,12 @@ import type { CommandSurface } from '@/lib/contracts';
  * metric. Demoting a number's visual weight is not editing its value, and the
  * Phase 5/Phase 6 guards on `formatMaturity` are untouched.
  *
- * ON_HOLD IS PRESERVED, AND STILL OWED TO ONE OWNER
+ * CURRENT STATUS IS FORWARDED, NOT INFERRED
  *
  * The canonical hold record — authority, effective date, restart requirement —
  * belongs to `HoldBanner` and is not restated here (Goose R4, Room seq 8383).
- * What this surface shows is the room's `ON_HOLD` identity plus the ordered
- * restart gate conditions, which are a list the one-line banner has nowhere to
- * put.
+ * This surface forwards the current implementation decision, including
+ * RESTART_AUTHORIZED, and keeps task execution status in its own source.
  */
 export function OverviewSurface({ surface }: { surface: CommandSurface }) {
   const pt = surface.process_truth;
@@ -64,6 +63,10 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
   const gaps = pt.convergence_gaps ?? [];
   const conflicts = et.conflicts ?? [];
   const onHold = hold?.implementation === 'ON_HOLD';
+  const restartAuthorized = hold?.implementation === 'RESTART_AUTHORIZED';
+  const executionPosture = onHold
+    ? 'BLOCKED BY HOLD'
+    : restartAuthorized ? 'AUTHORIZED · EXECUTION UNKNOWN' : 'UNKNOWN';
 
   const agents = et.agents ?? [];
   const staleAgents = agents.filter((a) => a.activity_freshness === 'STALE');
@@ -109,14 +112,14 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
   return (
     <div className="flex flex-col gap-3 p-4">
       {/*
-        (1) COMPACT ON_HOLD IDENTITY. The room's defining fact, one band, above
+        (1) COMPACT IMPLEMENTATION STATUS. The current decision, one band, above
         everything. This is room STATE, not the canonical hold record — the
         banner above already owns authority, effective date and the restart
         requirement.
       */}
       <div className="room-state-band" data-room-state-band="erp">
         <span className="label-micro">starqERP</span>
-        <Chip value={onHold ? hold?.implementation ?? 'ON_HOLD' : 'UNKNOWN'} tone="hold" />
+        <Chip value={hold?.implementation ?? 'UNKNOWN'} />
         <span className="text-2xs text-muted-foreground">
           private operational truth · POS stays inside this room · process closure governs maturity
         </span>
@@ -253,7 +256,7 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
 
       {/* (5) EXECUTION POSTURE AND RESTART GATE. */}
       <div className="command-split">
-        <Panel title="Execution posture" count={onHold ? 'BLOCKED BY HOLD' : 'RUNNING'}>
+        <Panel title="Execution posture" count={executionPosture}>
           <div className="body">
             {onHold && hold?.restart_gate_conditions?.length ? (
               <>
@@ -269,14 +272,15 @@ export function OverviewSurface({ surface }: { surface: CommandSurface }) {
               </>
             ) : (
               <p className="text-2xs text-muted-foreground">
-                Authority, effective date and the restart requirement are declared in the hold banner
-                above.
-                {onHold ? ' No restart gate conditions are recorded in canonical source.' : ''}
+                {restartAuthorized
+                  ? 'DEC-109 authorizes the implementation sequence; active task execution must be read from ERP work records.'
+                  : onHold
+                    ? 'The canonical Founder decision records an implementation hold.'
+                    : 'Current implementation authorization is UNKNOWN.'}
               </p>
             )}
             <p className="mt-2 text-2xs text-muted-foreground">
-              A Founder-imposed hold on implementation, not a technical dependency. Nothing on this
-              surface authorises or schedules a restart.
+              Authorization does not prove a task is active, and this surface does not schedule work.
             </p>
           </div>
         </Panel>

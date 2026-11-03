@@ -159,7 +159,7 @@ describe('R4 — HoldBanner owns the canonical hold record', () => {
     expect(attention).toMatch(/holdPresent/);
     expect(attention).toMatch(/SOURCE MISSING/);
     const process = code(SURFACES, 'process.tsx');
-    expect(process).toMatch(/carries no hold_state/);
+    expect(process).toMatch(/carries no implementation authorization state/);
   });
 
   it('convergence-not-rewrite keeps its absence signal on Attention', () => {

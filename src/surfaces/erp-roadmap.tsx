@@ -81,7 +81,7 @@ export function ErpRoadmapSurface() {
           <div className="rounded border border-border/60 bg-surface-0/30 p-2.5">
             <span className="text-muted-foreground text-2xs uppercase tracking-wider block">Plan Authority Status</span>
             <span className="font-medium text-foreground mt-0.5 block">General DEC-100 Freeze LIFTED</span>
-            <span className="text-muted-foreground text-2xs block mt-1">#14394 authorized normal ERP engineering. Residual CP2 HOLD #12690 applies only to payment-dispatch garage scope.</span>
+            <span className="text-muted-foreground text-2xs block mt-1">DEC-109 authorizes ERP restart. Residual CP2 HOLD #12690 applies only to payment-command/payment-dispatch work.</span>
           </div>
           <div className="rounded border border-border/60 bg-surface-0/30 p-2.5">
             <span className="text-muted-foreground text-2xs uppercase tracking-wider block">Current Plan Cards</span>

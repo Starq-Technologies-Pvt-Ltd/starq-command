@@ -203,7 +203,7 @@ describe('PROOFS 4/5/8/9 — activity cannot create, move or rank an attention r
   });
 });
 
-describe('PROOF 6 — hold, DEC-100 and the six restart-wave rows', () => {
+describe('PROOF 6 — current restart authorization and the six declared wave rows', () => {
   it('renders exactly six wave rows, one per canonical entry', () => {
     const wave = surface.process_truth.restart_wave_after_authorization ?? [];
     expect(wave).toHaveLength(6);
@@ -221,33 +221,35 @@ describe('PROOF 6 — hold, DEC-100 and the six restart-wave rows', () => {
     }
   });
 
-  it('stamps the wave NOT AUTHORISED and never says restart is authorised', () => {
-    expect(marked(html, 'data-attention-restart-wave')).toEqual(['not-authorised']);
-    expect(text).toContain('NOT AUTHORISED');
-    // A bare "AUTHORISED" with no NOT prefix is the failure this catches.
-    expect(text).not.toMatch(/(?<!NOT )AUTHORISED/);
+  it('renders the current authorization without claiming a task is executing', () => {
+    expect(marked(html, 'data-attention-restart-wave')).toEqual(['authorized']);
+    expect(text).toContain('RESTART_AUTHORIZED');
+    expect(text).not.toContain('AUTHORIZED BY DEC-109');
+    expect(text).not.toContain('2026-10-29');
+    expect(text).toMatch(/does not prove that any task is executing/i);
   });
 
-  it('renders the hold authority, the gate conditions and the global blocker', () => {
+  it('renders the current implementation decision and its sequence basis', () => {
     const hold = surface.process_truth.hold_state!;
-    expect(text).toContain(hold.authority!);
-    expect(text).toContain(hold.effective!);
-    expect(text).toContain(decode(hold.restart_requires!));
+    expect(hold.implementation).toBe('RESTART_AUTHORIZED');
+    expect(hold.authority).toBe('DEC-109');
+    expect(hold.restart_requires).toBeNull();
+    expect(text).toContain('RESTART_AUTHORIZED');
+    expect(text).not.toContain('AUTHORIZED BY DEC-109');
+    expect(text).not.toContain(hold.effective!);
     for (const g of hold.restart_gate_conditions ?? []) {
       expect(text).toContain(decode(g));
     }
-    const gb = surface.work_truth.global_blocker!;
-    expect(marked(html, 'data-attention-global-blocker')).toEqual([gb.id]);
-    expect(text).toContain(gb.description);
-    expect(text).toContain(gb.effect);
+    expect(surface.work_truth.global_blocker).toBeNull();
+    expect(marked(html, 'data-attention-global-blocker')).toEqual([]);
   });
 
-  it('renders ON_HOLD from the canonical field rather than a literal', () => {
+  it('renders RESTART_AUTHORIZED from the canonical field rather than a literal', () => {
     // The value appears because the field carries it. Asserting the literal
     // here would pass even if the renderer hardcoded the string, so the
     // structural check lives in phase5.test.ts; this pins the rendered word.
-    expect(surface.process_truth.hold_state!.implementation).toBe('ON_HOLD');
-    expect(text).toContain('ON_HOLD');
+    expect(surface.process_truth.hold_state!.implementation).toBe('RESTART_AUTHORIZED');
+    expect(text).toContain('RESTART_AUTHORIZED');
   });
 });
 

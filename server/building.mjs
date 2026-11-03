@@ -43,28 +43,75 @@ export const BUILDING_SOURCES = [
 ];
 const EXPECTED = [243, 56, 27];
 
-function isContained(child, parent) {
-  if (child === parent) return true;
-  return child.startsWith(parent.endsWith(path.sep) ? parent : `${parent}${path.sep}`);
+export function isPathContained(child, parent) {
+  const relative = path.relative(path.resolve(parent), path.resolve(child));
+  return relative === ''
+    || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-function readNexusTaskSource(workspaceRoot, source) {
+export function resolveNexusTaskSourcePath(workspaceRoot, source) {
   const filename = path.basename(source);
   if (!NEXUS_TASK_SOURCES.includes(source) || filename !== path.basename(source)) {
     throw new Error('Source outside the declared Nexus board surface');
   }
 
   // Test fixtures and a future company-side migration may place a preserved
-  // copy beneath the Command root.  Production falls back only to the named,
-  // historical Nexus data directory -- never to STARQ_WORKSPACE.
+  // copy beneath the Command root. The active ERP taskboard is also read
+  // from the workspace's StarqNexus project checkout when present. This role
+  // identifies the checkout without asserting Git cleanliness or acceptance.
+  const projectRoot = workspaceRoot && path.resolve(workspaceRoot, 'Projects', 'StarqNexus', 'data');
   const localRoot = workspaceRoot && path.resolve(workspaceRoot, 'starqNexus', 'data');
-  const sourceRoot = localRoot && fs.existsSync(localRoot) ? localRoot : NEXUS_COMPANY_BOARD_ROOT;
-  const rootReal = fs.realpathSync(sourceRoot);
-  const target = path.resolve(rootReal, filename);
-  if (!isContained(target, rootReal)) throw new Error('Nexus task source escapes its declared root');
+  // An explicit data-root override stays authoritative. Otherwise prefer the
+  // workspace's StarqNexus project checkout when it has the declared
+  // ERP board. This is a read-only projection of the current source tree; it
+  // never writes to or normalizes that repository. The older local fixture
+  // layout and separately configured historical root remain fallbacks.
+  const isErpBoard = filename === 'starq-erp-tasks.json';
+  const hasActiveProjectBoard = isErpBoard
+    && !process.env.STARQ_NEXUS_DATA_ROOT
+    && projectRoot
+    && fs.existsSync(path.join(projectRoot, 'starq-erp-tasks.json'));
+  const activeProjectBoard = hasActiveProjectBoard
+    ? resolveReadOnlyTarget({
+      workspaceRoot,
+      requested: 'Projects/StarqNexus/data/starq-erp-tasks.json',
+      allowed: ['Projects/StarqNexus/data'],
+    })
+    : null;
+  if (activeProjectBoard && !activeProjectBoard.ok) {
+    throw new Error(`Canonical StarqNexus ERP board refused: ${activeProjectBoard.error}`);
+  }
+  const candidates = process.env.STARQ_NEXUS_DATA_ROOT
+    ? [NEXUS_COMPANY_BOARD_ROOT]
+    : [localRoot, NEXUS_COMPANY_BOARD_ROOT];
+  const sourceRoot = activeProjectBoard?.ok
+    ? path.dirname(activeProjectBoard.real)
+    : candidates.find((candidate) => candidate
+      && fs.existsSync(path.join(candidate, filename)))
+      ?? NEXUS_COMPANY_BOARD_ROOT;
+  const sourceRole = activeProjectBoard?.ok
+    ? 'WORKSPACE_PROJECT_CHECKOUT'
+    : !process.env.STARQ_NEXUS_DATA_ROOT && sourceRoot === localRoot
+      ? 'WORKSPACE_LOCAL'
+      : (process.env.STARQ_NEXUS_DATA_ROOT || process.env.STARQ_NEXUS_WORKSPACE_ROOT)
+        ? 'CONFIGURED_EXTERNAL'
+        : 'HISTORICAL_FALLBACK';
+  return {
+    path: path.resolve(sourceRoot, filename),
+    source_root: sourceRoot,
+    source_role: sourceRole,
+  };
+}
+
+function readNexusTaskSource(workspaceRoot, source) {
+  const selected = resolveNexusTaskSourcePath(workspaceRoot, source);
+  const { source_role: sourceRole } = selected;
+  const rootReal = fs.realpathSync(selected.source_root);
+  const target = path.resolve(rootReal, path.basename(source));
+  if (!isPathContained(target, rootReal)) throw new Error('Nexus task source escapes its declared root');
 
   const targetReal = fs.realpathSync(target);
-  if (!isContained(targetReal, rootReal)) {
+  if (!isPathContained(targetReal, rootReal)) {
     throw new Error('Nexus task source escapes its declared root via a link');
   }
   const stat = fs.statSync(targetReal);
@@ -73,6 +120,7 @@ function readNexusTaskSource(workspaceRoot, source) {
   return {
     source,
     source_kind: 'NEXUS_COMPANY_BOARD',
+    source_role: sourceRole,
     source_root: rootReal,
     state: 'AVAILABLE',
     sha256: crypto.createHash('sha256').update(text).digest('hex'),
@@ -92,10 +140,10 @@ function readHoadhaDocumentSource(workspaceRoot, source) {
     localRoot && fs.existsSync(localRoot) ? localRoot : HOADHA_COMPANY_DOCUMENT_ROOT;
   const rootReal = fs.realpathSync(sourceRoot);
   const target = path.resolve(rootReal, filename);
-  if (!isContained(target, rootReal)) throw new Error('Hoadha document escapes its declared root');
+  if (!isPathContained(target, rootReal)) throw new Error('Hoadha document escapes its declared root');
 
   const targetReal = fs.realpathSync(target);
-  if (!isContained(targetReal, rootReal)) {
+  if (!isPathContained(targetReal, rootReal)) {
     throw new Error('Hoadha document escapes its declared root via a link');
   }
   const stat = fs.statSync(targetReal);

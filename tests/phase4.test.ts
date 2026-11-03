@@ -432,19 +432,19 @@ describe('R7 — Phase 5 is authorised and Phase 6 remains unauthorised', () => 
   });
 });
 
-describe('R8 — the DEC-100 hold remains visibly intact', () => {
-  it('carries the hold into canonical process truth', () => {
+describe('R8 — the historical DEC-100 fixture remains source-driven', () => {
+  it('preserves the historical hold fixture as historical evidence', () => {
     expect(pt.hold_state).not.toBeNull();
     expect(pt.hold_state!.implementation).toBe('ON_HOLD');
     expect(pt.hold_state!.authority).toBe('DEC-100');
   });
 
-  it('renders the hold, its authority and its restart gate on the process surface', () => {
+  it('renders the source decision and restart basis without duplicating banner-owned fields', () => {
     expect(processSrc).toMatch(/ERP implementation state/);
     // The hold value is rendered from canonical source, not hardcoded, so the
     // chip is asserted through the expression that produces it.
     expect(processCode).toMatch(/hold\?\.implementation/);
-    expect(processSrc).toMatch(/Restart requires/);
+    expect(processSrc).toMatch(/Restart authorization basis/);
     expect(processCode).toMatch(/hold_state/);
     expect(processCode).toMatch(/restart_gate_conditions/);
   });

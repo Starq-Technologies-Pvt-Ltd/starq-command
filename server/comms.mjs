@@ -91,6 +91,7 @@ export function toMessage(record) {
     mentions,
     project,
     task_id: e.taskId ?? null,
+    action: md.action ?? null,
     thread_id: e.threadId ?? null,
     reply_to: e.replyTo ?? null,
     action_required: md.actionRequired && md.actionRequired !== 'NONE' ? md.actionRequired : null,
@@ -103,6 +104,56 @@ export function toMessage(record) {
     record_hash: record.recordHash ?? null,
     verified: Boolean(record.recordHash),
   };
+}
+
+/** Latest strictly attributed Room task reports, kept separate from PM rows. */
+export function roomTaskActivity(records, identities, projectId = 'erp') {
+  const identityById = new Map((identities?.identities ?? [])
+    .filter((i) => i?.identityId && i?.canonicalHandle && i.status === 'active')
+    .map((i) => [i.identityId, i.canonicalHandle]));
+  const projectAliases = projectId === 'erp' ? new Set(['erp', 'starq-erp']) : new Set([projectId]);
+  const statusByAction = {
+    claim: 'CLAIMED', started: 'IN_PROGRESS', blocked: 'BLOCKED', done: 'AWAITING_REVIEW',
+    accepted: 'ACCEPTED', rejected: 'REJECTED',
+  };
+  const latest = new Map();
+  for (const record of records ?? []) {
+    const e = ev(record);
+    const md = e.metadata ?? {};
+    const taskId = e.taskId;
+    const action = md.action;
+    const sender = e.senderHandle;
+    const eventId = e.eventId ?? record.eventId;
+    if (typeof taskId !== 'string' || !taskId || md.task !== taskId || !projectAliases.has(md.project) ||
+        typeof action !== 'string' || !Object.hasOwn(statusByAction, action)) continue;
+    if (record.authorityDecision?.allowed !== true || !/^[a-f0-9]{64}$/i.test(record.recordHash ?? '') ||
+        !Number.isSafeInteger(record.brokerSequence) || record.brokerSequence < 1 ||
+        !/^[a-f0-9]{64}$/i.test(eventId ?? '') || !e.createdAt || !record.receivedAt ||
+        !e.senderIdentityId || identityById.get(e.senderIdentityId) !== sender) continue;
+    if (action === 'accepted' || action === 'rejected') {
+      const attestation = md.dec072;
+      if (!attestation || typeof attestation !== 'object' || !attestation.builder ||
+          !attestation.reviewer || attestation.reviewer !== sender || attestation.reviewer === attestation.builder ||
+          attestation.decision !== statusByAction[action]) continue;
+    }
+    const report = {
+      task_id: taskId,
+      project_id: projectId,
+      status: statusByAction[action],
+      action,
+      from: sender,
+      sender_identity_id: e.senderIdentityId,
+      sequence: record.brokerSequence,
+      event_id: eventId,
+      record_hash: record.recordHash,
+      at: e.createdAt,
+      received_at: record.receivedAt,
+      subject: md.subject ?? null,
+    };
+    const previous = latest.get(taskId);
+    if (!previous || report.sequence > previous.sequence) latest.set(taskId, report);
+  }
+  return [...latest.values()].sort((a, b) => a.task_id.localeCompare(b.task_id));
 }
 
 /** The channel directory, derived from the records themselves. */

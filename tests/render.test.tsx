@@ -121,9 +121,10 @@ describe('the Truth & Health floor renders from the real surface', () => {
     expect(text).toMatch(/absent/);
   });
 
-  it('carries the hold authority onto the floor', () => {
-    expect(surface.process_truth.hold_state?.authority).toBe('DEC-100');
-    expect(text).toContain('DEC-100');
+  it('keeps the current ERP decision in the payload without presenting a false hold', () => {
+    expect(surface.process_truth.hold_state?.authority).toBe('DEC-109');
+    expect(surface.process_truth.hold_state?.implementation).toBe('RESTART_AUTHORIZED');
+    expect(text).not.toMatch(/ERP implementation ON HOLD under DEC-100/);
   });
 
   it('never prints a value that did not arrive in the payload', () => {
@@ -142,7 +143,7 @@ describe('the Truth & Health floor renders from the real surface', () => {
     }
   });
 
-  it('renders the hold banner non-dismissably alongside the floor', () => {
+  it('renders the current decision banner non-dismissably alongside the floor', () => {
     const hold = surface.process_truth.hold_state!;
     const banner = renderToStaticMarkup(
       React.createElement(HoldBanner, {
@@ -153,8 +154,8 @@ describe('the Truth & Health floor renders from the real surface', () => {
         convergenceNotRewrite: hold.convergence_not_rewrite,
       }),
     );
-    expect(banner).toMatch(/ON HOLD/);
-    expect(banner).toMatch(/DEC-100/);
+    expect(banner).toMatch(/RESTART_AUTHORIZED/);
+    expect(banner).toMatch(/DEC-109/);
     expect(banner).not.toMatch(/dismiss/i);
   });
 });

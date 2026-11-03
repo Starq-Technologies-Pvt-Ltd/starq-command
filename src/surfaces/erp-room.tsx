@@ -182,6 +182,8 @@ export function ErpRoom({
               records={building.erp_tasks}
               label="Canonical ERP task records"
               projectLabel="starqERP"
+              projectId="erp"
+              building={building}
             />
             </details>
             {/*

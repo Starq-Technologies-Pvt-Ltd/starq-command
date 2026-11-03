@@ -140,8 +140,9 @@ export default function App() {
                       {
                         id: 'erp',
                         label: 'starqERP',
-                        state:
-                          surface.building.projects.find((p) => p.id === 'erp')?.state ?? 'UNKNOWN',
+                        state: surface.process_truth?.hold_state?.implementation
+                          ?? surface.building.projects.find((p) => p.id === 'erp')?.state
+                          ?? 'UNKNOWN',
                         href: '#studio/erp/overview',
                       },
                       {

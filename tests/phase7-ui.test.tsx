@@ -26,6 +26,7 @@ import { buildBuilding, BUILDING_SOURCES, HOADHA_ROOT } from '../server/building
 import { BuildingSurface } from '@/surfaces/building';
 import { ProjectBoard } from '@/surfaces/project-board';
 import { parseBuildingRoute } from '@/lib/building-route';
+import { HoldBanner } from '@/components/state-gate';
 import { toneOf, rowTone, show } from '@/components/console';
 import fixture from './fixtures/phase5-surface.json';
 import type { CommandSurface } from '@/lib/contracts';
@@ -159,11 +160,11 @@ describe('Phase 7 — the first screen answers', () => {
         their own peers — a new assertion in the direction the gap map asked for
         and which nothing previously guarded.
 
-    What did NOT change: room identity, ON_HOLD, PREPARED, 326, 33, C2C and the
+    What did NOT change: room identity, RESTART_AUTHORIZED, PREPARED, 326, 33, C2C and the
     task-subordination caveat are all still asserted. Nothing was dropped to
     make the restructure pass.
   */
-  it('ERP overview leads with room identity, hold state and closure, not task volume', () =>
+  it('ERP overview leads with room identity, current decision and closure, not task volume', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
       const html = render('#studio/erp/overview', surface);
@@ -171,7 +172,7 @@ describe('Phase 7 — the first screen answers', () => {
       // Room identity is on the first screen, not behind a nav click.
       expect(html).toContain('data-room="erp"');
       expect(html).toContain('starqERP');
-      expect(html).toContain('ON_HOLD');
+      expect(html).toContain('RESTART_AUTHORIZED');
 
       // PROCESS CLOSURE LEADS, TASK VOLUME FOLLOWS. Asserted against real
       // document order: the closure matrix must appear before the task block.
@@ -388,7 +389,8 @@ describe('Phase 7 — density without a report scroll', () => {
       // This is a read-only historical snapshot, not the ERP process overview.
       // The task board identifies that boundary and makes no maturity claim
       // based on row volume.
-      expect(html).toContain('HISTORICAL_SNAPSHOT');
+      expect(html).toContain('WORKSPACE LOCAL SOURCE');
+      expect(html).toContain('data-erp-board-source="WORKSPACE_LOCAL"');
       expect(html).not.toMatch(/\b\d+(?:\.\d+)?%\s*(?:maturity|complete)/i);
     }));
 
@@ -453,16 +455,15 @@ describe('Phase 7 — evidence drill-down is usable', () => {
 });
 
 describe('Phase 7 — absence is never rendered as emptiness', () => {
-  it('a deleted board reads as a source gap, not an empty table', () =>
+  it('a missing local board falls back only to the declared historical source', () =>
     withRealisticRoot((root) => {
       fs.unlinkSync(path.join(root, 'starqNexus/data/hoadha-tasks.json'));
       const surface = { ...base, building: buildBuilding(root, base) };
       const html = renderHistoricalBoard(surface.building!, 'hoadha');
-      expect(html).toContain('Historical Nexus Hoadha board records unavailable in the Building projection');
-      expect(html).toContain('No fallback or historical task data is shown.');
-      // Other collections being readable must not turn an incomplete live
-      // board into an apparently complete task list.
-      expect(html).not.toContain('DHIV-S');
+      expect(html).toContain('HISTORICAL_SNAPSHOT');
+      expect(html).toContain('DHIV-S');
+      expect(html).toContain('326');
+      expect(html).not.toContain('unavailable in the Building projection');
     }));
 
   it('an absent floor roster reads as absent, not as an empty staff table', () =>
@@ -627,16 +628,28 @@ describe('Phase 7 — tone mapping never invents a healthy state', () => {
     }));
 });
 
-describe('Phase 7 — hold and prepared states are never routed around', () => {
-  it('ERP hold is visible on every ERP tab and offers no restart control', () =>
+describe('Phase 7 — current authorization and prepared states are never routed around', () => {
+  it('current ERP authorization is visible on every ERP tab and offers no workflow control', () =>
     withRealisticRoot((root) => {
       const surface = { ...base, building: buildBuilding(root, base) };
       for (const tab of ['overview', 'process', 'decisions', 'evidence', 'staff', 'integrity']) {
-        const html = render(`#studio/erp/${tab}`, surface);
-        expect(html, tab).toMatch(/ON_HOLD|implementation ON HOLD/i);
-        // No control anywhere in the ERP room may imply the hold can be lifted
-        // from the UI. The restart is a Founder act, not a UI act.
-        expect(html, tab).not.toMatch(/resume implementation|lift hold|restart erp|clear hold/i);
+        const hash = `#studio/erp/${tab}`;
+        const route = parseBuildingRoute(hash);
+        // App owns the one canonical authority banner for every ERP route.
+        // Keep the surface-level assertion, but render the shell-owned banner
+        // here instead of requiring each child surface to repeat DEC-109.
+        const html = renderToStaticMarkup(
+          <>
+            {surface.process_truth.hold_state ? (
+              <HoldBanner {...surface.process_truth.hold_state} />
+            ) : null}
+            <BuildingSurface route={route} surface={surface} />
+          </>,
+        );
+        expect(html, tab).toMatch(/RESTART_AUTHORIZED|implementation RESTART_AUTHORIZED/i);
+        expect(html, tab).toContain('DEC-109');
+        // Decision state is displayed, but no execution control is synthesized.
+        expect(html, tab).not.toMatch(/mark active|start task|begin implementation/i);
       }
     }));
 

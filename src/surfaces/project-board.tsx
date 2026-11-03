@@ -8,6 +8,7 @@ import * as React from 'react';
 import type { BuildingProjection, BuildingRecord } from '@/lib/contracts';
 import { projectIdFromRoute } from '@/lib/building-route';
 import { Chip, SourceGap, show } from '@/components/console';
+import { useAdaptiveKanban, CollapsedColumnStrip } from '@/components/adaptive-kanban';
 
 export { projectIdFromRoute };
 
@@ -229,6 +230,133 @@ export function ProjectTaskDetails({ record }: { record: BuildingRecord }) {
   );
 }
 
+interface ProjectBoardGridProps {
+  filtered: BuildingRecord[];
+  selectedId: string | null;
+  setSelectedId: (id: string | null) => void;
+  navigationKey?: string | null;
+}
+
+function ProjectBoardGrid({
+  filtered,
+  selectedId,
+  setSelectedId,
+  navigationKey,
+}: ProjectBoardGridProps) {
+  const laneCounts = React.useMemo(() => {
+    const map: Record<ProjectBoardLane, number> = {
+      TODAY: 0,
+      READY: 0,
+      'IN PROGRESS': 0,
+      REVIEW: 0,
+      'FOUNDER GATE': 0,
+      BLOCKED: 0,
+      DONE: 0,
+      UNKNOWN: 0,
+    };
+    for (const record of filtered) {
+      const l = mapTaskToProjectLane(record);
+      if (map[l] !== undefined) {
+        map[l] += 1;
+      }
+    }
+    return map;
+  }, [filtered]);
+
+  const {
+    isColumnCollapsed,
+    toggleColumn,
+    desktopGridTemplateColumns,
+  } = useAdaptiveKanban(PROJECT_BOARD_LANES, laneCounts, {
+    isDataReady: true,
+    navigationKey,
+  });
+
+  return (
+    <div
+      className="grid grid-cols-1 gap-2 p-2 md:grid-cols-2 2xl:grid-cols-4 overflow-x-auto min-w-full"
+      style={{ gridTemplateColumns: desktopGridTemplateColumns }}
+      data-testid="project-kanban-grid"
+    >
+      {PROJECT_BOARD_LANES.map((laneName) => {
+        const laneRecords = filtered.filter((record) => mapTaskToProjectLane(record) === laneName);
+        const collapsed = isColumnCollapsed(laneName);
+
+        if (collapsed) {
+          return (
+            <CollapsedColumnStrip
+              key={laneName}
+              id={laneName}
+              title={laneName}
+              count={laneRecords.length}
+              onToggle={() => toggleColumn(laneName)}
+            />
+          );
+        }
+
+        return (
+          <section
+            key={laneName}
+            className="min-w-0 rounded border border-border bg-background/40"
+            aria-labelledby={`project-board-lane-${laneName.replaceAll(' ', '-')}`}
+            data-lane={laneName}
+            data-collapsed="false"
+          >
+            <header
+              className="sticky top-0 z-[1] flex items-center justify-between border-b border-border bg-card px-2.5 py-2 cursor-pointer select-none"
+              onClick={() => toggleColumn(laneName)}
+              title={`Click to collapse ${laneName} lane`}
+            >
+              <h3 id={`project-board-lane-${laneName.replaceAll(' ', '-')}`} className="font-mono text-[10px] font-semibold tracking-wide">{laneName}</h3>
+              <span className="chip" data-tone="muted">{laneRecords.length}</span>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleColumn(laneName); }}
+                aria-expanded="true"
+                aria-label={`Collapse ${laneName} lane`}
+                title="Collapse column"
+                className="text-muted-foreground hover:text-foreground text-[10px] px-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
+              >
+                ⇥
+              </button>
+            </header>
+            <ul className="project-board-lane-list grid max-h-[60vh] content-start gap-1.5 overflow-y-auto overscroll-contain p-1.5">
+              {laneRecords.length === 0 ? (
+                <li className="py-8 text-center text-2xs text-muted-foreground/60 italic select-none">
+                  No task records in this lane
+                </li>
+              ) : null}
+              {laneRecords.map((record, index) => {
+                const chosen = selectedId === record.id;
+                return (
+                  <li key={`${record.collection}:${record.id}:${index}`}>
+                    <button
+                      type="button"
+                      aria-pressed={chosen}
+                      onClick={() => setSelectedId(chosen ? null : record.id)}
+                      className={`w-full rounded border p-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${chosen ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]' : 'border-border bg-card hover:border-[hsl(var(--room)/.6)]'}`}
+                    >
+                      <span className="flex flex-wrap items-start justify-between gap-1">
+                        <span className="font-mono text-[10px] text-[hsl(var(--room))]">{show(record.id)}</span>
+                        <span className="text-[9px] text-muted-foreground">{projectOf(record)}</span>
+                      </span>
+                      <span className="mt-1 block text-xs font-medium leading-5">{show(record.title)}</span>
+                      <span className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1.5 text-[10px] text-muted-foreground">
+                        <span>{valueText(textField(record, ['owner', 'ownerLabel', 'assignee', 'assigned_to', 'seat', 'workers']))}</span>
+                        <span>source: {canonicalTaskStatus(record)}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ProjectBoard({
   records,
   label,
@@ -250,6 +378,20 @@ export function ProjectBoard({
   const resolved = records !== undefined ? null : resolveProjectBoardRecords(building, projectId);
   const supplied = records !== undefined ? records : resolved?.records ?? null;
   const all = supplied ?? [];
+  const erpSource = projectId?.toLowerCase() === 'erp'
+    ? building?.sources.find((source) => source.source === 'starqNexus/data/starq-erp-tasks.json')
+    : undefined;
+  const sourceLabel = projectId?.toLowerCase() !== 'erp'
+    ? 'HISTORICAL_SNAPSHOT'
+    : erpSource?.source_role === 'WORKSPACE_PROJECT_CHECKOUT'
+      ? 'WORKSPACE PROJECT CHECKOUT'
+      : erpSource?.source_role === 'WORKSPACE_LOCAL'
+        ? 'WORKSPACE LOCAL SOURCE'
+        : erpSource?.source_role === 'CONFIGURED_EXTERNAL'
+          ? 'CONFIGURED SOURCE'
+          : erpSource?.source_role === 'HISTORICAL_FALLBACK'
+            ? 'HISTORICAL SOURCE SNAPSHOT'
+            : 'SOURCE SNAPSHOT';
 
   const projects = React.useMemo(
     () => [...new Set(all.map(projectOf))].sort((a, b) => a.localeCompare(b)),
@@ -281,8 +423,17 @@ export function ProjectBoard({
         <span className="chip" data-tone="muted">{filtered.length} / {all.length}</span>
         <span className="spacer" />
         <Chip value="READ ONLY" />
-        <Chip value="HISTORICAL_SNAPSHOT" />
+        <Chip value={sourceLabel} />
       </div>
+      {erpSource ? (
+        <p className="break-all border-b border-border px-3 py-2 text-[10px] text-muted-foreground" data-erp-board-source={erpSource.source_role ?? 'UNKNOWN'}>
+          Source: {show(erpSource.source_root)}\{show(erpSource.source.split('/').at(-1))}
+          {' · modified '} {show(erpSource.modified_at)}
+          {' · SHA-256 '} {show(erpSource.sha256)}
+          {' · source statuses are recorded values, not independently verified live execution'}
+          {' · Git commit and cleanliness are not verified by this projection'}
+        </p>
+      ) : null}
 
       <div className="flex flex-wrap items-end gap-2 border-b border-border p-2.5">
         <label className="grid min-w-36 flex-1 gap-1 text-2xs text-muted-foreground">
@@ -315,44 +466,12 @@ export function ProjectBoard({
       {all.length === 0 ? (
         <SourceGap reason="Source read, zero task records." detail={`${label} has no records in the current projection.`} />
       ) : (
-        <div className="grid grid-cols-1 gap-2 p-2 md:grid-cols-2 2xl:grid-cols-4">
-          {PROJECT_BOARD_LANES.map((laneName) => {
-            const laneRecords = filtered.filter((record) => mapTaskToProjectLane(record) === laneName);
-            return (
-              <section key={laneName} className="min-w-0 rounded border border-border bg-background/40" aria-labelledby={`project-board-lane-${laneName.replaceAll(' ', '-')}`}>
-                <header className="sticky top-0 z-[1] flex items-center justify-between border-b border-border bg-card px-2.5 py-2">
-                  <h3 id={`project-board-lane-${laneName.replaceAll(' ', '-')}`} className="font-mono text-[10px] font-semibold tracking-wide">{laneName}</h3>
-                  <span className="chip" data-tone="muted">{laneRecords.length}</span>
-                </header>
-                <ul className="project-board-lane-list grid max-h-[60vh] content-start gap-1.5 overflow-y-auto overscroll-contain p-1.5">
-                  {laneRecords.map((record, index) => {
-                    const chosen = selectedId === record.id;
-                    return (
-                      <li key={`${record.collection}:${record.id}:${index}`}>
-                        <button
-                          type="button"
-                          aria-pressed={chosen}
-                          onClick={() => setSelectedId(chosen ? null : record.id)}
-                          className={`w-full rounded border p-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${chosen ? 'border-[hsl(var(--room))] bg-[hsl(var(--room-soft))]' : 'border-border bg-card hover:border-[hsl(var(--room)/.6)]'}`}
-                        >
-                          <span className="flex flex-wrap items-start justify-between gap-1">
-                            <span className="font-mono text-[10px] text-[hsl(var(--room))]">{show(record.id)}</span>
-                            <span className="text-[9px] text-muted-foreground">{projectOf(record)}</span>
-                          </span>
-                          <span className="mt-1 block text-xs font-medium leading-5">{show(record.title)}</span>
-                          <span className="mt-1 flex flex-wrap items-center justify-between gap-1 border-t border-border pt-1.5 text-[10px] text-muted-foreground">
-                            <span>{valueText(textField(record, ['owner', 'ownerLabel', 'assignee', 'assigned_to', 'seat', 'workers']))}</span>
-                            <span>source: {canonicalTaskStatus(record)}</span>
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+        <ProjectBoardGrid
+          filtered={filtered}
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+          navigationKey={projectId ?? projectLabel}
+        />
       )}
 
       {all.length > 0 && filtered.length === 0 ? <p className="px-3 pb-3 text-xs text-muted-foreground">No task records match these filters.</p> : null}

@@ -50,10 +50,11 @@ describe('Phase 7 — both real project rooms instantiate (Room seq 8358)', () =
     }
   });
 
-  it('the ERP room renders its source-derived ON_HOLD state', () => {
+  it('the ERP room renders its source-derived current restart authorization', () => {
     const html = render('#studio/erp/overview');
     expect(html).toMatch(/starqERP/);
-    expect(html).toMatch(/ON_HOLD/);
+    expect(html).toMatch(/RESTART_AUTHORIZED/);
+    expect(html).toMatch(/DEC-109/);
   });
 
   it('the Hoadha room renders and is reachable by route', () => {

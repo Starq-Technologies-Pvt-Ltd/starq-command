@@ -61,16 +61,24 @@ test('import retains full source payloads, relationships, hashes, and duplicate 
     { id: 'STU-001', title: 'Retain source graph', status: 'planned', workers: ['codex', 'cursor'], depends_on: ['STU-000'], blocked_by: ['STU-099'], related: ['SERP-002'], parent: 'STU-ROOT', children: ['STU-001A'], acceptance_evidence: ['evidence/a.md'], phase: 'P1', custom_field: { source: 'kept' } },
     { id: 'STU-001', title: 'Duplicate source row', status: 'todo', workers: ['vision'], depends_on: ['STU-500'] },
   ];
+  const erpRows = [{ id: 'SERP-354', title: 'Reference financial command', status: 'in_progress' }];
   for (const board of NEXUS_BOARDS) {
     if (!board.file) continue;
     mkdirSync(path.dirname(path.join(dir, board.file)), { recursive: true });
-    writeFileSync(path.join(dir, board.file), JSON.stringify({ project: board.name, tasks: board.id === 'studio' ? duplicateRows : [] }));
+    writeFileSync(path.join(dir, board.file), JSON.stringify({ project: board.name, tasks: board.id === 'studio' ? duplicateRows : board.id === 'erp' ? erpRows : [] }));
     db.prepare('INSERT INTO pm_projects (id,name,prefix,description,next_seq,created_at) VALUES (?,?,?,?,?,?)')
       .run(board.id, board.name, board.prefix, board.description, 1, when);
   }
 
+  const scoped = importNexusBoards(db, { nowIso: () => when, json: JSON.stringify, dataRoot: dir, boardIds: ['erp'] });
+  assert.equal(scoped.imported, 1);
+  assert.deepEqual(scoped.boards.map((board) => board.id), ['erp']);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_records').get().n, 1);
+  assert.equal(db.prepare("SELECT source_file FROM pm_source_records").get().source_file, 'starq-erp-tasks.json');
+
   const result = importNexusBoards(db, { nowIso: () => when, json: JSON.stringify, dataRoot: dir });
   assert.equal(result.imported, 1);
+  assert.equal(result.preserved, 1);
   assert.equal(result.skipped, 1);
   const rows = db.prepare('SELECT * FROM pm_source_records WHERE source_file = ? ORDER BY source_row_index').all('starq-studio-tasks.json');
   assert.equal(rows.length, 2);
@@ -86,12 +94,12 @@ test('import retains full source payloads, relationships, hashes, and duplicate 
   assert.equal(source.content_sha256, createHash('sha256').update(JSON.stringify({ project: 'Starq Studio', tasks: duplicateRows })).digest('hex'));
   const repeated = importNexusBoards(db, { nowIso: () => when, json: JSON.stringify, dataRoot: dir });
   assert.equal(repeated.imported, 0);
-  assert.equal(repeated.preserved, 1);
+  assert.equal(repeated.preserved, 2);
   assert.equal(repeated.skipped, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_tasks').get().n, 1);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_records').get().n, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_tasks').get().n, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_records').get().n, 3);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_import_source_versions').get().n, 18);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_record_versions').get().n, 2);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM pm_source_record_versions').get().n, 3);
 });
 
 test('legacy Command PM database is preserved as archived records without colliding with live task ids', (t) => {

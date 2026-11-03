@@ -316,8 +316,8 @@ it('keeps the App warning and hold visible while navigating real pages with Buil
     dom!.window.location.hash = '#attention/holds';
     await changed;
   });
-  expect(host.textContent).toContain('ON_HOLD');
-  expect(host.textContent).toContain('DEC-100');
+  expect(host.textContent).toContain('RESTART_AUTHORIZED');
+  expect(host.textContent).toContain('DEC-109');
   expect(host.textContent).toContain('Building projection unreachable');
   // All network work remains intercepted, including PM portfolio and staff
   // effects. Navigation must not initiate a mutation.
