@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comms / Room — Starq Command</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Geist:wght@400;500;600;700&family=Sora:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  :root{
+    --surface-0: hsl(220 22% 4%); --surface-1: hsl(220 18% 6.5%); --surface-2: hsl(220 16% 9%); --surface-3: hsl(220 15% 12%);
+    --fg: hsl(210 16% 92%); --muted: hsl(215 10% 58%); --border: hsl(220 14% 15%);
+    --primary: hsl(205 90% 58%); --primary-soft: hsl(205 90% 58% / 0.14);
+    --truth-ok: hsl(152 58% 46%); --truth-ok-soft: hsl(152 58% 46% / 0.14);
+    --truth-stale: hsl(38 92% 56%); --truth-stale-soft: hsl(38 92% 56% / 0.14);
+    --truth-drift: hsl(358 74% 60%); --truth-drift-soft: hsl(358 74% 60% / 0.14);
+    --truth-unknown: hsl(215 12% 52%); --truth-unknown-soft: hsl(215 12% 52% / 0.14);
+    --truth-hold: hsl(268 70% 66%); --truth-hold-soft: hsl(268 70% 66% / 0.14);
+    --truth-founder: hsl(44 96% 60%); --truth-founder-soft: hsl(44 96% 60% / 0.14);
+    --room-erp: hsl(205 88% 56%); --room-hoadha: hsl(271 74% 68%); --room-studio: hsl(152 46% 52%);
+    --font-display: "Space Grotesk", system-ui, sans-serif;
+    --font-ui: "Geist", system-ui, sans-serif;
+    --font-accent: "Sora", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body{ margin:0; background:var(--surface-0); font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
+  a{ color:var(--fg); text-decoration:none; } a:hover{ color:var(--primary); }
+  .mono{ font-family:var(--font-mono); }
+  /* Universal clipping safety — applies at ANY width, not just the phone breakpoint.
+     The embedded canvas/artifact viewer often renders this page well under 1440px, so
+     these can not be mobile-only fixes. */
+  .main-content{ overflow-x:hidden; min-width:0; }
+  .decision-row, .org-health-footer, .wf-row{ flex-wrap:wrap; row-gap:8px; }
+  ::-webkit-scrollbar{ width:10px; height:10px; } ::-webkit-scrollbar-thumb{ background:var(--border); border-radius:999px; }
+  .nav-toggle{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  .nav-toggle:focus-visible ~ header .mobile-nav-trigger{ outline:2px solid var(--primary); outline-offset:2px; }
+  .mobile-nav-trigger{ display:none; align-items:center; gap:6px; border:1px solid var(--border); background:var(--surface-2); padding:6px 10px; border-radius:6px; font-size:11px; color:var(--muted); cursor:pointer; white-space:nowrap; }
+  .nav-backdrop{ display:none; }
+  @media (min-width: 761px){
+    /* Docked rail = Command's own --rail token (3.25rem/52px), permanently reserved so
+       main content always keeps the same width. Expanding (hover/focus) does NOT reflow
+       main — the rail becomes a floating card (--rail-expanded, 15rem/240px) overlaying
+       on top of it, like a flyout dock, with its own shadow. */
+    .layout-row{ position:relative; }
+    .nav-rail{ position:absolute; top:0; left:0; bottom:0; width:52px !important; z-index:40; box-sizing:border-box; overflow:hidden; transition:width 160ms ease-out, box-shadow 160ms ease-out; padding-left:7px !important; padding-right:7px !important; }
+    .nav-rail:hover, .nav-rail:focus-within{ width:240px !important; box-shadow:12px 0 30px -8px rgba(0,0,0,0.6); z-index:45; padding-left:10px !important; padding-right:10px !important; }
+    .nav-rail:not(:hover):not(:focus-within) a{ justify-content:center; padding-left:0 !important; padding-right:0 !important; }
+    .nav-rail:not(:hover):not(:focus-within) a[style*="border-left:2px solid var(--primary)"]{ padding-left:0 !important; border-left:none; background:var(--surface-2); box-shadow:inset 2px 0 0 0 var(--primary); }
+    .nav-rail:not(:hover):not(:focus-within) .nav-label,
+    .nav-rail:not(:hover):not(:focus-within) .nav-badge-count{ display:none; }
+    .nav-rail a{ white-space:nowrap; }
+    .main-content{ margin-left:52px !important; }
+    .nav-backdrop{ display:none !important; }
+  }
+  @media (max-width: 760px){
+    .mobile-nav-trigger{ display:inline-flex; }
+    .nav-rail{ position:fixed; top:0; left:0; bottom:0; z-index:60; transform:translateX(-100%); transition:transform 180ms ease-out; box-shadow:12px 0 30px rgba(0,0,0,0.55); }
+    .nav-toggle:checked ~ .layout-row .nav-rail{ transform:translateX(0); }
+    .nav-backdrop{ display:none; position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.5); }
+    .nav-toggle:checked ~ .layout-row .nav-backdrop{ display:block; }
+    .main-content{ padding:20px 16px 40px !important; overflow-x:hidden !important; max-width:100vw; }
+    header{ padding:8px 14px !important; }
+    .header-title-group{ flex-wrap:wrap !important; row-gap:4px; }
+    .mobile-nav-trigger{ padding:9px 12px !important; }
+    .nav-rail a{ padding:11px 10px !important; }
+    .room-tabs{ flex-wrap:wrap !important; }
+  }
+</style>
+</helmet>
+
+<div style="width:100%; height:100vh; overflow:hidden; display:flex; flex-direction:column; background:var(--surface-0); color:var(--fg);">
+<input type="checkbox" id="navToggle" class="nav-toggle">
+
+  <header style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:10px 24px; border-bottom:1px solid var(--border); background:var(--surface-1); flex-wrap:wrap;">
+    <div class="header-title-group" style="display:flex; align-items:center; gap:14px; min-width:0;">
+      <label for="navToggle" class="mobile-nav-trigger" aria-label="Open navigation menu">☰ Menu</label>
+      <a href="Main.dc.html" style="font-size:13px; font-weight:600; letter-spacing:-0.01em; white-space:nowrap; color:var(--fg); font-family:var(--font-display);">STARQ&nbsp;//&nbsp;COMMAND</a>
+      <span style="width:1px; height:16px; background:var(--border);"></span>
+      <span style="font-size:11px; color:var(--muted); white-space:nowrap;">Comms / Room</span>
+    </div>
+    <details style="position:relative;">
+        <summary style="list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:5px; border:1px solid var(--border); border-radius:6px; background:var(--surface-2); padding:4px 8px; font-size:10px; letter-spacing:0.04em; color:var(--truth-unknown);" class="mono"><span style="width:6px; height:6px; border-radius:999px; background:var(--truth-unknown); flex-shrink:0;"></span>ILLUSTRATIVE DATA ▾</summary>
+        <div style="position:absolute; right:0; z-index:30; margin-top:6px; width:320px; max-width:calc(100vw - 32px); border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:10px 12px; box-shadow:0 16px 40px -20px rgba(0,0,0,0.85); font-size:11px; line-height:1.5; color:var(--muted);">
+          This screen shows how Room would read in plain language — ILLUSTRATIVE paraphrases below, not a real export. Command has no wired Room connection yet. Paraphrasing never replaces the verbatim record; it stays one click away and remains authoritative.
+        </div>
+      </details>
+    <div style="display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:6px; padding:4px 10px 4px 6px; background:var(--surface-2);">
+      <span style="width:20px; height:20px; border-radius:999px; background:var(--truth-founder-soft); color:var(--truth-founder); display:grid; place-items:center; font-size:10px; font-weight:600;" class="mono">M</span>
+      <span class="mono" style="font-size:12px; font-weight:500;">@mustarq</span>
+    </div>
+  </header>
+
+
+  <div class="layout-row" style="display:flex; flex:1; min-height:0; position:relative;">
+    <label for="navToggle" class="nav-backdrop" aria-hidden="true"></label>
+
+    <nav aria-label="Primary" class="nav-rail" style="width:224px; flex-shrink:0; overflow-y:auto; border-right:1px solid var(--border); background:var(--surface-1); padding:16px 10px; display:flex; flex-direction:column; gap:2px;">
+      <a href="Main.dc.html" title="Founder home" aria-label="Home — Founder home" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg><span class="nav-label">Home</span></a>
+      <a href="Organization.dc.html" title="Operating organization" aria-label="Organization — Operating organization" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M10 18v-7" /> <path d="M11.119 2.205a2 2 0 0 1 1.762 0l7.84 3.846A.5.5 0 0 1 20.5 7h-17a.5.5 0 0 1-.22-.949z" /> <path d="M14 18v-7" /> <path d="M18 18v-7" /> <path d="M3 22h18" /> <path d="M6 18v-7" /></svg><span class="nav-label">Organization</span></a>
+      <a href="Workforce.dc.html" title="People and appointments" aria-label="Workforce — People and appointments" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M16 2v2" /> <path d="M7 21v-2a2 2 0 012-2h6a2 2 0 012 2v2" /> <path d="M8 2v2" /> <circle cx="12" cy="10" r="3" /> <rect x="3" y="3" width="18" height="18" rx="2" /></svg><span class="nav-label">Workforce</span></a>
+      <a href="Projects.dc.html" title="PM portfolio" aria-label="Projects — PM portfolio" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" /> <path d="M8 10v4" /> <path d="M12 10v2" /> <path d="M16 10v6" /></svg><span class="nav-label">Projects</span></a>
+      <a href="Activity.dc.html" title="Attention, digest, and follow-ups" aria-label="Activity — Attention, digest, and follow-ups" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" /></svg><span class="nav-label">Activity</span></a>
+      <a href="#" title="Source records" aria-label="Records — Source records" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M15 12h-5" /> <path d="M15 8h-5" /> <path d="M19 17V5a2 2 0 0 0-2-2H4" /> <path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></svg><span class="nav-label">Records</span></a>
+      <a href="#" title="Starq Technologies" aria-label="Overview — Starq Technologies" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1" /> <rect width="7" height="5" x="14" y="3" rx="1" /> <rect width="7" height="9" x="14" y="12" rx="1" /> <rect width="7" height="5" x="3" y="16" rx="1" /></svg><span class="nav-label">Overview</span></a>
+      <a href="#" title="Starq Technologies as a company" aria-label="Company — Starq Technologies as a company" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M10 12h4" /> <path d="M10 8h4" /> <path d="M14 21v-3a2 2 0 0 0-4 0v3" /> <path d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2" /> <path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16" /></svg><span class="nav-label">Company</span></a>
+      <a href="#" title="Floors and project rooms" aria-label="Building — Floors and project rooms" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" /> <path d="m7 16.5-4.74-2.85" /> <path d="m7 16.5 5-3" /> <path d="M7 16.5v5.17" /> <path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" /> <path d="m17 16.5-5-3" /> <path d="m17 16.5 4.74-2.85" /> <path d="M17 16.5v5.17" /> <path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" /> <path d="M12 8 7.26 5.15" /> <path d="m12 8 4.74-2.85" /> <path d="M12 13.5V8" /></svg><span class="nav-label">Building</span></a>
+      <a href="#" title="Nexus records and documents" aria-label="Library — Nexus records and documents" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="m16 6 4 14" /> <path d="M12 6v14" /> <path d="M8 8v12" /> <path d="M4 4v16" /></svg><span class="nav-label">Library</span></a>
+      <a href="#" title="Connected work and evidence" aria-label="Cortex — Connected work and evidence" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1" /> <rect x="2" y="16" width="6" height="6" rx="1" /> <rect x="9" y="2" width="6" height="6" rx="1" /> <path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" /> <path d="M12 12V8" /></svg><span class="nav-label">Cortex</span></a>
+      <a href="Comms.dc.html" title="Room messenger" aria-label="Comms — Room messenger" style="display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:6px; background:var(--surface-2); border-left:2px solid var(--primary); font-size:12.5px; font-weight:600;"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z" /></svg><span class="nav-label">Comms</span></a>
+      <a href="#" title="Project boards" aria-label="Dev Studio — Project boards" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <path d="M16 3.128a4 4 0 0 1 0 7.744" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <circle cx="9" cy="7" r="4" /></svg><span class="nav-label">Dev Studio</span></a>
+      <a href="Attention.dc.html" title="Building governance" aria-label="Founder Attention — Building governance" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M12 16h.01" /> <path d="M12 8v4" /> <path d="M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z" /></svg><span class="nav-label" style="flex:1; min-width:0;">Founder Attention</span><span class="mono nav-badge-count" style="font-size:10px; font-weight:600; padding:1px 6px; border-radius:999px; background:var(--truth-founder-soft); color:var(--truth-founder); margin-left:auto;">3</span></a>
+      <a href="#" title="Command summarizes → Room proves" aria-label="Evidence — Command summarizes → Room proves" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" /> <path d="M14 13.12c0 2.38 0 6.38-1 8.88" /> <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" /> <path d="M2 12a10 10 0 0 1 18-6" /> <path d="M2 16h.01" /> <path d="M21.8 16c.2-2 .131-5.354 0-6" /> <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" /> <path d="M8.65 22c.21-.66.45-1.32.57-2" /> <path d="M9 6.8a6 6 0 0 1 9 5.2v2" /></svg><span class="nav-label">Evidence</span></a>
+      <a href="#" title="Building source health" aria-label="System — Building source health" style="display:flex; align-items:center; gap:10px; padding:7px 10px 7px 12px; border-radius:6px; font-size:12.5px; color:var(--fg);"><svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;" aria-hidden="true"><path d="M14 17H5" /> <path d="M19 7h-9" /> <circle cx="17" cy="17" r="3" /> <circle cx="7" cy="7" r="3" /></svg><span class="nav-label">System</span></a>
+      <div class="mono nav-label" style="margin-top:auto; padding:10px 12px; font-size:10px; color:var(--muted); white-space:nowrap;">STARQ COMMAND · COMMS</div>
+    </nav>
+
+    <main class="main-content" style="flex:1; min-width:0; padding:28px 32px 48px; display:flex; flex-direction:column; gap:18px; overflow-y:auto;">
+
+      <div>
+        <h1 style="margin:0 0 4px; font-size:26px; font-weight:600; letter-spacing:-0.02em; font-family:var(--font-display);">Comms · Room</h1>
+        <p style="margin:0; font-size:13px; color:var(--muted);">Team conversations, handovers and decisions — readable, without losing the authoritative record.</p>
+      </div>
+
+      <div class="room-tabs" style="display:flex; align-items:center; gap:8px;">
+        <span style="display:inline-flex; align-items:center; gap:6px; border:1px solid var(--room-studio); border-radius:999px; padding:5px 12px; background:hsl(152 46% 52% / 0.12); font-size:12px; font-weight:600; color:var(--room-studio);">Command</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; border:1px solid var(--border); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--muted);">Hoadhaa</span>
+        <span style="display:inline-flex; align-items:center; gap:6px; border:1px dashed var(--border); border-radius:999px; padding:5px 12px; font-size:12px; color:var(--truth-unknown);">StarqERP · parked</span>
+        <span class="mono" style="font-size:9px; font-weight:600; padding:1px 6px; border-radius:4px; background:var(--surface-3); color:var(--muted); border:1px solid var(--border);">not wired</span>
+      </div>
+
+      <section style="border:1px solid var(--border); border-radius:8px; background:var(--surface-1); padding:16px 18px; display:flex; flex-direction:column; gap:16px;">
+
+        <div>
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px; flex-wrap:wrap;">
+            <span class="mono" style="font-size:10.5px; font-weight:600; color:var(--fg);">@codex → FOUNDER</span>
+            <span class="mono" style="font-size:9px; color:var(--muted);">example time</span>
+            <span class="mono" style="font-size:9px; font-weight:600; padding:1px 6px; border-radius:4px; background:var(--truth-unknown-soft); color:var(--truth-unknown);">ILLUSTRATIVE</span>
+          </div>
+          <p style="margin:0; font-size:13px; line-height:1.55; color:var(--fg);">Paraphrased: "Command daily-driver restoration is moving — I'll have a PR up shortly. ERP is parked per your note, so Cursor's prior work there stays as-is."</p>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px; flex-wrap:wrap;">
+            <span class="mono" style="font-size:10.5px; font-weight:600; color:var(--room-studio);">@antigravity → COMMAND</span>
+            <span class="mono" style="font-size:9px; color:var(--muted);">example time</span>
+            <span class="mono" style="font-size:9px; font-weight:600; padding:1px 6px; border-radius:4px; background:var(--truth-unknown-soft); color:var(--truth-unknown);">ILLUSTRATIVE</span>
+          </div>
+          <p style="margin:0; font-size:13px; line-height:1.55; color:var(--fg);">Paraphrased: "Flagging a drift — the nav contract I'm integrating against doesn't match what canonical source declares. Holding frontend work here until the Founder decides."</p>
+        </div>
+
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px; flex-wrap:wrap;">
+            <span class="mono" style="font-size:10.5px; font-weight:600; color:var(--room-hoadha);">HOADHAA ROOM</span>
+            <span class="mono" style="font-size:9px; color:var(--muted);">example time</span>
+            <span class="mono" style="font-size:9px; font-weight:600; padding:1px 6px; border-radius:4px; background:var(--truth-unknown-soft); color:var(--truth-unknown);">ILLUSTRATIVE</span>
+          </div>
+          <p style="margin:0; font-size:13px; line-height:1.55; color:var(--fg);">Paraphrased: "Handover document is complete and waiting on Founder sign-off before this room can close it out."</p>
+        </div>
+
+        <a href="#" style="display:inline-flex; align-items:center; gap:4px; font-size:12px; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.3); align-self:flex-start;">View verbatim Room record → <span style="font-size:10px; color:var(--muted);">(not wired)</span></a>
+      </section>
+
+      <p style="margin:0; font-size:11.5px; color:var(--muted); line-height:1.6;">Every line above is an illustrative paraphrase of the layout, not a real conversation. Once wired, a paraphrase is always a summary of something real — Command never generates a quote that wasn't said, and the verbatim Room message stays one click away from every paraphrased line.</p>
+
+    </main>
+  </div>
+
+  <footer style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:6px 20px; border-top:1px solid var(--border); background:var(--surface-1); font-size:10.5px; color:var(--muted);" class="mono">
+    <span>SOURCE: READ-ONLY</span>
+    <span style="width:2px; height:2px; border-radius:999px; background:currentColor; opacity:0.6;"></span>
+    <span>contract v3</span>
+    <span style="flex:1 1 auto;"></span>
+    <details style="position:relative;">
+      <summary style="cursor:pointer; list-style:none; text-decoration:underline; text-decoration-color:rgba(255,255,255,0.2);">more</summary>
+      <div style="position:absolute; right:0; bottom:calc(100% + 6px); z-index:30; width:300px; max-width:calc(100vw - 32px); border:1px solid var(--border); border-radius:8px; background:var(--surface-2); padding:10px 12px; box-shadow:0 -12px 32px -18px rgba(0,0,0,0.85); font-size:11px; line-height:1.5; color:var(--muted);">
+        Design draft, not a running build. No generation timestamp is real; no action on this screen reaches Command's backend.
+      </div>
+    </details>
+  </footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1536,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

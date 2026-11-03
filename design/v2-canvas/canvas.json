@@ -1,0 +1,30 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-11-03T00:00:00Z" },
+  "title": "Starq Command — Final Application Design",
+  "launch": { "view": "focused", "file": "Main.dc.html" },
+  "pages": [
+    { "id": "home", "name": "Founder Home" },
+    { "id": "org", "name": "Organization" },
+    { "id": "workforce", "name": "Workforce" },
+    { "id": "attention", "name": "Founder Attention" },
+    { "id": "projects", "name": "Projects & Dev Studio" },
+    { "id": "activity", "name": "Activity" },
+    { "id": "comms", "name": "Comms / Room" }
+  ],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1536, "h": 2300, "page": "home", "expand": "fill", "title": "Founder Home", "is_interactive": false },
+    "Organization.dc.html": { "x": 1696, "y": 0, "w": 1536, "h": 1700, "page": "org", "expand": "fill", "title": "Organization", "is_interactive": false },
+    "Workforce.dc.html": { "x": 3392, "y": 0, "w": 1536, "h": 1500, "page": "workforce", "expand": "fill", "title": "Workforce", "is_interactive": false },
+    "Attention.dc.html": { "x": 5088, "y": 0, "w": 1536, "h": 1700, "page": "attention", "expand": "fill", "title": "Founder Attention", "is_interactive": false },
+    "Projects.dc.html": { "x": 6784, "y": 0, "w": 1536, "h": 900, "page": "projects", "expand": "fill", "title": "Projects & Dev Studio", "is_interactive": false },
+    "Activity.dc.html": { "x": 8480, "y": 0, "w": 1536, "h": 1100, "page": "activity", "expand": "fill", "title": "Activity", "is_interactive": false },
+    "Comms.dc.html": { "x": 10176, "y": 0, "w": 1536, "h": 1000, "page": "comms", "expand": "fill", "title": "Comms / Room", "is_interactive": false }
+  },
+  "order": ["Main.dc.html", "Organization.dc.html", "Workforce.dc.html", "Attention.dc.html", "Projects.dc.html", "Activity.dc.html", "Comms.dc.html"],
+  "notes": {
+    "intro": { "x": -420, "y": -120, "w": 360, "text": "STARQ COMMAND — V2\nFounder Home: Draft 2 — real identities (@mustarq, @codex, @cursor, @antigravity) only, fixed authority model, consistent truth states.\n\nOrganization and Founder Attention are next. Projects & Dev Studio, Workforce (full), Activity, Comms/Room, and the rest follow in further passes." },
+    "handoff": { "x": -420, "y": 420, "w": 360, "text": "@codex / @antigravity — HANDOFF NOTE (written from this cloud design session, not posted to Room)\n\nThis session has no reach into the live Room, StarqBot, or any Codex/Antigravity process — it runs in an isolated cloud container with only this repo checked out; the canonical workspace (D:\\StarqTech) and the running Room gateway are on the Founder's own machine. I could not read Room or message either of you directly, and I'm not fabricating that I did.\n\nWhat's real and ready for retrieval: this canvas (Founder Home v2 draft 2, Organization, Founder Attention). Nothing here touches src/ — design-only. The Founder said the engineering split is @codex to assess/divide into tasks, @antigravity to implement. Once the Founder approves a screen, I'll write it up as implementation-grade documentation (component specs, interaction notes, truth-state mapping) in a PR to this repo for you to pick up from there — that's the actual coordination channel available to me." }
+  },
+  "designSystems": []
+}
