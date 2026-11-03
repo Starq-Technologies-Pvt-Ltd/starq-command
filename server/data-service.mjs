@@ -971,6 +971,12 @@ function sourceFingerprint(root) {
 }
 
 let projectionCache = null;
+// A cold cache miss can take several seconds because the projection reads and
+// validates dozens of source files, including the Room ledger. Keep one build
+// in flight per service process so simultaneous /api/surface, /api/health,
+// /api/floor and /api/health-floor requests share the same assembly instead of
+// multiplying the cold-start cost until clients hit their request deadlines.
+let projectionBuildInFlight = null;
 
 export function invalidateProjectionCache() {
   projectionCache = null;
@@ -1008,38 +1014,56 @@ async function cachedSurface() {
   const root = resolveWorkspace().root;
   if (!root) return { surface: await buildPhase3Surface(), hit: false, entry: null };
 
-  const before = sourceFingerprint(root);
-  if (projectionCache && projectionCache.key === before.key) {
-    projectionCache.hits += 1;
-    return { surface: projectionCache.surface, hit: true, entry: projectionCache };
+  while (true) {
+    const before = sourceFingerprint(root);
+    if (projectionCache && projectionCache.key === before.key) {
+      projectionCache.hits += 1;
+      return { surface: projectionCache.surface, hit: true, entry: projectionCache };
+    }
+
+    if (projectionBuildInFlight) {
+      // Recompute the fingerprint after waiting. If a source changed during
+      // the shared build, this caller must not reuse that torn/stale assembly.
+      await projectionBuildInFlight;
+      continue;
+    }
+
+    const build = (async () => {
+      const startedAt = Date.now();
+      const surface = await buildPhase3Surface();
+      const buildMs = Date.now() - startedAt;
+      const after = sourceFingerprint(root);
+
+      if (after.key !== before.key) {
+        surface.projection_cache = {
+          state: 'NOT_CACHED_TORN_READ',
+          reason: 'a canonical source changed during assembly; this response was not stored',
+          build_ms: buildMs,
+        };
+        projectionCache = null;
+        return { surface, hit: false, entry: null };
+      }
+
+      projectionCache = {
+        key: before.key,
+        surface,
+        etag: 'W/"sfc-' + before.key.slice(0, 32),
+        sources: before.sources,
+        assembled_at: surface.assembled_at,
+        hits: 0,
+        build_ms: buildMs,
+        bodies: new Map(),
+      };
+      return { surface, hit: false, entry: projectionCache };
+    })();
+
+    projectionBuildInFlight = build;
+    try {
+      return await build;
+    } finally {
+      if (projectionBuildInFlight === build) projectionBuildInFlight = null;
+    }
   }
-
-  const startedAt = Date.now();
-  const surface = await buildPhase3Surface();
-  const buildMs = Date.now() - startedAt;
-  const after = sourceFingerprint(root);
-
-  if (after.key !== before.key) {
-    surface.projection_cache = {
-      state: 'NOT_CACHED_TORN_READ',
-      reason: 'a canonical source changed during assembly; this response was not stored',
-      build_ms: buildMs,
-    };
-    projectionCache = null;
-    return { surface, hit: false, entry: null };
-  }
-
-  projectionCache = {
-    key: before.key,
-    surface,
-    etag: 'W/"sfc-' + before.key.slice(0, 32),
-    sources: before.sources,
-    assembled_at: surface.assembled_at,
-    hits: 0,
-    build_ms: buildMs,
-    bodies: new Map(),
-  };
-  return { surface, hit: false, entry: projectionCache };
 }
 
 /**
