@@ -1265,8 +1265,14 @@ function createProject(body, d = null) {
   return tx((handle) => insert(handle));
 }
 
-function attention() {
+export function attention() {
   const tasks = listTasks(null).filter((t) => t.status !== 'DONE');
+  // Keep explicit current governance work separate from ordinary attention.
+  // Historical imports may carry the same stage label, but they are evidence,
+  // not a live request for Founder action.
+  const founderGateTasks = tasks.filter(
+    (t) => t.provenance === PROVENANCE.LIVE && t.stage === 'FOUNDER_GATE',
+  );
   const href = (t) => {
     const routes = { command: '#studio/command', erp: '#studio/erp/tasks', hoadha: '#studio/hoadha/board' };
     return `${routes[t.project_id] ?? `#studio/${t.project_id}`}?task=${encodeURIComponent(t.id)}`;
@@ -1282,22 +1288,25 @@ function attention() {
     const rank = { BLOCKED: 0, IN_PROGRESS: 1, NEXT: 2, TODO: 3 };
     return (rank[a.status] ?? 9) - (rank[b.status] ?? 9);
   });
+  const actionRecord = (t) => ({
+    task_id: t.id,
+    project_id: t.project_id,
+    title: t.title,
+    status: t.status,
+    stage: t.stage,
+    owner: t.owner,
+    verifier: t.verifier,
+    priority: t.priority,
+    reason: reason(t),
+    href: href(t),
+  });
   return {
     generated_at: nowIso(),
     room_post: ROOM_POST ? 'ON' : 'OFF',
-    next_actions: ranked.slice(0, 12).map((t) => ({
-      task_id: t.id,
-      project_id: t.project_id,
-      title: t.title,
-      status: t.status,
-      owner: t.owner,
-      verifier: t.verifier,
-      priority: t.priority,
-      reason: reason(t),
-      href: href(t),
-    })),
+    next_actions: ranked.slice(0, 12).map(actionRecord),
     blocked: tasks.filter((t) => t.status === 'BLOCKED').length,
-    founder_gate: tasks.filter((t) => t.stage === 'FOUNDER_GATE').length,
+    founder_gate: founderGateTasks.length,
+    founder_gate_actions: founderGateTasks.map(actionRecord),
     unassigned: tasks.filter((t) => t.owner === 'UNASSIGNED').length,
     in_progress: tasks.filter((t) => t.status === 'IN_PROGRESS').length,
   };
