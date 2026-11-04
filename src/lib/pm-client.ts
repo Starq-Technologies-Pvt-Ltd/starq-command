@@ -354,6 +354,8 @@ export interface PmAttentionAction {
   project_id: string;
   title: string;
   status: string;
+  /** Governance stage from the source task record; optional for older services. */
+  stage?: string;
   owner: string;
   verifier: string;
   priority: string;
@@ -365,6 +367,8 @@ export interface PmAttention {
   generated_at: string;
   room_post: string;
   next_actions: PmAttentionAction[];
+  /** Current LIVE tasks explicitly marked FOUNDER_GATE, separate from attention. */
+  founder_gate_actions?: PmAttentionAction[];
   blocked: number;
   founder_gate: number;
   unassigned: number;
