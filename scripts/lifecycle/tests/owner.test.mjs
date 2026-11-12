@@ -1024,3 +1024,82 @@ test('every child is told the lifecycle workspace_root, which decides which data
     }
   } finally { w.cleanup(); }
 });
+
+// ── Job-verified broker-down recovery (Founder Option A, Room #19236) ──────────
+// Scenario: broker process GONE, port clear, broker API unreachable, NO recorded
+// historical-closeout exception. Recovery may proceed only if the broker's
+// containment job proves itself closed WITHOUT force; otherwise fail closed.
+
+test('RECOVERY job-verified broker-down: proves containment closed without force, records evidence, continues', async () => {
+  const w = world();
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const before = readState(w.statePath).state;
+    for (const child of before.children) w.kill(child.pid);
+    const { forceKill: _testForceKill, ...recoveryDeps } = w.deps;
+    const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: {
+      ...recoveryDeps,
+      brokerRequest: async () => ({ status: 0, error: 'ECONNREFUSED' }),
+      listListeners: async () => [],
+    } });
+    const result = await owner.recoverForce();
+    assert.equal(result.result, RESULT.STOPPED);
+    assert.deepEqual(w.calls.forceKill, [], 'no forced signal is sent to the gone broker');
+    assert.ok(w.calls.gracefulStopContained.some((c) => c.name === 'herdrBroker' && c.forced === false), 'the broker job is proven through the non-forced path');
+    assert.equal(w.calls.recoverOwnedJob.length, 0, 'the forcing job-stop path is not used for the job-verified broker');
+    const state = readState(w.statePath).state;
+    const evt = state.events.find((event) => event.event === 'recover.job_verified_broker_closeout');
+    assert.ok(evt, 'job-verified closeout evidence is recorded');
+    assert.equal(evt.forced, false);
+    assert.equal(evt.broker_port_clear, true);
+    assert.equal(evt.historical_closeout, 'UNKNOWN', 'historical registry closeout stays UNKNOWN');
+    assert.equal(state.events.some((event) => event.event === 'recover.historical_closeout_exception_resumed'), false);
+    assert.equal(state.children.find((child) => child.name === 'herdrBroker').status, 'EXITED');
+  } finally { w.cleanup(); }
+});
+
+test('RECOVERY job-verified broker-down: fails closed when the containment job is not proven closed', async () => {
+  const w = world();
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const before = readState(w.statePath).state;
+    for (const child of before.children) w.kill(child.pid);
+    const { forceKill: _testForceKill, ...recoveryDeps } = w.deps;
+    const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: {
+      ...recoveryDeps,
+      brokerRequest: async () => ({ status: 0, error: 'ECONNREFUSED' }),
+      listListeners: async () => [],
+      gracefulStopContained: async (child) => {
+        w.calls.gracefulStopContained.push({ name: child.name, forced: false });
+        return { owned: true, closed: false, active: 1, outcome: 'STILL_RUNNING', forced: false };
+      },
+    } });
+    const result = await owner.recoverForce();
+    assert.equal(result.result, RESULT.STOP_INCOMPLETE);
+    assert.equal(result.phase, 'job-verification');
+    assert.deepEqual(w.calls.forceKill, []);
+    const state = readState(w.statePath).state;
+    assert.equal(state.events.some((event) => event.event === 'recover.job_verified_broker_closeout'), false, 'no closeout evidence is written on failure');
+    assert.equal(state.children.find((child) => child.name === 'herdrBroker').status, 'READY', 'broker record is left untouched');
+  } finally { w.cleanup(); }
+});
+
+test('RECOVERY job-verified broker-down: a broker port with a live listener is still blocked', async () => {
+  const w = world();
+  try {
+    assert.equal((await w.owner.start()).result, RESULT.READY);
+    const before = readState(w.statePath).state;
+    for (const child of before.children) w.kill(child.pid);
+    const { forceKill: _testForceKill, ...recoveryDeps } = w.deps;
+    const owner = createOwner({ configFile: w.configFile, runtimeDir: w.runtimeDir, configOptions: { checkFiles: false }, deps: {
+      ...recoveryDeps,
+      brokerRequest: async () => ({ status: 0, error: 'ECONNREFUSED' }),
+      listListeners: async () => [{ port: 5188, pid: 4242 }],
+    } });
+    const result = await owner.recoverForce();
+    assert.equal(result.result, RESULT.STOP_INCOMPLETE);
+    assert.equal(result.phase, 'agents');
+    assert.equal(w.calls.gracefulStopContained.some((c) => c.name === 'herdrBroker'), false, 'no containment proof is attempted while the port is live');
+    assert.equal(readState(w.statePath).state.events.some((event) => event.event === 'recover.job_verified_broker_closeout'), false);
+  } finally { w.cleanup(); }
+});
