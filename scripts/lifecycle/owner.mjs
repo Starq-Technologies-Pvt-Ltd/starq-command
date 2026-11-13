@@ -734,9 +734,32 @@ export function createOwner({ configFile, runtimeDir, lockFile = path.join(runti
             const stateDir = path.dirname(cfg.abs(comp(cfg, 'herdrBroker').lifecycle_token));
             const recorded = d.recordedHistoricalCloseoutRecovery({ stateDir, events: doc.events });
             if (recorded?.applied !== true) {
-              return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: recorded?.reason ?? 'broker channel unavailable and no exact historical recovery evidence' };
+              // Job-verified broker-down path (Founder Option A, Room #19236). Applies only when the broker
+              // process is GONE, its port is clear and its API is unreachable, and the broker was started inside
+              // a recorded containment job. The job must prove itself closed WITHOUT force; any other outcome fails closed.
+              if (!brokerChild.containment) {
+                return { result: RESULT.STOP_INCOMPLETE, phase: 'agents', steps, note: recorded?.reason ?? 'broker channel unavailable and no exact historical recovery evidence' };
+              }
+              const proof = await d.gracefulStopContained(brokerChild, cfg.timeouts_ms.graceful_exit);
+              const closed = proof?.outcome === 'GONE' && proof.closed === true && proof.active === 0 && proof.owned === true && proof.forced !== true;
+              if (!closed) {
+                return { result: RESULT.STOP_INCOMPLETE, phase: 'job-verification', steps, proof, note: 'broker is gone but its containment job could not be proven closed without force; failing closed' };
+              }
+              appendEvent(doc, 'recover.job_verified_broker_closeout', {
+                broker_process: 'GONE',
+                broker_port_clear: true,
+                broker_job_closeout: 'VERIFIED',
+                forced: false,
+                proof: { outcome: proof.outcome, owned: proof.owned, closed: proof.closed, active: proof.active, forced: proof.forced === true },
+                historical_closeout: 'UNKNOWN',
+              });
+              // Job already proven closed without force; mark it so the forced-recovery loop below does not re-signal it.
+              Object.assign(brokerChild, { status: 'EXITED', tree_closeout_verified: true, exited_at: new Date().toISOString(), exit_note: 'job-verified broker closeout (no force)' });
+              save(doc);
+              steps.push({ name: 'herdrBroker', outcome: 'GONE', proof: { outcome: proof.outcome, closed: proof.closed, active: proof.active, forced: false } });
+            } else {
+              recordedHistoricalCloseout = recorded;
             }
-            recordedHistoricalCloseout = recorded;
           } else if (view.status === 200 && view.body.running.length) {
             await broker(cfg, 'POST', '/api/lifecycle/drain');
             const r = await broker(cfg, 'POST', '/api/lifecycle/force-stop-agents', cfg.timeouts_ms.agent_stop);
